@@ -1,0 +1,10 @@
+{
+  "session_id": "019a4f2e-5c1d-7b3a-9e8f-1a2b3c4d5e6f",
+  "transcript_path": "/srv/home/.codex/sessions/2026/10/07/rollout-019a4f2e.jsonl",
+  "cwd": "/srv/app",
+  "model": "gpt-6.1-sol",
+  "hook_event_name": "Stop",
+  "turn_id": "turn_3",
+  "stop_hook_active": false,
+  "last_assistant_message": "Done."
+}

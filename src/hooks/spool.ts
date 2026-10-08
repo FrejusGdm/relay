@@ -1,7 +1,7 @@
 // The hook spool, RELAY_HOME/spool/hooks.jsonl (add-provider-adapters, design decision 14). relay
-// hook appends one line per event with one write call; readers trim it, because no daemon empties
-// it in this version.
-import { closeSync, constants, lstatSync, mkdirSync, openSync, readFileSync, renameSync, chmodSync, writeFileSync, writeSync } from "node:fs";
+// hook appends one line per event with one write call when the daemon does not accept the event.
+// The daemon empties it when it starts (src/daemon/spool.ts); without a daemon, readers trim it.
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, chmodSync, writeFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { now } from "../platform/clock";
 import type { SpoolLine } from "./fields";
@@ -31,6 +31,33 @@ export function appendSpoolLine(relayHome: string, line: SpoolLine): boolean {
     closeSync(fd);
   }
   return true;
+}
+
+// A spool file's text, or null when it is not a regular file (a named pipe would block the read),
+// is a symbolic link, is larger than maxBytes or cannot be read.
+export function readSpoolFile(path: string, maxBytes: number): string | null {
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch {
+    return null;
+  }
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile() || stats.size > maxBytes) return null;
+    const buffer = Buffer.alloc(stats.size);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync(fd, buffer, length, buffer.length - length, length);
+      if (read === 0) break;
+      length += read;
+    }
+    return buffer.toString("utf8", 0, length);
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 // Every valid line, oldest first. A line that is not a spool line is skipped.

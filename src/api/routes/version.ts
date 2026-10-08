@@ -13,9 +13,9 @@ export interface DaemonInfo {
   schema_version: number;
 }
 
-// Each task group that adds endpoints adds their capability here; jobs.checkpoint, jobs.switch and
-// hooks come later.
-const CAPABILITIES = ["accounts", "jobs", "events.sse"];
+// Each task group that adds endpoints adds their capability here; jobs.checkpoint and jobs.switch
+// come later.
+const CAPABILITIES = ["accounts", "jobs", "events.sse", "hooks"];
 
 export function versionRoute(daemon: DaemonInfo, db: Database): Route {
   return {

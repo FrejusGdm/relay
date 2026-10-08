@@ -172,7 +172,7 @@ or secrets.
 | `provider_allowed` | `add-relay-switch` | `account`, `company`, `how` |
 | `handoff` | `add-relay-switch` | `number`, `from_worker_id`, `from_target`, `to_target`, `to_worker_id`, `checkpoint_number`, `checkpoint_commit`, `handoff_ref`, `notes_source`, `notes_reason`, `tiers`, `claims_count`, `mismatches`, `checks`, `instruction_files_changed`, `confirmations`, `invisible_removed`, `prompt_path` |
 | `handoff_failed` | `add-relay-switch` | `number`, `to_target`, `step`, `reason`, `exit_code`, `kept_checkpoint` |
-| `hook` | `add-daemon-api-and-status` | `provider`, `event`, and the allow-listed hook fields |
+| `hook` | `add-daemon-api-and-status` | `provider`, `event`, `received_at`, `relay_worker`, `worker_id`, and the allow-listed hook fields |
 
 `add-t3-limit-rules` writes its events to `RELAY_HOME/t3/events.jsonl`, not to a job's
 `.relay/events.jsonl`, because T3 threads are not relay jobs. They use the same envelope with
