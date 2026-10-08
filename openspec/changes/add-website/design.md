@@ -31,7 +31,7 @@ Facts checked on 2026-10-07:
 **Goals:**
 
 - The website reads and looks like the preview, with the spacing fixed, and works without JavaScript except for the animations and the copy buttons.
-- A visitor with access to the private repository can install relay by copying one block of commands.
+- A visitor can install relay by copying one block of commands, with no GitHub account.
 - The page cannot load or send anything outside its own address, and the deployment never exposes its token.
 - Every rule in this design has a test that fails when the rule is broken.
 
@@ -246,7 +246,7 @@ The panel, placed just before `</main>`. Each command block's text starts right 
     <h2 id="install-title">Install relay</h2>
     <button type="button" class="btn btn-secondary btn-sm" popovertarget="install" popovertargetaction="hide" autofocus>Close</button>
   </div>
-  <p>relay is installed from the releases of its GitHub repository, which is private for now. You need the GitHub CLI, <span class="mono">gh</span>, signed in with an account that can read <span class="mono">FrejusGdm/relay</span>. Run <span class="mono">gh auth status</span> to check, or <span class="mono">gh auth login</span> to sign in.</p>
+  <p>relay is free and <a href="https://github.com/FrejusGdm/relay">open source</a>. These commands download the latest release from GitHub.</p>
 
   <div class="install-block">
     <div class="install-block-head">
@@ -281,15 +281,12 @@ The panel, placed just before `</main>`. Each command block's text starts right 
 
 Until a release contains `Relay-macOS.zip`, the Mac app block holds only its heading and the note "The Mac menu-bar app is not released yet. The command line tool above works on its own.", with no block C, no Copy button and no first-launch note.
 
-Block A, exactly:
+Josué made relay open source on 2026-10-08, so the install commands download the release directly with `curl`, with no GitHub account and no `gh`. Block A, exactly:
 
 ```
 mkdir -p "$HOME/.local/bin"
-gh release download \
-  --repo FrejusGdm/relay \
-  --pattern relay-darwin-arm64 \
-  --output "$HOME/.local/bin/relay" \
-  --clobber
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64
 chmod +x "$HOME/.local/bin/relay"
 "$HOME/.local/bin/relay" --version
 ```
@@ -308,7 +305,7 @@ ditto -x -k Relay-macOS.zip /Applications
 open /Applications/Relay.app
 ```
 
-Why these commands: `--output` writes the asset straight to its final name, so no rename is needed; `--clobber` lets the same block reinstall; `mkdir -p` is needed because `gh` does not create the folder; the last line runs the binary by its full path, so it works before `~/.local/bin` is on PATH. `ditto -x -k` is Apple's tool for unpacking a zipped app bundle with its symbolic links and attributes. Writing to `/Applications` needs no `sudo` for an administrator account, the default on a personal Mac. No line is longer than 42 characters, so a block fits a 390 pixel screen at 12 pixels without scrolling sideways.
+Why these commands: GitHub's `releases/latest/download/<asset>` address always redirects to that asset in the latest release; `curl -f` fails on an HTTP error instead of saving the error page, `-sS` hides the progress bar but shows errors, `-L` follows the redirect, and `-o` writes the file straight to its final name, replacing an older copy. `mkdir -p` is needed because `curl` does not create the folder; the last line runs the binary by its full path, so it works before `~/.local/bin` is on PATH. Block C is unchanged and is not shown until the Mac app is released. `ditto -x -k` is Apple's tool for unpacking a zipped app bundle with its symbolic links and attributes. Writing to `/Applications` needs no `sudo` for an administrator account, the default on a personal Mac. Every line except the download address is at most 42 characters. The address is 80 characters and cannot be split. The panel is 760 pixels wide, so the address fits on one line at 1024 pixels and wider; on a narrower screen `.install-cmd` uses `white-space: pre-wrap; word-break: break-all`, so the line wraps between any two characters and continues after its indent instead of scrolling sideways. Copying still gives the original lines.
 
 Copying: each `data-copy` button calls `copyText(pre.textContent + "\n", button, ...)`, where `pre` is the element whose `id` is the button's `data-copy` value. The final newline makes the last line run when pasted. The button text changes to `Copied` (or `Copy failed`) for 1.6 seconds, and `#copy-status` gets the text `Commands copied.` (or `Copying failed. Select the commands and copy them by hand.`) so screen readers announce it.
 
@@ -317,7 +314,7 @@ Focus: a button with `data-install-focus` also, on click, waits for the panel's 
 CSS (added to `styles.css`):
 
 ```css
-.install { margin: auto; width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 32px; border: 1px solid var(--rule); border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
+.install { margin: auto; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 32px; border: 1px solid var(--rule); border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
 .install::backdrop { background: rgba(20, 20, 19, 0.32); }
 .install-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .install-head h2 { margin: 0; font: 600 20px var(--font-text); }
@@ -325,7 +322,7 @@ CSS (added to `styles.css`):
 .install-block { margin-top: 28px; }
 .install-block-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .install-block-head h3 { margin: 0; font: 600 15px var(--font-text); }
-.install-cmd { margin: 10px 0 0; padding: 14px 16px; font: 13px/1.6 var(--font-mono); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; white-space: pre; overflow-x: auto; }
+.install-cmd { margin: 10px 0 0; padding: 14px 16px; font: 13px/1.6 var(--font-mono); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; white-space: pre-wrap; word-break: break-all; overflow-x: auto; }
 .install-note { font-size: 14px; }
 @media (max-width: 480px) {
   .install { width: 100vw; max-width: 100vw; max-height: 100dvh; border-radius: 0; border-left: 0; border-right: 0; padding: 20px 16px; }
@@ -451,7 +448,7 @@ What each part does: `default-src 'none'` blocks everything not listed, includin
   - `site/fonts.sha256` has exactly the six lines of decision 3, and `.gitignore` contains `site/public/fonts/`.
 - `config.test.ts`: `staticwebapp.config.json` parses, deep-equals the object in decision 7 (written out in the test), and is under 20 KB.
 - `content.test.ts` (added in task 3.1, after the content changes):
-  - Every `<a href>` in every `.html` file is one of `#top`, `#how`, `#pricing`, `/` and `https://www.apache.org/licenses/LICENSE-2.0`.
+  - Every `<a href>` in every `.html` file is one of `#top`, `#how`, `#pricing`, `/`, `https://www.apache.org/licenses/LICENSE-2.0` and `https://github.com/FrejusGdm/relay`.
   - The word `preview` (any case) does not appear in `index.html`.
   - The section ids appear in the order `cost`, `how`, `graph`, `pricing`, `closing`.
   - The `<h1>` text is `Never run out of limits again.` and the `<title>` is as in decision 2.
@@ -463,9 +460,9 @@ What each part does: `default-src 'none'` blocks everything not listed, includin
   - `robots.txt` is exactly as in decision 5, and `404.html` contains `Page not found`.
 - `install.test.ts`:
   - The two `<pre>` blocks, read by `id` and with `&quot;` and `&amp;` decoded, equal blocks A and B (written out in the test).
-  - No line in them is longer than 42 characters.
+  - No line in them is longer than 42 characters, except the download address.
   - The panel has `id="install"` and the `popover` attribute, and every `popovertarget` value is `install`.
-  - The page contains `private` and `gh auth status`.
+  - The panel's first paragraph says relay is free and open source, with the link to `https://github.com/FrejusGdm/relay`, and the page contains none of `gh auth`, `gh release`, `private` and `--pattern`.
   - The Mac app block has no `<pre>` and no Copy button and contains the "not released yet" note, the page does not contain `Relay-macOS.zip`, and both `data-install-focus` values are `install-macos`.
   - When `.github/workflows/release.yml` exists, it contains `relay-darwin-arm64` and `relay-linux-x64`. Otherwise this one test is skipped with `test.skipIf`, and its name says why.
 
@@ -671,7 +668,7 @@ header() { tr -d '\r' < "$work/headers" | grep -i "^$1:" | head -n 1 | sed 's/^[
 code=$(curl -sS -o "$work/index.html" -D "$work/headers" -w '%{http_code}' "$url/") || fail "the request to $url/ failed"
 [ "$code" = 200 ] || fail "GET / returned $code, expected 200"
 grep -qF '<title>relay: never run out of limits again</title>' "$work/index.html" || fail "the page title is missing"
-for text in 'gh release download' '--repo FrejusGdm/relay' '--pattern relay-darwin-arm64' '--pattern relay-linux-x64'; do
+for text in 'curl -fsSL -o "$HOME/.local/bin/relay"' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-linux-x64'; do
   grep -qF -- "$text" "$work/index.html" || fail "the page does not contain: $text"
 done
 [ "$(header content-security-policy)" = "$csp" ] || fail "the Content-Security-Policy header is missing or different"
@@ -724,7 +721,6 @@ playwright-report/
 ## Risks / Trade-offs
 
 - [Fontshare changes the Satoshi file or the download address] → The hash check stops the font script and the deployment. A person reviews the new file and updates `site/fonts.sha256`.
-- [The repository is private, so most visitors cannot install relay] → The panel says so in its first sentence. Making the repository public is a separate decision.
 - [A release without one of the three assets] → `deploy.sh` refuses to deploy. If the live site is already deployed and a later release drops an asset, the commands fail; the release change should keep the names stable.
 - [The emulator's server process outlives Playwright or `npx`] → After each local run, `ss -ltnp | grep ":$SITE_PORT "` must print nothing; if a process is left, stop it with `kill <pid>` using the PID that `ss` shows.
 - [Visitors on browsers without the Popover API cannot open the panel] → Out of scope (Non-Goals); all current versions of Chrome, Edge, Safari and Firefox support it.
