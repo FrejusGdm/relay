@@ -152,7 +152,7 @@ describe("One process records the answer", () => {
   test("answers from relay switch in another terminal are used, and the relay run neither asks nor writes", async () => {
     const before = configText('["claude:personal"]');
     write(before);
-    const asker = { ...fakeAsker({ terminal: false }), preset: { newAccount: "flag" as const } };
+    const asker = { ...fakeAsker({ terminal: false }), preset: { newAccount: "flag" as const, recorded: true } };
     const result = await check(asker, "codex:personal");
     expect(result).toEqual({
       allowed: { account: "codex:personal", company: "OpenAI", how: "flag" },
@@ -164,8 +164,16 @@ describe("One process records the answer", () => {
 
   test("without an answer for a new account, the relay run does not ask from its old settings", async () => {
     write(configText('["claude:personal"]'));
-    const asker = { ...fakeAsker({ terminal: false }), preset: {} };
+    const asker = { ...fakeAsker({ terminal: false }), preset: { recorded: true } };
     expect(await check(asker, "codex:personal")).toEqual({ allowed: null, confirmations: [] });
+  });
+
+  test("an answer given through the local API, not yet written, is written by the process that received it", async () => {
+    const before = configText('["claude:personal"]');
+    write(before);
+    const asker = { ...fakeAsker({ terminal: false }), preset: { newAccount: "api" as const } };
+    expect((await check(asker, "codex:personal")).allowed).toEqual({ account: "codex:personal", company: "OpenAI", how: "api" });
+    expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(before.replace('allow = ["claude:personal"] #', 'allow = ["claude:personal", "codex:personal"] #'));
   });
 });
 
