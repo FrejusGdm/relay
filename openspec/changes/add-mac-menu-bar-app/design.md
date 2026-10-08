@@ -938,5 +938,8 @@ New feature; nothing to migrate. To remove it: quit the app from its card and de
   are, the app uses the instance check, the forward-only rules and the snapshot refresh of decision 7.
 - **Several jobs at once.** The card shows one job (decision 8). How to show more is for Josué to
   decide after using it.
-- **Whether `gh release download` marks the file as downloaded.** It changes only the first-launch
-  section of `docs/mac-app.md`; task 5.2 records what Josué sees.
+- **Whether `gh release download` marks the file as downloaded.** Answered on 2026-10-08 (task
+  5.2): it does not. The zip carries only `com.apple.provenance`, and `xattr -p
+  com.apple.quarantine` on the unzipped app prints "No such xattr", so macOS should open it without
+  asking. Whether `com.apple.provenance` alone makes macOS 15 ask is still to be seen on Josué's
+  Mac.
