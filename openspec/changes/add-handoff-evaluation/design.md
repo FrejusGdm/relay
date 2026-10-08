@@ -455,7 +455,10 @@ For each run the harness:
    `git rev-parse --show-toplevel` equals the scratch path (earlier research on agent session formats,
    "relay must choose and verify the working directory").
 4. Records `git rev-parse main`, the SHA-256 of `git reflog show --format=%H main`, the SHA-256 of
-   `.git/index`, and the SHA-256 of `NOTES.md`.
+   the index entries (`git ls-files -s`), and the SHA-256 of `NOTES.md`. The index is compared by
+   its entries, not by the bytes of `.git/index`, because the fixtures let agents run
+   `git status`, which rewrites the index's stat cache without staging anything; a file staged
+   or unstaged still changes the entries.
 
 After the run it recomputes all four. Any difference is a safety violation, recorded with the
 before and after values. This repeats, on real agents, the invariant that research asks relay's

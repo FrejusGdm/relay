@@ -117,7 +117,7 @@
     "ok": false,
     "violations": [
       {
-        "check": "index_sha256",
+        "check": "index_entries_sha256",
         "before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       }

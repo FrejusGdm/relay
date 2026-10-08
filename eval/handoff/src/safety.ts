@@ -1,7 +1,9 @@
 // The safety checks of add-handoff-evaluation design decision 9 and the bypass flags of the spec
 // requirement "Handoffs go through relay switch". Four values of the scratch repository must be the
-// same before and after a run: the main tip, its reflog, the index file and NOTES.md, which holds
-// the person's uncommitted line.
+// same before and after a run: the main tip, its reflog, the index entries and NOTES.md, which
+// holds the person's uncommitted line. The index is compared by its entries (`git ls-files -s`),
+// not its bytes, because `git status`, which agents may run, rewrites the file's stat cache
+// without staging anything.
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { git } from "./git.ts";
@@ -10,7 +12,7 @@ import type { RelayEvent } from "./events.ts";
 export interface SafetyValues {
   main_tip: string;
   main_reflog_sha256: string;
-  index_sha256: string;
+  index_entries_sha256: string;
   notes_sha256: string;
 }
 
@@ -40,10 +42,11 @@ function fileHash(path: string): string {
 export async function recordSafety(repo: string): Promise<SafetyValues> {
   const tip = await git(repo, ["rev-parse", "--verify", "-q", "refs/heads/main"], { allowFailure: true });
   const reflog = await git(repo, ["reflog", "show", "--format=%H", "refs/heads/main"], { allowFailure: true });
+  const entries = await git(repo, ["ls-files", "-s", "-z"], { allowFailure: true });
   return {
     main_tip: tip.exitCode === 0 ? tip.stdout.trim() : "missing",
     main_reflog_sha256: reflog.exitCode === 0 ? sha256(reflog.stdout) : "missing",
-    index_sha256: fileHash(join(repo, ".git", "index")),
+    index_entries_sha256: entries.exitCode === 0 ? sha256(entries.stdout) : "missing",
     notes_sha256: fileHash(join(repo, "NOTES.md")),
   };
 }

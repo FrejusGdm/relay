@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { git } from "../src/git.ts";
 import { EvalError } from "../src/plan.ts";
@@ -69,7 +69,7 @@ test("Changing the branch tip, the index or NOTES.md gives one violation each", 
   expect(compareSafety(first, second)).toEqual([{ check: "main_tip", before: first.main_tip, after: commit }]);
   await git(repo, ["add", "NOTES.md"]);
   const third = await recordSafety(repo);
-  expect(compareSafety(second, third).map((violation) => violation.check)).toEqual(["index_sha256"]);
+  expect(compareSafety(second, third).map((violation) => violation.check)).toEqual(["index_entries_sha256"]);
   appendFileSync(join(repo, "NOTES.md"), "Changed by someone else.\n");
   expect(compareSafety(third, await recordSafety(repo)).map((violation) => violation.check)).toEqual(["notes_sha256"]);
 });
@@ -95,4 +95,19 @@ test("Cleanup removes relay's job worktrees and the work folder", async () => {
   await removeWork(workDir);
   expect(existsSync(elsewhere)).toBe(false);
   expect(existsSync(workDir)).toBe(false);
+});
+
+test("A git status that rewrites the index's stat cache is not a violation, a staged file is", async () => {
+  const { repo } = await scratch();
+  const before = await recordSafety(repo);
+  const bytes = readFileSync(join(repo, ".git", "index"));
+  // A new modification time makes git status refresh the cache and write the index, as an agent's
+  // git status does when it may take the index lock.
+  utimesSync(join(repo, "src", "math.ts"), new Date(2030, 0, 1), new Date(2030, 0, 1));
+  await git(repo, ["status", "--porcelain"], { env: { GIT_OPTIONAL_LOCKS: "1" } });
+  expect(readFileSync(join(repo, ".git", "index"))).not.toEqual(bytes);
+  expect(compareSafety(before, await recordSafety(repo))).toEqual([]);
+  writeFileSync(join(repo, "src", "math.ts"), "export const staged = true;\n");
+  await git(repo, ["add", "src/math.ts"]);
+  expect(compareSafety(before, await recordSafety(repo)).map((violation) => violation.check)).toEqual(["index_entries_sha256"]);
 });
