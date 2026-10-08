@@ -1,0 +1,4 @@
+#!/usr/bin/env bun
+// A stand-in for the relay binary in the harness's own tests (add-handoff-evaluation task 5.1).
+// It starts no agent: stub-relay.ts follows the scenario file named by RELAY_STUB_SCENARIO.
+import "./stub-relay.ts";

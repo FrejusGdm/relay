@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { checkFixtures } from "./fixtures.ts";
 import { EvalError, planCommand } from "./plan.ts";
 import { runCommand } from "./campaign.ts";
+import { annotateCommand, summarizeCommand } from "./summary.ts";
 
 const usage = `bun run eval:handoff plan <plan>
 bun run eval:handoff run <plan> [--campaign <name>] [--only <run-id>] [--max-runs <n>]
@@ -30,9 +31,10 @@ try {
       process.exitCode = await runCommand(args, io);
       break;
     case "summarize":
+      process.exitCode = await summarizeCommand(args, io);
+      break;
     case "annotate":
-      await Bun.write(Bun.stderr, "Not built yet.\n");
-      process.exitCode = 1;
+      process.exitCode = await annotateCommand(args, io);
       break;
     case "check-fixtures":
       process.exitCode = await checkFixtures({

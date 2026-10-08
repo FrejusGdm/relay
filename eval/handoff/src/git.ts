@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
 
 export interface GitResult {
@@ -56,4 +57,19 @@ export async function git(
     throw new Error(`git ${args.join(" ")} failed in ${cwd} with exit code ${exitCode}: ${stderr.trim()}`);
   }
   return { exitCode, stdout, stderr };
+}
+
+// Writes the files of a commit or tree to an empty folder: `git archive` to a tar file next to the
+// folder, then `tar -x`. Nothing in the repository changes.
+export async function exportTree(cwd: string, treeish: string, target: string): Promise<void> {
+  mkdirSync(target, { recursive: true });
+  const tar = `${target}.tar`;
+  try {
+    await git(cwd, ["archive", "--format=tar", "-o", tar, treeish]);
+    const child = Bun.spawn(["tar", "-xf", tar, "-C", target], { cwd: target, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    if (exitCode !== 0) throw new Error(`tar could not unpack ${treeish} into ${target}: ${stderr.trim()}`);
+  } finally {
+    rmSync(tar, { force: true });
+  }
 }
