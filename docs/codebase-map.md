@@ -14,8 +14,8 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, hook.ts, account.ts,<br/>providers.ts, policy.ts, not-built.ts: their handlers"]
-    checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, hook.ts, account.ts,<br/>providers.ts, policy.ts, not-built.ts: their handlers"]
+    checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml<br/>edit.ts: the one writer of config.toml"]
     platform["src/platform/<br/>toml.ts: the only Bun-specific call<br/>clock.ts: now() and, for tests, setClock()"]
@@ -65,7 +65,7 @@ flowchart TD
   commands -->|"init.ts checks the scanner with"| secrets
   commands -->|"init.ts finds the repository and records trust with"| git
   secrets -->|"reads the checkpoint trees through"| git
-  commands -->|"init.ts and checkpoint.ts save checkpoints with"| checkpoint
+  commands -->|"init.ts, checkpoint.ts, checkpoints.ts and rollback.ts use"| checkpoint
   checkpoint -->|"builds trees and commits through"| git
   checkpoint -->|"scans with"| secrets
   checkpoint -->|"locks, appends events and updates state.json with"| job
@@ -93,7 +93,7 @@ the command line to `runCli` in `src/cli/run.ts`. `runCli` asks `src/cli/router.
 command line means, prints help from `src/cli/help.ts` or an error, or calls the command's
 handler. `src/cli/commands/registry.ts` lists the sixteen commands with their help texts and
 argument counts. In this version every handler is `not-built.ts`, except `hook.ts` for
-`relay hook`, `init.ts` for `relay init`, `checkpoint.ts` for `relay checkpoint`, `account.ts` for
+`relay hook`, `init.ts` for `relay init`, `checkpoint.ts` for `relay checkpoint`, `checkpoints.ts` for `relay checkpoints`, `rollback.ts` for `relay rollback`, which restores an earlier checkpoint's files after saving an undo checkpoint, `account.ts` for
 `relay account`, `providers.ts` for `relay providers` and `policy.ts` for `relay policy show`. `--version` prints the version from `src/core/version.ts`, which reads the
 `version` field of `package.json`. `docs/cli.md` describes the command line and its exit codes.
 

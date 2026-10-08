@@ -131,9 +131,12 @@ leaves the working directory, also through a symbolic link, stops the fake.
 ```
 
 After a `SIGSEGV`, the system may write a core dump of the whole Bun process, which took 26 seconds
-on the build machine. A test that uses `SIGSEGV` should start the fake with core dumps
-turned off: `Bun.spawn(["sh", "-c", 'ulimit -c 0; exec "$@"', "sh", fakePath, ...args])`. `exec`
-keeps the process ID, so the test still holds the fake itself.
+on the build machine. On Linux the fake therefore marks itself as not dumpable before it crashes,
+which works whatever the machine's core-dump settings; `ulimit -c 0` alone does not stop a system
+that pipes core dumps to a program such as apport or systemd-coredump. On other systems a test that
+uses `SIGSEGV` should start the fake with core dumps turned off:
+`Bun.spawn(["sh", "-c", 'ulimit -c 0; exec "$@"', "sh", fakePath, ...args])`. `exec` keeps the
+process ID, so the test still holds the fake itself.
 
 `exit` makes the fake exit with the given code at once, without a final result.
 

@@ -2,6 +2,7 @@
 // (add-provider-adapters, design decision 17). docs/testing-adapters.md describes every field.
 import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dlopen, FFIType } from "bun:ffi";
 
 export interface Scenario {
   version: 1;
@@ -262,4 +263,22 @@ export function writeStepFile(root: string, path: string, content: string): { ab
   writeFileSync(absolute, content);
   const created = existing === undefined;
   return { absolute, created };
+}
+
+// Ends the fake with a crash step's signal. A SIGSEGV can make the system write a core dump of the
+// whole Bun process first, which takes seconds to minutes. ulimit -c 0 does not stop it when the
+// system pipes core dumps to a program such as apport or systemd-coredump, so on Linux the fake
+// first marks itself as not dumpable (prctl PR_SET_DUMPABLE 0), which the kernel always honours.
+export function crashWith(signal: "SIGKILL" | "SIGSEGV"): void {
+  if (signal === "SIGSEGV" && process.platform === "linux") {
+    try {
+      const libc = dlopen("libc.so.6", {
+        prctl: { args: [FFIType.i32, FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
+      });
+      libc.symbols.prctl(4, 0, 0, 0, 0);
+    } catch {
+      // Without glibc the shell wrapper's ulimit -c 0 is the only protection.
+    }
+  }
+  process.kill(process.pid, signal);
 }

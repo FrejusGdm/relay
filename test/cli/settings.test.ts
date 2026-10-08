@@ -12,12 +12,13 @@ const BROKEN = "version = = 1\n";
 const missingRelayHome = () => join(makeRelayHome(), "missing");
 
 describe("Commands that are not built yet", () => {
-  // Every command except hook reads the settings first; relay init and relay checkpoint are built.
+  // Every command except hook reads the settings first; relay init, relay checkpoint, relay
+  // checkpoints, relay rollback, relay account, relay providers and relay policy are built.
   const readSettings = COMMANDS.filter((def) => def.name !== "hook");
   const unbuilt = readSettings.filter((def) => !def.built);
 
-  test("there are ten of them", () => {
-    expect(unbuilt).toHaveLength(10);
+  test("there are eight of them", () => {
+    expect(unbuilt).toHaveLength(8);
   });
 
   test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(

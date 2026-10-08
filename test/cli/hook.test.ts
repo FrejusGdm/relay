@@ -29,7 +29,7 @@ test("a hook usage error reads standard input to the end", async () => {
     env: process.env,
     homedir: process.env.HOME!,
     uid: process.getuid!(),
-    io: { out: () => {}, err: () => {}, stdinIsTTY: false, readStdinToEnd: async () => (read++, ""), readLine: async () => null },
+    io: { out: () => {}, err: () => {}, stdinIsTTY: false, readStdinToEnd: async () => (read++, ""), isTerminal: false, readLine: async () => null },
   });
   expect({ code, read }).toEqual({ code: 0, read: 1 });
 });

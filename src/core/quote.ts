@@ -19,3 +19,9 @@ export function printable(text: string): string {
 export function quote(value: string): string {
   return printable(JSON.stringify(value));
 }
+
+// A path as the person would type it in a shell: as it is when it holds only safe characters,
+// otherwise in quotes.
+export function shellWord(path: string): string {
+  return /^[\w./@%+=:,-]+$/.test(path) ? path : quote(path);
+}

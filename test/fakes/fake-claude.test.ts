@@ -235,7 +235,24 @@ test("crashes retain the last flushed assistant line and the terminating signal"
       expect(result.events().some((event) => event.type === "result")).toBe(false);
     } finally { await fake.cleanup(); }
   }
-}, 4000);
+}, 10_000);
+
+// Core dumps allowed on purpose: the fake must still end at once, because it is not dumpable.
+test.if(process.platform === "linux")("a SIGSEGV crash ends at once even when core dumps are allowed", async () => {
+  const cwd = mkdtempSync(join(process.env.HOME!, "fake-claude-"));
+  const scenarioFile = join(cwd, "scenario.json");
+  writeFileSync(scenarioFile, JSON.stringify({ version: 1, ...steps({ crash: { signal: "SIGSEGV" } }) }));
+  const child = Bun.spawn(["sh", "-c", 'ulimit -c unlimited 2>/dev/null; exec "$@"', "sh", FAKE_PATH, ...FLAGS], {
+    cwd, env: { ...process.env, CLAUDE_CONFIG_DIR: cwd, RELAY_FAKE_SCENARIO: scenarioFile },
+    stdin: "pipe", stdout: "ignore", stderr: "ignore",
+  });
+  child.stdin.write(JSON.stringify({ type: "user", message: { role: "user", content: "go" }, parent_tool_use_id: null }) + "\n");
+  child.stdin.end();
+  const started = performance.now();
+  await child.exited;
+  expect(child.signalCode).toBe("SIGSEGV");
+  expect(performance.now() - started).toBeLessThan(3000);
+}, 10_000);
 
 test("exit ends immediately without a result", async () => {
   const result = await session(steps({ exit: 3 }));

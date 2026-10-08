@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { startRecord } from "./record";
-import { loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
+import { crashWith, loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
 import type { Scenario } from "./scenario";
 import { runHooks, runStatusLine } from "./run-hooks";
 
@@ -247,7 +247,7 @@ async function turn(index: number) {
       await failure(step.error, text, details);
       return;
     } else if ("crash" in step) {
-      process.kill(process.pid, step.crash.signal);
+      crashWith(step.crash.signal);
       await new Promise<never>(() => { setInterval(() => {}, 60_000); });
     } else if ("exit" in step) process.exit(step.exit);
     else if ("hang" in step) await wait(signal);

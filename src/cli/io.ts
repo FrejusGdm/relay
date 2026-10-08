@@ -5,7 +5,10 @@ export interface Io {
   err(text: string): void;
   stdinIsTTY: boolean;
   readStdinToEnd(): Promise<string>;
-  // Reads one answer line from the terminal; null at end of input.
+  // Whether a person can answer a question: standard input and standard output are both terminals.
+  isTerminal: boolean;
+  // One line of standard input without its line ending, or null at the end of the input. It reads
+  // byte by byte, so nothing after the answer is taken from a program relay starts next.
   readLine(): Promise<string | null>;
 }
 
@@ -19,6 +22,7 @@ export function processIo(): Io {
       for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
       return Buffer.concat(chunks).toString("utf8");
     },
+    isTerminal: process.stdin.isTTY === true && process.stdout.isTTY === true,
     readLine: async () => readLineSync(),
   };
 }
