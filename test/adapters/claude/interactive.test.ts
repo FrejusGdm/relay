@@ -127,12 +127,28 @@ test("interactive resume keeps its ID and accepts matching session hooks only on
 test("interactive prompt is cleaned and passed last without permission flags", async () => {
   await interactiveTest([{ say: "Done." }], async ({ fixture, child, info, events }) => {
     expect(readRecord(fixture.record).argv).toEqual(["--session-id", info.presetSessionId,
-      "--append-system-prompt", "Follow the task.", "First turn."]);
+      "--append-system-prompt", "Follow the task.", "--", "First turn."]);
     child.stdin.end();
     expect(await child.exited).toBe(0);
     expect(events()).toContainEqual({ kind: "turn_completed" });
   }, {}, undefined, { instructions: "Follow\u202e the task.", prompt: "First\u200b turn." });
 }, 10_000);
+
+// Claude Code 2.1.282 parses its arguments with Commander: after "--" no argument is an option, but
+// a first operand that names a command, such as "update", still runs that command. relay passes
+// "--" and adds a space to a one-word prompt.
+for (const [prompt, sent] of [["--permission-mode=bypassPermissions", "--permission-mode=bypassPermissions "],
+  ["--dangerously-skip-permissions now", "--dangerously-skip-permissions now"], ["-p", "-p "], ["update", "update "], ["help", "help "]] as [string, string][]) {
+  test(`interactive passes the prompt ${JSON.stringify(prompt)} as the prompt`, async () => {
+    await interactiveTest([{ say: "Done." }], async ({ fixture, child, info, events }) => {
+      expect(readRecord(fixture.record).argv).toEqual(["--session-id", info.presetSessionId,
+        "--append-system-prompt", "Follow the task.", "--", sent]);
+      child.stdin.end();
+      expect(await child.exited).toBe(0);
+      expect(events()).toContainEqual({ kind: "turn_completed" });
+    }, {}, undefined, { prompt });
+  }, 10_000);
+}
 
 test("interactive interrupt reaches the inherited-input child", async () => {
   await interactiveTest([{ notification: "ready" }, { hang: true }], async ({ fixture, child, control }) => {

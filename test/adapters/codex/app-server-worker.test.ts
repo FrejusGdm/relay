@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { VERSION } from "../../../src/core/version";
 import { readRecord } from "../../fakes/record";
-import { codexTest, until } from "./helpers/worker";
+import { codexTest, THREAD, until } from "./helpers/worker";
 import { scriptedAppServer } from "./helpers/app-server";
 import { startAppServerWorker } from "../../../src/adapters/codex/app-server-worker";
 
@@ -19,8 +19,8 @@ test("app server handshakes first, starts the thread and closes input after its 
       capabilities: { experimentalApi: false, requestAttestation: false } });
     expect(messages[1]).toEqual({ method: "initialized" });
     expect(messages[2]?.params).toEqual({ cwd: fixture.root, sandbox: "workspace-write", approvalPolicy: "never", developerInstructions: "Follow the task.", model: "test-model" });
-    expect(messages[3]?.params).toEqual({ threadId: "thread_test", input: [{ type: "text", text: "First turn.", text_elements: [] }] });
-    expect(fixture.events[0]).toMatchObject({ kind: "session_started", providerSessionId: "thread_test", source: "stream" });
+    expect(messages[3]?.params).toEqual({ threadId: THREAD, input: [{ type: "text", text: "First turn.", text_elements: [] }] });
+    expect(fixture.events[0]).toMatchObject({ kind: "session_started", providerSessionId: THREAD, source: "stream" });
     expect(fixture.events.at(-1)).toEqual({ kind: "exited", code: 0, signal: null });
     expect(await worker.stop()).toMatchObject({ how: "already_exited" });
   } finally { await fixture.cleanup(); }
@@ -44,11 +44,11 @@ test("steer uses the active ID, interrupt keeps input open, and send starts the 
     await until(() => fixture.events.some((event) => event.kind === "message"));
     await worker.send("Second\u200b message.");
     expect(fixture.messages().find((message) => message.method === "turn/steer")?.params).toEqual({
-      threadId: "thread_test", expectedTurnId: "turn_1", input: [{ type: "text", text: "Second message.", text_elements: [] }],
+      threadId: THREAD, expectedTurnId: "turn_1", input: [{ type: "text", text: "Second message.", text_elements: [] }],
     });
     await worker.interrupt();
     await until(() => fixture.events.some((event) => event.kind === "turn_failed" && event.reason === "interrupted"));
-    expect(fixture.messages().find((message) => message.method === "turn/interrupt")?.params).toEqual({ threadId: "thread_test", turnId: "turn_1" });
+    expect(fixture.messages().find((message) => message.method === "turn/interrupt")?.params).toEqual({ threadId: THREAD, turnId: "turn_1" });
     expect(fixture.events.some((event) => event.kind === "exited")).toBe(false);
     await worker.send("Continue.");
     await fixture.finished();

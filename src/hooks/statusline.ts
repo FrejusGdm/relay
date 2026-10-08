@@ -2,7 +2,9 @@
 // "relay statusline claude"). Claude Code runs it on every status-line refresh. It records the
 // usage windows for the account, then runs the person's own status line with the same input and
 // passes its output and exit code through. It prints nothing of its own.
-import { resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { constants as osConstants } from "node:os";
+import { join, resolve } from "node:path";
 import { readAvailability, recordReading } from "../accounts/availability";
 import { usesProviderDefaultFolder } from "../accounts/profile";
 import type { LimitWindow } from "../adapters/types";
@@ -10,11 +12,12 @@ import { resetTimeFromValue } from "../adapters/reset-time";
 import type { Account, RelayConfig } from "../core/config/types";
 import type { Io } from "../cli/io";
 import { now } from "../platform/clock";
-import { savedStatusLine } from "./install";
+import { savedStatusLine, savedStatusLineWithoutConfig } from "./install";
 
 const MAX_INPUT = 1024 * 1024;
 const INPUT_TIME_MS = 200;
 const ORIGINAL_TIME_LIMIT_MS = 2000;
+const MAX_OUTPUT = 1024 * 1024;
 const WINDOW_MINUTES = { five_hour: 300, seven_day: 10080 } as const;
 
 type Json = Record<string, unknown>;
@@ -52,17 +55,27 @@ function sameWindows(a: LimitWindow[], b: LimitWindow[]): boolean {
   return key(a) === key(b);
 }
 
+// config is null when config.toml is invalid. Without an account, nothing is recorded, but the
+// person's own status line still runs.
 export async function runStatusLine(options: {
   io: Io;
   env: Record<string, string | undefined>;
-  config: RelayConfig;
+  config: RelayConfig | null;
   relayHome: string;
   homedir: string;
 }): Promise<number> {
   const { io, env } = options;
   const input = io.stdinIsTTY ? Buffer.alloc(0) : await io.readStdin(MAX_INPUT, INPUT_TIME_MS);
-  const account = statusLineAccount(options.config, env, options.homedir);
-  if (account === undefined) return 0;
+  const account = options.config === null ? undefined : statusLineAccount(options.config, env, options.homedir);
+  const original = account === undefined
+    ? savedStatusLineWithoutConfig(options.relayHome, env.RELAY_TARGET, resolve(env.CLAUDE_CONFIG_DIR || join(options.homedir, ".claude")))
+    : savedStatusLine(options.relayHome, account).value;
+  if (account !== undefined) record(options.relayHome, account, input);
+  if (!isObject(original) || original.type !== "command" || typeof original.command !== "string") return 0;
+  return runOriginal(original.command, input, env, io);
+}
+
+function record(relayHome: string, account: Account, input: Buffer): void {
   try {
     let parsed: unknown;
     try {
@@ -71,11 +84,11 @@ export async function runStatusLine(options: {
       parsed = undefined;
     }
     const windows = statusLineWindows(parsed);
-    const recorded = readAvailability(options.relayHome, account).windows.filter((window) => window.source === "status_line");
+    const recorded = readAvailability(relayHome, account).windows.filter((window) => window.source === "status_line");
     if (windows.length > 0 && !sameWindows(windows, recorded)) {
       const full = windows.filter((window) => window.usedPercent! >= 100 && window.resetsAt !== undefined);
       const retryAt = full.length === 0 ? undefined : new Date(Math.max(...full.map((window) => window.resetsAt!.getTime())));
-      recordReading(options.relayHome, account, {
+      recordReading(relayHome, account, {
         state: windows.some((window) => window.usedPercent! >= 100) ? "quota_exhausted" : "available",
         windows, observedAt: now(), source: "status_line", ...(retryAt === undefined ? {} : { retryAt }),
       });
@@ -83,17 +96,49 @@ export async function runStatusLine(options: {
   } catch {
     // A reading that cannot be recorded must not hide the person's status line.
   }
-  const original = savedStatusLine(options.relayHome, account).value;
-  if (!isObject(original) || original.type !== "command" || typeof original.command !== "string") return 0;
-  return runOriginal(original.command, input, env, io);
 }
 
-async function runOriginal(command: string, input: Buffer, env: Record<string, string | undefined>, io: Io): Promise<number> {
-  const child = Bun.spawn(["sh", "-c", command], { env, stdin: new Blob([input]), stdout: "pipe", stderr: "inherit" });
-  const timer = setTimeout(() => child.kill("SIGKILL"), ORIGINAL_TIME_LIMIT_MS);
-  const output = await new Response(child.stdout).text();
-  const code = await child.exited;
-  clearTimeout(timer);
-  io.out(output);
-  return code;
+// Runs the person's command in its own process group. At the time limit, relay kills the group,
+// so also the programs the command started, stops reading and shows what it printed until then.
+// It shows at most 1 MiB.
+function runOriginal(command: string, input: Buffer, env: Record<string, string | undefined>, io: Io): Promise<number> {
+  return new Promise((done) => {
+    const child = spawn("sh", ["-c", command], { env, stdio: ["pipe", "pipe", "inherit"], detached: true });
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let exitCode: number | null = null;
+    let outputEnded = false;
+    let finished = false;
+    const finish = (code: number) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      child.stdout!.destroy();
+      io.out(Buffer.concat(chunks).toString("utf8"));
+      done(code);
+    };
+    const timer = setTimeout(() => {
+      try {
+        process.kill(-child.pid!, "SIGKILL");
+      } catch {
+        // The group has already ended.
+      }
+      finish(exitCode ?? 0);
+    }, ORIGINAL_TIME_LIMIT_MS);
+    child.stdin!.on("error", () => {});
+    child.stdin!.end(input);
+    child.stdout!.on("data", (chunk: Buffer) => {
+      if (size < MAX_OUTPUT) chunks.push(chunk.subarray(0, MAX_OUTPUT - size));
+      size += chunk.length;
+    });
+    child.stdout!.on("end", () => {
+      outputEnded = true;
+      if (exitCode !== null) finish(exitCode);
+    });
+    child.on("exit", (code, signal) => {
+      exitCode = code ?? (signal === null ? 0 : 128 + (osConstants.signals[signal] ?? 0));
+      if (outputEnded) finish(exitCode);
+    });
+    child.on("error", () => finish(127));
+  });
 }

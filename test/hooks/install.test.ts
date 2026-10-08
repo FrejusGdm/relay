@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { displayPath } from "../../src/accounts/profile";
+import { shellQuote } from "../../src/hooks/install";
 import { runRelayInProcess } from "../helpers/cli";
 import { fakeEnv } from "../helpers/fake-programs";
 
@@ -120,17 +121,40 @@ test("a missing settings file is created with mode 0600", async () => {
 
 test("the status line is wrapped, the original saved and restored on removal", async () => {
   const mine = { type: "command", command: "~/bin/my-status" };
-  const { relayHome, read } = setup("claude", JSON.stringify({ statusLine: mine }));
+  const { relayHome, profile, read } = setup("claude", JSON.stringify({ statusLine: mine }));
   const result = await run(relayHome, ["install", "claude:work", "--status-line", "--yes"]);
   expect(result.stdout).toContain("Your status line still shows; relay runs it after recording the usage numbers.\n");
   expect(read().statusLine).toEqual({ type: "command", command: "'/usr/local/bin/relay' statusline claude" });
-  expect(JSON.parse(readFileSync(join(relayHome, "accounts", "claude-work", "statusline-original.json"), "utf8"))).toEqual({ v: 1, original: mine });
+  expect(JSON.parse(readFileSync(join(relayHome, "accounts", "claude-work", "statusline-original.json"), "utf8"))).toEqual({ v: 1, original: mine, profile });
   await run(relayHome, ["remove", "claude:work", "--yes"]);
   expect(read()).toEqual({ statusLine: mine });
   const plain = setup("claude");
   await run(plain.relayHome, ["install", "claude:work", "--yes"]);
   expect(plain.read().statusLine).toBeUndefined();
 });
+
+// A program with another name than relay, such as relay-darwin-arm64 or the one RELAY_BIN names,
+// writes commands that the name pattern alone does not recognise.
+for (const program of ["/opt/relay/relay-darwin-arm64", "/home/someone/bin/my relay's copy"]) {
+  test(`relay recognises the commands it wrote for ${JSON.stringify(program)}`, async () => {
+    for (const provider of ["claude", "codex"] as const) {
+      const { relayHome, read } = setup(provider, JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "say done" }] }] } }));
+      const runAs = (args: string[]) => runRelayInProcess(["hooks", ...args], { relayHome, env: { ...env, RELAY_BIN: program } });
+      const options = provider === "claude" ? ["--status-line"] : [];
+      expect((await runAs(["install", `${provider}:work`, ...options, "--yes"])).code).toBe(0);
+      const first = read();
+      expect(first.hooks.Stop[1].hooks[0].command).toBe(`${shellQuote(program)} hook ${provider} Stop`);
+      expect(await runAs(["install", `${provider}:work`, ...options, "--yes"])).toEqual({
+        code: 0, stdout: `relay's hooks are already installed for ${provider}:work.\n`, stderr: "" });
+      expect(read()).toEqual(first);
+      const status = await runAs(["status", `${provider}:work`]);
+      expect(status.stdout).toContain("Hooks: installed");
+      if (provider === "claude") expect(status.stdout).toContain("Status line: installed");
+      expect((await runAs(["remove", `${provider}:work`, "--yes"])).code).toBe(0);
+      expect(read()).toEqual({ hooks: { Stop: [{ hooks: [{ type: "command", command: "say done" }] }] } });
+    }
+  });
+}
 
 test("relay refuses to write source paths: RELAY_BIN is needed when running from source", async () => {
   const { relayHome } = setup("claude");

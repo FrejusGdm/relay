@@ -1,6 +1,7 @@
 // Headless Codex workers through `codex exec --json`, the fallback when the app server cannot
 // start or when RELAY_CODEX_TRANSPORT is set to exec, as the codex-adapter spec says. The prompt is
-// an argument and standard input is at end of file.
+// the last argument, after "--", so Codex never reads it as an option or a subcommand, and standard
+// input is at end of file.
 import type { Account } from "../../core/config/types";
 import { now } from "../../platform/clock";
 import { JsonLineParser } from "../lines";
@@ -10,7 +11,7 @@ import { findProgram } from "../program";
 import { resetTimeFromText } from "../reset-time";
 import { tomlString } from "../text";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
 import { createExecMapper } from "./exec-stream";
 
 // Reset text uses the child's local clock, which can differ from relay's clock.
@@ -53,10 +54,11 @@ export async function startExecWorker(
   const sandbox = request.permission === "read-only" ? "read-only" : "workspace-write";
   const args = request.resumeSessionId === undefined
     ? ["exec", "--json", "-C", request.cwd, "-s", sandbox]
-    : ["exec", "resume", request.resumeSessionId, "--json", "-c", `sandbox_mode=${tomlString(sandbox)}`];
+    : ["exec", "resume", sessionIdForCommand(request.resumeSessionId), "--json", "-c", `sandbox_mode=${tomlString(sandbox)}`];
   args.push("-c", `developer_instructions=${tomlString(instructions)}`);
   if (request.resumeSessionId === undefined && request.model !== undefined) args.push("-m", request.model);
-  args.push(prompt);
+  // codex exec reads its prompt from standard input when the prompt is "-", so that one gets a space.
+  args.push("--", prompt === "-" ? "- " : prompt);
   const queue = new EventQueue();
   const parser = new JsonLineParser();
   const context = { interruptSent: false };

@@ -48,6 +48,9 @@ if (argv[0] === "auth") {
   }
   fail(`error: unknown command '${argv[1] ?? ""}'`);
 }
+// The commands and aliases that claude --help lists in Claude Code 2.1.282, and Commander's help.
+const COMMANDS = new Set(["agents", "attach", "auth", "auto-mode", "doctor", "gateway", "import", "install", "logs", "mcp",
+  "plugin", "plugins", "project", "respawn", "rm", "setup-token", "stop", "kill", "ultrareview", "update", "upgrade", "help"]);
 const valueOptions = new Set(["--input-format", "--output-format", "--session-id", "--resume", "-r", "--permission-mode", "--permission-prompts", "--append-system-prompt", "--model"]);
 const booleanOptions = new Set(["-p", "--print", "--verbose"]);
 const flags = new Map<string, string>();
@@ -57,7 +60,15 @@ let unknown: string | undefined;
 let missing: string | undefined;
 for (let i = 0; i < argv.length; i++) {
   const arg = argv[i]!;
-  if (valueOptions.has(arg)) {
+  // As in Commander, the parser Claude Code uses, every argument after "--" is an operand, and a
+  // long option can carry its value after "=".
+  if (arg === "--") {
+    prompts.push(...argv.slice(i + 1));
+    break;
+  }
+  const equals = arg.startsWith("--") ? arg.indexOf("=") : -1;
+  if (equals > 0 && valueOptions.has(arg.slice(0, equals))) flags.set(arg.slice(0, equals), arg.slice(equals + 1));
+  else if (valueOptions.has(arg)) {
     const value = argv[++i];
     if (value === undefined) missing ??= arg;
     else flags.set(arg === "-r" ? "--resume" : arg, value);
@@ -65,6 +76,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (arg.startsWith("-")) unknown ??= arg;
   else prompts.push(arg);
 }
+// Commander runs a subcommand whose name equals the first operand, even one given after "--".
+if (prompts[0] !== undefined && COMMANDS.has(prompts[0])) fail(`fake-claude: ran the ${prompts[0]} command, because the first operand names it.`);
 if (unknown !== undefined) fail(`error: unknown option '${unknown}'`);
 if (missing !== undefined) fail(`error: option '${missing}' argument missing`);
 if (prompts.length > 1) fail("error: too many arguments");

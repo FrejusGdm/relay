@@ -2,7 +2,7 @@
 // (add-provider-adapters, design decision 13; the provider-hook-setup spec). relay touches only its
 // own entries, keeps a backup of the old file, and writes the new one through a temporary file and
 // a rename that keeps the file's mode. It never edits Codex's config.toml.
-import { closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, chmodSync, openSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
+import { closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, chmodSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { HookSpec, ProviderId } from "../adapters/types";
 import { accountFolder, readJsonFile, writeJsonFile } from "../accounts/files";
@@ -44,14 +44,19 @@ export function statusLineCommand(program: string): string {
   return `${shellQuote(program)} statusline claude`;
 }
 
-export function isRelayHook(command: unknown, provider: ProviderId, event?: string): boolean {
-  if (typeof command !== "string") return false;
-  const match = RELAY_HOOK.exec(command);
-  return match !== null && match[2] === provider && (event === undefined || command.endsWith(` ${event}`));
+// relay's own entry: the command relay writes for the program it runs as (see relayProgram), or a
+// command that runs a program named relay. The first form also covers a program with another name,
+// such as relay-darwin-arm64 or the one RELAY_BIN names.
+export function isRelayHook(command: unknown, provider: ProviderId, program: string | null, event?: string): boolean {
+  if (typeof command !== "string" || !(event === undefined || command.endsWith(` ${event}`))) return false;
+  const prefix = program === null ? null : `${shellQuote(program)} hook ${provider} `;
+  if (prefix !== null && command.startsWith(prefix) && /^[A-Za-z]+$/.test(command.slice(prefix.length))) return true;
+  return RELAY_HOOK.exec(command)?.[2] === provider;
 }
 
-export function isRelayStatusLine(value: unknown): boolean {
-  return isObject(value) && value.type === "command" && typeof value.command === "string" && RELAY_STATUS_LINE.test(value.command);
+export function isRelayStatusLine(value: unknown, program: string | null): boolean {
+  if (!isObject(value) || value.type !== "command" || typeof value.command !== "string") return false;
+  return (program !== null && value.command === statusLineCommand(program)) || RELAY_STATUS_LINE.test(value.command);
 }
 
 function isObject(value: unknown): value is Json {
@@ -83,18 +88,18 @@ export function readSettingsFile(path: string, shown: string): SettingsFile {
 }
 
 // Which of relay's entries are already in the file.
-export function presentHooks(data: Json, provider: ProviderId, events: string[]): string[] {
+export function presentHooks(data: Json, provider: ProviderId, events: string[], program: string | null): string[] {
   const hooks = isObject(data.hooks) ? data.hooks : {};
   return events.filter((event) => {
     const groups = hooks[event];
     return Array.isArray(groups) && groups.some((group) =>
-      isObject(group) && Array.isArray(group.hooks) && group.hooks.some((entry) => isObject(entry) && isRelayHook(entry.command, provider, event)));
+      isObject(group) && Array.isArray(group.hooks) && group.hooks.some((entry) => isObject(entry) && isRelayHook(entry.command, provider, program, event)));
   });
 }
 
 // Appends a new matcher group for each missing entry, after the person's own groups.
-export function addHooks(data: Json, provider: ProviderId, planned: PlannedHook[]): { data: Json; added: PlannedHook[] } {
-  const present = presentHooks(data, provider, planned.map((hook) => hook.event));
+export function addHooks(data: Json, provider: ProviderId, planned: PlannedHook[], program: string): { data: Json; added: PlannedHook[] } {
+  const present = presentHooks(data, provider, planned.map((hook) => hook.event), program);
   const added = planned.filter((hook) => !present.includes(hook.event));
   if (added.length === 0) return { data, added };
   const hooks: Json = isObject(data.hooks) ? { ...data.hooks } : {};
@@ -108,7 +113,7 @@ export function addHooks(data: Json, provider: ProviderId, planned: PlannedHook[
 
 // Removes relay's entries. A matcher group, an event and the hooks key are dropped only when they
 // became empty because relay's entry was their last one.
-export function removeHooks(data: Json, provider: ProviderId): { data: Json; removed: number } {
+export function removeHooks(data: Json, provider: ProviderId, program: string | null): { data: Json; removed: number } {
   if (!isObject(data.hooks)) return { data, removed: 0 };
   let removed = 0;
   const hooks: Json = {};
@@ -124,7 +129,7 @@ export function removeHooks(data: Json, provider: ProviderId): { data: Json; rem
         kept.push(group);
         continue;
       }
-      const entries = group.hooks.filter((entry) => !(isObject(entry) && isRelayHook(entry.command, provider)));
+      const entries = group.hooks.filter((entry) => !(isObject(entry) && isRelayHook(entry.command, provider, program)));
       if (entries.length === group.hooks.length) {
         kept.push(group);
         continue;
@@ -199,11 +204,32 @@ export function savedStatusLine(relayHome: string, account: Pick<Account, "provi
   return { saved: true, value: raw.original };
 }
 
-// Sets relay's status line, saving the previous value first. Returns whether a previous status
-// line existed.
-export function installStatusLine(relayHome: string, account: Pick<Account, "provider" | "name">, data: Json, program: string): { data: Json; hadOriginal: boolean } {
+// The saved status line of a Claude account that config.toml cannot name, because the file is
+// invalid or the account was removed: the account RELAY_TARGET names, else the one whose saved
+// profile folder is the given folder.
+export function savedStatusLineWithoutConfig(relayHome: string, target: string | undefined, profile: string): unknown {
+  const named = /^claude:([a-z0-9][a-z0-9-]{0,31})$/.exec(target ?? "");
+  if (named !== null) return savedStatusLine(relayHome, { provider: "claude", name: named[1]! }).value;
+  let names: string[];
+  try {
+    names = readdirSync(join(relayHome, "accounts"));
+  } catch {
+    return null;
+  }
+  for (const name of names.filter((name) => name.startsWith("claude-"))) {
+    const raw = readJsonFile(join(relayHome, "accounts", name, "statusline-original.json"));
+    if (isObject(raw) && raw.v === 1 && raw.profile === profile && "original" in raw) return raw.original;
+  }
+  return null;
+}
+
+// Sets relay's status line, saving the previous value and the profile folder first. Returns whether
+// a previous status line existed.
+export function installStatusLine(relayHome: string, account: Pick<Account, "provider" | "name" | "profileDir">, data: Json, program: string): { data: Json; hadOriginal: boolean } {
   const current = data.statusLine;
-  if (!isRelayStatusLine(current)) writeJsonFile(originalPath(relayHome, account), { v: 1, original: current ?? null });
+  if (!isRelayStatusLine(current, program)) {
+    writeJsonFile(originalPath(relayHome, account), { v: 1, original: current ?? null, profile: account.profileDir });
+  }
   const original = savedStatusLine(relayHome, account).value;
   return {
     data: { ...data, statusLine: { type: "command", command: statusLineCommand(program) } },
@@ -212,8 +238,8 @@ export function installStatusLine(relayHome: string, account: Pick<Account, "pro
 }
 
 // Puts the saved status line back, or removes the key when there was none, and forgets the copy.
-export function removeStatusLine(relayHome: string, account: Pick<Account, "provider" | "name">, data: Json): { data: Json; restored: boolean } {
-  if (!isRelayStatusLine(data.statusLine)) return { data, restored: false };
+export function removeStatusLine(relayHome: string, account: Pick<Account, "provider" | "name">, data: Json, program: string | null): { data: Json; restored: boolean } {
+  if (!isRelayStatusLine(data.statusLine, program)) return { data, restored: false };
   const { value } = savedStatusLine(relayHome, account);
   const result = { ...data };
   if (value === null || value === undefined) delete result.statusLine;

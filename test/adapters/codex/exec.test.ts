@@ -9,6 +9,7 @@ import { readRecord } from "../../fakes/record";
 import { codexTest, until } from "./helpers/worker";
 import { unresponsiveExec } from "./helpers/app-server";
 
+const PREVIOUS = "0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a32";
 const NOTE = "The Codex app server did not start, so relay is using codex exec. Reset times will not be available for this run.";
 
 test("exec command line uses EOF, TOML instructions, model and sandbox", async () => {
@@ -19,7 +20,7 @@ test("exec command line uses EOF, TOML instructions, model and sandbox", async (
     await fixture.finished();
     expect(worker.transport).toBe("codex-exec");
     expect(readRecord(fixture.record)).toMatchObject({ cwd: fixture.root, stdin: "eof", input: [], argv: [
-      "exec", "--json", "-C", fixture.root, "-s", "read-only", "-c", `developer_instructions=${tomlString('Follow "the task".\nNext line.')}`, "-m", "test-model", "First turn.",
+      "exec", "--json", "-C", fixture.root, "-s", "read-only", "-c", `developer_instructions=${tomlString('Follow "the task".\nNext line.')}`, "-m", "test-model", "--", "First turn.",
     ] });
   } finally { await fixture.cleanup(); }
 });
@@ -28,10 +29,40 @@ test("exec resume passes settings again without flags that resume cannot accept"
   const fixture = codexTest();
   fixture.env.RELAY_CODEX_TRANSPORT = "exec";
   try {
-    await fixture.start({ resumeSessionId: "thread_previous" });
+    await fixture.start({ resumeSessionId: PREVIOUS });
     await fixture.finished();
-    expect(readRecord(fixture.record)).toMatchObject({ cwd: fixture.root, stdin: "eof", argv: ["exec", "resume", "thread_previous", "--json",
-      "-c", 'sandbox_mode="workspace-write"', "-c", 'developer_instructions="Follow the task."', "First turn."] });
+    expect(readRecord(fixture.record)).toMatchObject({ cwd: fixture.root, stdin: "eof", argv: ["exec", "resume", PREVIOUS, "--json",
+      "-c", 'sandbox_mode="workspace-write"', "-c", 'developer_instructions="Follow the task."', "--", "First turn."] });
+  } finally { await fixture.cleanup(); }
+});
+
+// The real codex exec 0.160.0 reads every argument after "--" as its prompt: `codex exec -- --help
+// extra` fails with "unexpected argument 'extra' found" instead of printing the help, and
+// `codex -- completion bash extra` fails on 'bash' instead of running the completion command.
+for (const [prompt, sent] of [["--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-approvals-and-sandbox"],
+  ["-s", "-s"], ["resume", "resume"], ["-", "- "]] as [string, string][]) {
+  for (const resumeSessionId of [undefined, PREVIOUS]) {
+    test(`exec ${resumeSessionId === undefined ? "start" : "resume"} passes the prompt ${JSON.stringify(prompt)} as the prompt`, async () => {
+      const fixture = codexTest();
+      fixture.env.RELAY_CODEX_TRANSPORT = "exec";
+      try {
+        await fixture.start({ prompt, resumeSessionId });
+        await fixture.finished();
+        expect(readRecord(fixture.record).argv.slice(-2)).toEqual(["--", sent]);
+        expect(fixture.events.some((event) => event.kind === "turn_completed")).toBe(true);
+        expect(fixture.events.at(-1)).toEqual({ kind: "exited", code: 0, signal: null });
+      } finally { await fixture.cleanup(); }
+    });
+  }
+}
+
+test("exec: a session ID that is not a UUID never reaches Codex", async () => {
+  const fixture = codexTest();
+  fixture.env.RELAY_CODEX_TRANSPORT = "exec";
+  try {
+    await expect(fixture.start({ resumeSessionId: "--dangerously-bypass-approvals-and-sandbox" }))
+      .rejects.toThrow("The session ID to resume is not a UUID, so relay did not start the agent.");
+    expect(fixture.hasRecord()).toBe(false);
   } finally { await fixture.cleanup(); }
 });
 
@@ -85,6 +116,9 @@ test("exec usage-limit text supplies its reset time", async () => {
   reset.setSeconds(0, 0);
   const fixture = codexTest([{ limit: { window: "primary", resets_at: reset.toISOString() } }]);
   fixture.env.RELAY_CODEX_TRANSPORT = "exec";
+  // bun test runs in UTC without setting TZ, so without this the fake would write its reset time in
+  // the machine's own time zone.
+  fixture.env.TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     await fixture.start(); await fixture.finished();
     const failure = fixture.events.find((event) => event.kind === "turn_failed");

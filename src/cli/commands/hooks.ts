@@ -99,8 +99,8 @@ export async function install(ctx: CommandContext, account: Account, options: { 
   const { spec, path, shown } = settingsPath(ctx, account);
   const file = readSettingsFile(path, shown);
   const planned = plannedHooks(account.provider, spec, relay);
-  const { added } = addHooks(file.data, account.provider, planned);
-  const statusLineNeeded = options.statusLine && !isRelayStatusLine(file.data.statusLine);
+  const { added } = addHooks(file.data, account.provider, planned, relay);
+  const statusLineNeeded = options.statusLine && !isRelayStatusLine(file.data.statusLine, relay);
   if (added.length === 0 && !statusLineNeeded) {
     out(ctx, [`relay's hooks are already installed for ${account.id}.`]);
     return ExitCode.Ok;
@@ -116,7 +116,7 @@ export async function install(ctx: CommandContext, account: Account, options: { 
   ensureProfileFolder(account.profileDir, ctx.relayHome, uid, ctx.homedir);
   // Read again after the question, so a change the person made meanwhile is kept.
   const fresh = readSettingsFile(path, shown);
-  let data = addHooks(fresh.data, account.provider, planned).data;
+  let data = addHooks(fresh.data, account.provider, planned, relay).data;
   let hadOriginal = false;
   if (statusLineNeeded) ({ data, hadOriginal } = installStatusLine(ctx.relayHome, account, data, relay));
   const backup = backupSettings(ctx.relayHome, account, fresh);
@@ -145,8 +145,9 @@ async function remove(ctx: CommandContext, account: Account): Promise<number> {
   checkProfileFolder(account.profileDir, process.getuid!(), ctx.homedir);
   const { path, shown } = settingsPath(ctx, account);
   const file = readSettingsFile(path, shown);
-  const { removed } = removeHooks(file.data, account.provider);
-  const statusLine = isRelayStatusLine(file.data.statusLine);
+  const relay = relayProgram(ctx.env);
+  const { removed } = removeHooks(file.data, account.provider, relay);
+  const statusLine = isRelayStatusLine(file.data.statusLine, relay);
   if (removed === 0 && !statusLine) {
     out(ctx, [`relay's hooks are not installed for ${account.id}.`]);
     return ExitCode.Ok;
@@ -154,8 +155,8 @@ async function remove(ctx: CommandContext, account: Account): Promise<number> {
   out(ctx, [`relay will remove its ${removed === 1 ? "hook" : `${removed} hooks`} from ${shown}${statusLine ? " and put back your status line" : ""}.`]);
   await confirm(ctx, "Remove relay's hooks?");
   const fresh = readSettingsFile(path, shown);
-  let data = removeHooks(fresh.data, account.provider).data;
-  data = removeStatusLine(ctx.relayHome, account, data).data;
+  let data = removeHooks(fresh.data, account.provider, relay).data;
+  data = removeStatusLine(ctx.relayHome, account, data, relay).data;
   const backup = backupSettings(ctx.relayHome, account, fresh);
   writeSettings(fresh, data);
   updateAccountRecord(ctx.relayHome, account, { hooks_installed_at: null, status_line_installed_at: null });
@@ -171,7 +172,8 @@ async function status(ctx: CommandContext, account: Account, readTrust?: TrustRe
   checkProfileFolder(account.profileDir, process.getuid!(), ctx.homedir);
   const { spec, path, shown } = settingsPath(ctx, account);
   const file = readSettingsFile(path, shown);
-  const present = presentHooks(file.data, account.provider, spec.events);
+  const relay = relayProgram(ctx.env);
+  const present = presentHooks(file.data, account.provider, spec.events, relay);
   const missing = spec.events.filter((event) => !present.includes(event));
   let summary: string;
   if (present.length === 0) summary = "not installed";
@@ -189,7 +191,7 @@ async function status(ctx: CommandContext, account: Account, readTrust?: TrustRe
     `${account.id}  ${shown}`,
     `Hooks: ${summary}`,
     ...spec.events.map((event) => `  ${event.padEnd(width)}${present.includes(event) ? "present" : "missing"}`),
-    ...(account.provider === "claude" ? [`Status line: ${isRelayStatusLine(file.data.statusLine) ? "installed" : "not installed"}`] : []),
+    ...(account.provider === "claude" ? [`Status line: ${isRelayStatusLine(file.data.statusLine, relay) ? "installed" : "not installed"}`] : []),
   ]);
   return ExitCode.Ok;
 }

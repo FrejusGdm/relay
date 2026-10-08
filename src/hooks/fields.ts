@@ -1,6 +1,7 @@
 // What relay keeps from a hook's input (add-provider-adapters, design decision 14; the same list as
 // the provider-hooks capability of add-daemon-api-and-status). Everything else, such as
 // tool_input, error_details or last_assistant_message, is dropped before anything is written.
+import { resolve } from "node:path";
 import { PROVIDERS, type Provider } from "../adapters/providers";
 import { isJobId } from "../job/id";
 
@@ -64,7 +65,8 @@ export function spoolLine(
     relay_job: matching(env.RELAY_JOB, isJobId),
     relay_target: matching(env.RELAY_TARGET, (text) => ACCOUNT_ID.test(text) && text.startsWith(`${provider}:`)),
     relay_worker: matching(env.RELAY_WORKER, (text) => WORKER_ID.test(text)),
-    profile: profile ? profile : "default",
+    // Resolved in the hook's own folder, where a relative CLAUDE_CONFIG_DIR or CODEX_HOME applies.
+    profile: profile ? resolve(profile) : "default",
     fields: keepFields(input),
   };
 }

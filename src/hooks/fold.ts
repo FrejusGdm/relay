@@ -1,6 +1,7 @@
 // Folds hook events from the spool into the accounts' availability (add-provider-adapters, design
 // decision 9). In this version relay account status does it; a later daemon takes it over. Only
 // the events below change availability, always with source "hook".
+import { resolve } from "node:path";
 import { readAvailability, markSpoolSeen, recordReading, spoolSeenUntil, type Reading } from "../accounts/availability";
 import { usesProviderDefaultFolder } from "../accounts/profile";
 import type { Account, RelayConfig } from "../core/config/types";
@@ -16,12 +17,13 @@ const UNAVAILABLE: Record<string, string> = {
 };
 
 // The account a spool line belongs to: RELAY_TARGET, else the account whose profile folder the
-// line names, else, for "default", the account that uses the provider's own folder.
+// line names, else, for "default", the account that uses the provider's own folder. The folder is
+// resolved as relay statusline claude resolves CLAUDE_CONFIG_DIR, so both find the same account.
 export function spoolLineAccount(line: SpoolLine, config: RelayConfig, home: string): Account | undefined {
   const accounts = config.accounts.filter((account) => account.provider === line.provider);
   if (line.relay_target !== null) return accounts.find((account) => account.id === line.relay_target);
   if (line.profile === "default") return accounts.find((account) => usesProviderDefaultFolder(account, home));
-  return accounts.find((account) => account.profileDir === line.profile);
+  return accounts.find((account) => account.profileDir === resolve(line.profile));
 }
 
 // The reading a hook event gives, or null when the event does not change availability.

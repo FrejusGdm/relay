@@ -23,6 +23,9 @@ export async function initializeCodex(rpc: RpcClient, timeoutMs: number): Promis
   await rpc.notify("initialized");
 }
 
+// The messages Codex 0.160.0 sends when account/rateLimits/read finds no signed-in account.
+const SIGNED_OUT = /authentication required to read rate limits/i;
+
 type SessionResult = { status: "answer"; result: unknown } | { status: "error"; error: RpcError } | { status: "unknown" };
 
 // One short session, including its handshake and shutdown, shares one deadline.
@@ -42,7 +45,8 @@ export async function readCodexSession(
   let requesting = false;
   try {
     child = await startHeadless({ path, args: ["app-server"], cwd, env, input: "pipe",
-      logPath: join(home, "logs", "workers", `availability-${account.provider}-${account.name}.log`),
+      // Every short session of an account appends to this one log, which no cleanup removes.
+      logPath: join(home, "logs", "workers", `availability-${account.provider}-${account.name}.log`), logLimit: 1024 * 1024,
       onLine(stream, line) {
         if (stream !== "out") return;
         const parsed = parser.parse(line);
@@ -73,15 +77,17 @@ export async function codexAvailability(
 ): Promise<Availability> {
   const response = await readCodexSession(account, env, resolveHomedir(env),
     "account/rateLimits/read", undefined, adapterEnv);
+  const signedOut = response.status === "error" && SIGNED_OUT.test(response.error.message);
   const reading: Availability = response.status === "answer" ? availabilityFromRateLimits(response.result, account.id)
-    : response.status === "error" ? {
+    : signedOut ? {
       account: account.id, state: "unavailable", windows: [], source: "provider_api", observedAt: now(),
       detail: `Codex is not signed in on this account. Run relay account login codex:${account.name}.`,
     } : {
       account: account.id, state: "unknown", windows: [], source: "none", observedAt: now(),
       detail: "relay could not read Codex's rate limits.",
     };
-  // A failed attempt says nothing about the account, so it does not replace an earlier reading.
-  if (response.status !== "unknown") recordReading(resolveRelayHome(env, resolveHomedir(env)), account, reading);
+  // A failed attempt, or an error other than signed out, says nothing about the account, so it does
+  // not replace an earlier reading.
+  if (response.status === "answer" || signedOut) recordReading(resolveRelayHome(env, resolveHomedir(env)), account, reading);
   return reading;
 }

@@ -14,7 +14,7 @@ import { notBuilt } from "./not-built";
 import { policy } from "./policy";
 import { providers } from "./providers";
 import { rollback } from "./rollback";
-import { statusline } from "./statusline";
+import { statusline, statuslineWithoutSettings } from "./statusline";
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
@@ -55,6 +55,8 @@ export interface CommandDef {
   quiet: boolean;        // true for hook and statusline: no output of relay's own, always exit 0
   built: boolean;        // false until a change builds the command
   handler: (ctx: CommandContext) => Promise<number>;
+  // Runs in place of the settings error when config.toml is invalid.
+  withoutSettings?: (ctx: Omit<CommandContext, "config">) => Promise<number>;
 }
 
 // Each later change that builds a command replaces its handler, sets `built`, adds its options,
@@ -301,6 +303,7 @@ export const COMMANDS: CommandDef[] = [
     quiet: true,
     built: true,
     handler: statusline,
+    withoutSettings: statuslineWithoutSettings,
   },
   {
     name: "daemon",

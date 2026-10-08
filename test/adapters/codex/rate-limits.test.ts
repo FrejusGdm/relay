@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { availabilityPath, readAvailability } from "../../../src/accounts/availability";
 import { createCodexAdapter } from "../../../src/adapters/codex/adapter";
 import { readCodexSession } from "../../../src/adapters/codex/session";
 import type { AvailabilityState } from "../../../src/adapters/types";
 import type { Scenario } from "../../fakes/scenario";
+import { scriptedAppServer } from "./helpers/app-server";
 import { codexTest } from "./helpers/worker";
 
 const RESET = new Date(Date.now() + 86_400_000).toISOString();
@@ -43,6 +45,32 @@ test("not signed in is unavailable with the login instruction", async () => {
     expect(reading).toMatchObject({ state: "unavailable", windows: [], source: "provider_api",
       detail: "Codex is not signed in on this account. Run relay account login codex:test." });
     expect(readAvailability(fixture.relayHome, fixture.account)).toEqual(reading);
+  } finally { await fixture.cleanup(); }
+});
+
+test("an app-server error other than signed out gives unknown and keeps the earlier reading", async () => {
+  const fixture = codexTest([], { rate_limits: { primary, ordinary_usage_allowed: true } });
+  try {
+    const earlier = await fixture.adapter.availability(fixture.account, fixture.env);
+    expect(earlier.state).toBe("available");
+    const failing = scriptedAppServer(fixture.root, { errorMethod: "account/rateLimits/read", code: -32603 });
+    const reading = await createCodexAdapter({ ...fixture.env, RELAY_CODEX_BIN: failing }).availability(fixture.account, fixture.env);
+    expect(reading).toMatchObject({ state: "unknown", source: "none", detail: "relay could not read Codex's rate limits." });
+    expect(readAvailability(fixture.relayHome, fixture.account)).toEqual(earlier);
+  } finally { await fixture.cleanup(); }
+});
+
+test("the shared availability log starts again when it is larger than 1 MiB", async () => {
+  const fixture = codexTest([], { rate_limits: { primary, ordinary_usage_allowed: true } });
+  try {
+    const log = join(fixture.relayHome, "logs", "workers", "availability-codex-test.log");
+    mkdirSync(dirname(log), { recursive: true, mode: 0o700 });
+    writeFileSync(log, "x".repeat(2 * 1024 * 1024), { mode: 0o600 });
+    await fixture.adapter.availability(fixture.account, fixture.env);
+    const text = readFileSync(log, "utf8");
+    expect(text.length).toBeLessThan(1024 * 1024);
+    expect(text.startsWith("x")).toBe(false);
+    expect(text).toContain("rateLimits");
   } finally { await fixture.cleanup(); }
 });
 

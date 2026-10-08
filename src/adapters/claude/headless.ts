@@ -9,7 +9,7 @@ import { startHeadless } from "../process";
 import type { HeadlessProcess } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, settlesWithin, textForAgent } from "../worker";
+import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent } from "../worker";
 import { createClaudeStreamMapper } from "./stream";
 
 export async function startClaudeHeadless(
@@ -23,7 +23,7 @@ export async function startClaudeHeadless(
   const prompt = textForAgent(request.prompt);
   const path = findProgram("claude", adapterEnv);
   if (path === null) throw new Error("Claude Code is not installed.");
-  const sessionId = request.resumeSessionId ?? crypto.randomUUID();
+  const sessionId = request.resumeSessionId === undefined ? crypto.randomUUID() : sessionIdForCommand(request.resumeSessionId);
   const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
     request.resumeSessionId === undefined ? "--session-id" : "--resume", sessionId,
     "--permission-mode", request.permission === "read-only" ? "dontAsk" : "acceptEdits",

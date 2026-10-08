@@ -9,14 +9,15 @@ const HOME = process.env.HOME!;
 afterEach(() => setClock(null));
 const WORK = { id: "claude:work" as const, provider: "claude" as const, name: "work" };
 
-function setup(original?: unknown) {
+function setup(original?: unknown, config = '[accounts."claude:work"]\n\n[accounts."claude:home"]\n') {
   const relayHome = mkdtempSync(join(HOME, "relay-"));
-  writeFileSync(join(relayHome, "config.toml"), '[accounts."claude:work"]\n\n[accounts."claude:home"]\n', { mode: 0o600 });
+  writeFileSync(join(relayHome, "config.toml"), config, { mode: 0o600 });
+  const profile = join(relayHome, "profiles", "claude-work");
   if (original !== undefined) {
     mkdirSync(join(relayHome, "accounts", "claude-work"), { recursive: true, mode: 0o700 });
-    writeFileSync(join(relayHome, "accounts", "claude-work", "statusline-original.json"), JSON.stringify({ v: 1, original }));
+    writeFileSync(join(relayHome, "accounts", "claude-work", "statusline-original.json"), JSON.stringify({ v: 1, original, profile }));
   }
-  return { relayHome, profile: join(relayHome, "profiles", "claude-work") };
+  return { relayHome, profile };
 }
 const INPUT = JSON.stringify({
   session_id: "s1", model: { id: "m" },
@@ -73,3 +74,35 @@ test("the original starts less than 50 ms after relay starts, on the median of 2
   times.sort((a, b) => a - b);
   expect(times[10]!).toBeLessThan(50);
 });
+
+test("at the 2-second limit relay kills everything the original started and shows what it printed", async () => {
+  const folder = mkdtempSync(join(HOME, "status-"));
+  const pidFile = join(folder, "pid");
+  // The background sleep keeps standard output open after sh is killed.
+  const { relayHome, profile } = setup({ type: "command", command: `sleep 30 & echo $! > '${pidFile}'; printf 'partial'; wait` });
+  const started = performance.now();
+  const result = await runRelayInProcess(["statusline", "claude"], { relayHome, stdin: INPUT, env: { CLAUDE_CONFIG_DIR: profile } });
+  expect(performance.now() - started).toBeLessThan(4000);
+  expect(result).toEqual({ code: 0, stdout: "partial", stderr: "" });
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  await new Promise<void>((done) => setTimeout(done, 200));
+  expect(() => process.kill(pid, 0)).toThrow();
+}, 10_000);
+
+test("relay shows at most 1 MiB of the original's output", async () => {
+  const { relayHome, profile } = setup({ type: "command", command: "head -c 3000000 /dev/zero | tr '\\0' a" });
+  const result = await runRelayInProcess(["statusline", "claude"], { relayHome, stdin: INPUT, env: { CLAUDE_CONFIG_DIR: profile } });
+  expect(result.stdout).toBe("a".repeat(1024 * 1024));
+});
+
+for (const [label, config] of [["config.toml is invalid", "[accounts.\"claude:work\"\nbroken = \n"], ["the account was removed", ""]]) {
+  for (const env of ["CLAUDE_CONFIG_DIR", "RELAY_TARGET"]) {
+    test(`the person's status line still shows when ${label} (found by ${env})`, async () => {
+      const { relayHome, profile } = setup({ type: "command", command: "printf 'Opus | 20%%'" }, config);
+      const result = await runRelayInProcess(["statusline", "claude"], { relayHome, stdin: INPUT,
+        env: env === "RELAY_TARGET" ? { RELAY_TARGET: "claude:work", CLAUDE_CONFIG_DIR: "/elsewhere" } : { CLAUDE_CONFIG_DIR: profile } });
+      expect(result).toEqual({ code: 0, stdout: "Opus | 20%", stderr: "" });
+      expect(readAvailability(relayHome, WORK).source).toBe("none");
+    });
+  }
+}

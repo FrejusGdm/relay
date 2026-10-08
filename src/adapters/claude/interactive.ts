@@ -6,8 +6,15 @@ import { now } from "../../platform/clock";
 import { startInteractive } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
 import { claudeHookEvents } from "./hooks";
+
+// After "--", Claude Code reads no more options, but its argument parser still runs a subcommand
+// whose name equals the first remaining argument, so a one-word prompt such as "update" would run
+// "claude update". A space at the end keeps such a prompt from matching a name.
+function promptArgument(prompt: string): string {
+  return /^\S+$/.test(prompt) ? `${prompt} ` : prompt;
+}
 
 export async function startClaudeInteractive(
   account: Account,
@@ -18,10 +25,10 @@ export async function startClaudeInteractive(
   const prompt = request.prompt === undefined ? undefined : textForAgent(request.prompt);
   const path = findProgram("claude", adapterEnv);
   if (path === null) throw new Error("Claude Code is not installed.");
-  const sessionId = request.resumeSessionId ?? crypto.randomUUID();
+  const sessionId = request.resumeSessionId === undefined ? crypto.randomUUID() : sessionIdForCommand(request.resumeSessionId);
   const args = [request.resumeSessionId === undefined ? "--session-id" : "--resume", sessionId,
     "--append-system-prompt", instructions];
-  if (prompt !== undefined) args.push(prompt);
+  if (prompt !== undefined) args.push("--", promptArgument(prompt));
   const queue = new EventQueue();
   const relayHome = request.env.RELAY_HOME!;
   const seen = new Map<string, number>();

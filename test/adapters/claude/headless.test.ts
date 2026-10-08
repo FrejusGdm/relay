@@ -96,3 +96,16 @@ test("an oversized sent message is refused without changing the worker’s input
     expect(fixture.events.some((event) => event.kind === "exited")).toBe(false);
   } finally { await fixture.cleanup(); }
 });
+
+for (const mode of ["headless", "interactive"] as const) {
+  test(`${mode}: a session ID that is not a UUID never reaches Claude Code`, async () => {
+    const fixture = claudeTest();
+    try {
+      for (const resumeSessionId of ["--permission-mode=bypassPermissions", "7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f --fork-session"]) {
+        await expect(fixture.adapter.start(fixture.account, { ...fixture.request, mode, resumeSessionId }))
+          .rejects.toThrow("The session ID to resume is not a UUID, so relay did not start the agent.");
+      }
+      expect(fixture.hasRecord()).toBe(false);
+    } finally { await fixture.cleanup(); }
+  });
+}

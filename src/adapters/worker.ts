@@ -93,6 +93,19 @@ export function textForAgent(text: string): string {
   return cleaned;
 }
 
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Claude Code and Codex name their sessions with UUIDs. A session ID can come from a hook's input,
+// which any program that runs as a hook controls, so only a UUID may reach a command line.
+export function isSessionId(value: unknown): value is string {
+  return typeof value === "string" && SESSION_ID.test(value);
+}
+
+export function sessionIdForCommand(id: string): string {
+  if (!isSessionId(id)) throw new Error("The session ID to resume is not a UUID, so relay did not start the agent.");
+  return id;
+}
+
 export function unsupportedOperation(displayName: string, transport: Transport, operation: string): UnsupportedOperation {
   const mode = transport === "claude-print" ? "claude -p" : transport === "codex-app-server" ? "app server"
     : transport === "codex-exec" ? "codex exec" : "interactive";

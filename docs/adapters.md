@@ -287,6 +287,16 @@ relay. Instructions go only through the tool's system channel, and text written 
 as `.relay/checkpoint.md`, never goes there. For Codex's `-c developer_instructions=<value>`,
 `tomlString()` in `src/adapters/text.ts` encodes the text as a TOML basic string.
 
+A prompt on a command line always comes last, after `--`, so neither program reads it as an
+option: a prompt such as `--dangerously-bypass-approvals-and-sandbox` stays a prompt. Codex reads
+every argument after `--` as a positional argument. Claude Code's argument parser still runs a
+subcommand whose name equals the first argument after `--`, so relay adds a space at the end of a
+one-word prompt (`update` becomes `update `), and `codex exec`, which reads standard input when the
+prompt is `-`, gets `- ` instead. A session ID reaches a command line only when it is a UUID
+(`isSessionId()` in `src/adapters/worker.ts`); relay refuses to resume any other ID, and ignores a
+`SessionStart` hook line whose `session_id` is not a UUID, because any program can write to the
+spool.
+
 Facts that relay writes to the job's event log, such as the commands an agent ran, pass through
 `redact()` in `src/secrets/redact.ts` first. It replaces common token formats (Anthropic, OpenAI,
 GitHub, Slack and AWS keys, and JSON web tokens), the value after `Bearer `, the value of a
@@ -401,7 +411,7 @@ events (decision 8), and the worker records limit readings and finished turns in
 `availability.json`.
 
 **Interactive** (`claude-interactive`): relay runs `claude --session-id <uuid> --append-system-prompt
-<instructions> [<prompt>]` in your terminal, with no permission flag, and learns what happens from
+<instructions> [-- <prompt>]` in your terminal, with no permission flag, and learns what happens from
 relay's hooks: every second it reads the spool lines of this worker or this session.
 `StopFailure` gives `turn_failed` with the hook's `error`, `Stop` gives `turn_completed`, and
 `Notification` with `quota_auto_resume_fired` marks the account available again. relay never
@@ -447,21 +457,24 @@ messages into worker events.
 
 **Fallback** (`codex-exec`): when the app server exits before answering `initialize`, gives no
 answer within 15 seconds, or answers `thread/start` with method-not-found, relay uses
-`codex exec --json -C <root> -s <sandbox> -c developer_instructions=<TOML string> <prompt>` with
+`codex exec --json -C <root> -s <sandbox> -c developer_instructions=<TOML string> -- <prompt>` with
 standard input at end of file, and notes in the worker log that reset times are not available.
 `RELAY_CODEX_TRANSPORT=exec` forces this transport. A resume is
-`codex exec resume <id> --json -c sandbox_mode="<sandbox>" -c developer_instructions=<…> <prompt>`.
+`codex exec resume <id> --json -c sandbox_mode="<sandbox>" -c developer_instructions=<…> -- <prompt>`.
 In this mode a usage limit is read from the message text, "You've hit your usage limit … try again
 at <time>".
 
-**Interactive** (`codex-interactive`): `codex -C <root> -c developer_instructions=<…> [<prompt>]` in
+**Interactive** (`codex-interactive`): `codex -C <root> -c developer_instructions=<…> [-- <prompt>]` in
 your terminal. The session ID comes from the first `SessionStart` hook event of this worker, so it
 stays unknown until you trust relay's hooks in Codex.
 
 **Availability** is read live: relay starts `codex app-server` with the account's environment, asks
 `account/rateLimits/read` and stops it within 10 seconds. `ordinaryUsageAllowed` true gives
-`available`, false or a `rateLimitReachedType` gives `quota_exhausted`, null gives `unknown`, and an
-error gives `unavailable` with "Codex is not signed in on this account."
+`available`, false or a `rateLimitReachedType` gives `quota_exhausted`, and null gives `unknown`.
+The error Codex sends when no account is signed in ("authentication required to read rate limits")
+gives `unavailable` with "Codex is not signed in on this account." Any other error gives `unknown`
+and leaves the earlier reading in place. These short sessions share one worker log per account,
+`logs/workers/availability-codex-<name>.log`, which relay empties when it is larger than 1 MiB.
 
 Before relay is used with a new Codex version, `bun run scripts/check-codex-protocol.ts` checks
 that every method, field and value in `src/adapters/codex/protocol-used.json` still exists

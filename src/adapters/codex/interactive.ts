@@ -1,5 +1,6 @@
 // Interactive Codex workers in the person's terminal. The session ID comes from relay's
-// SessionStart hook, so it stays unknown until the person trusts relay's hooks in Codex.
+// SessionStart hook, so it stays unknown until the person trusts relay's hooks in Codex. The prompt
+// comes after "--", so Codex never reads it as an option or a subcommand.
 import type { Account } from "../../core/config/types";
 import { readSpool } from "../../hooks/spool";
 import { now } from "../../platform/clock";
@@ -7,7 +8,7 @@ import { startInteractive } from "../process";
 import { findProgram } from "../program";
 import { tomlString } from "../text";
 import type { StartRequest, StopResult, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
 import { codexHookEvents } from "./hooks";
 
 export async function startCodexInteractive(
@@ -17,9 +18,9 @@ export async function startCodexInteractive(
   const prompt = request.prompt === undefined ? undefined : textForAgent(request.prompt);
   const path = findProgram("codex", adapterEnv);
   if (path === null) throw new Error("Codex is not installed.");
-  const args = request.resumeSessionId === undefined ? [] : ["resume", request.resumeSessionId];
+  const args = request.resumeSessionId === undefined ? [] : ["resume", sessionIdForCommand(request.resumeSessionId)];
   args.push("-C", request.cwd, "-c", `developer_instructions=${tomlString(instructions)}`);
-  if (prompt !== undefined) args.push(prompt);
+  if (prompt !== undefined) args.push("--", prompt);
   const queue = new EventQueue();
   const home = request.env.RELAY_HOME!;
   const seen = new Map<string, number>();

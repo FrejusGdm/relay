@@ -26,7 +26,8 @@ event's JSON for at most 200 ms, prints nothing, always exits with code 0, and a
 and `turn_id`. Everything else, such as the commands the agent ran (`tool_input`), the provider's
 error details and the agent's last message, is dropped before anything is written. The line also
 records `RELAY_JOB`, `RELAY_TARGET` and `RELAY_WORKER` when relay started the agent (otherwise
-null), and the profile folder (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`, or `default`):
+null), and the profile folder (`CLAUDE_CONFIG_DIR` or `CODEX_HOME` as an absolute path, or
+`default`):
 
 ```
 {"v":1,"received_at":"2026-10-07T13:02:11.120Z","provider":"claude","event":"StopFailure","relay_job":"3f9a2c1d","relay_target":"claude:work","relay_worker":"5d2e8f01","profile":"/home/user/.relay/profiles/claude-work","fields":{"session_id":"7c1e9a52-…","cwd":"/home/user/app","hook_event_name":"StopFailure","error":"rate_limit"}}
@@ -61,7 +62,9 @@ These hook events change an account's availability, and no others:
 | Claude or Codex `Stop` | `available`, "The last turn finished normally" |
 
 relay finds the account from `RELAY_TARGET`, otherwise from the profile folder: an event from
-`~/.claude` or `~/.codex` belongs to the account that uses that folder.
+`~/.claude` or `~/.codex` belongs to the account that uses that folder. relay resolves the folder
+the same way for hook lines and for the status line, so `~/.relay/profiles/claude-work/` and
+`~/.relay/profiles/claude-work` name the same account.
 
 ## Installing hooks
 
@@ -86,7 +89,10 @@ object, relay changes nothing and exits with code 1. relay does not replace a se
 is a symbolic link.
 
 The command in each entry names relay's own program. An installed relay uses its own path. When
-you run relay from source, set `RELAY_BIN` to the program the hooks should run.
+you run relay from source, set `RELAY_BIN` to the program the hooks should run. relay recognises an
+entry as its own when the command is exactly the one it writes for that program, whatever the
+program's file name (for example `relay-darwin-arm64`), or when the command runs a program named
+`relay`. So installing twice adds nothing, and `relay hooks remove` finds the entries.
 
 `relay account add` offers to install the hooks only for a profile folder relay created. For
 `~/.claude`, `~/.codex` and any folder given with `--profile-dir`, it prints "To let relay see
@@ -109,12 +115,16 @@ line in `accounts/<provider>-<name>/statusline-original.json`. On each refresh,
 `rate_limits.seven_day` (`used_percentage` and `resets_at`) for the account when they changed, and
 then runs your saved status line with the same input, passing its output and exit code through.
 It prints nothing of its own and records before it runs yours, so a slow status line of yours
-never delays the reading. A window at 100 percent makes the account `quota_exhausted` until that
+never delays the reading. Your status line runs in its own process group. When it has not
+finished after 2 seconds, relay stops it and every program it started, and shows what it printed
+until then (exit code 0). relay shows at most 1 MiB of its output. A window at 100 percent makes the account `quota_exhausted` until that
 window's reset time; otherwise the account is `available`. Claude Code sends these numbers only to
 Pro and Max subscribers, after the first answer in a session.
 
 relay finds the account from `RELAY_TARGET`, otherwise from `CLAUDE_CONFIG_DIR`, otherwise the
-account whose profile folder is `~/.claude`.
+account whose profile folder is `~/.claude`. When `config.toml` is invalid, or the account is no
+longer in it, relay records nothing but still shows your status line: it finds the saved copy from
+`RELAY_TARGET`, or from the profile folder that `statusline-original.json` records next to it.
 
 ## Checking and removing everything
 
