@@ -106,6 +106,12 @@ export function sessionIdForCommand(id: string): string {
   return id;
 }
 
+// The program's arguments as relay records them (design decision 16): the argument at each given
+// position is replaced by its placeholder, such as <instructions> or <prompt>.
+export function recordedArgs(args: string[], placeholders: Record<number, string>): string[] {
+  return args.map((arg, index) => placeholders[index] ?? arg);
+}
+
 export function unsupportedOperation(displayName: string, transport: Transport, operation: string): UnsupportedOperation {
   const mode = transport === "claude-print" ? "claude -p" : transport === "codex-app-server" ? "app server"
     : transport === "codex-exec" ? "codex exec" : "interactive";

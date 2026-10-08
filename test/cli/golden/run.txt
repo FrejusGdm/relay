@@ -1,15 +1,23 @@
 Usage
-  relay run [<provider[:account]>]
+  relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]
 
 Start an agent inside a relay job.
 Without an account, relay uses defaults.account from your settings.
+The agent works in your terminal, or with --headless on its own, and relay records what it did.
 
 Examples
   relay run
   relay run claude:personal
+  relay run codex:personal --headless --prompt "Fix the failing test."
+  relay run claude:personal --resume last
 
 Options
+      --headless           Run the agent without your terminal
+      --prompt <text>      The first message for the agent
+      --prompt-file <path>  Read the first message from a file
+      --resume <id>        Continue a session, or the last one with last
+      --permission <level>  headless: read-only or edit-in-workspace
+      --model <name>       The model the agent uses
+      --json               headless: print each worker event as JSON
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.

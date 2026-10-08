@@ -6,7 +6,7 @@ import { now } from "../../platform/clock";
 import { startInteractive } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
 import { claudeHookEvents } from "./hooks";
 
 // After "--", Claude Code reads no more options, but its argument parser still runs a subcommand
@@ -80,6 +80,7 @@ export async function startClaudeInteractive(
   };
   return {
     workerId: request.workerId, transport: "claude-interactive", pid: child.pid, presetSessionId: sessionId,
+    argv: recordedArgs(args, { [args.indexOf("--append-system-prompt") + 1]: "<instructions>", ...(prompt === undefined ? {} : { [args.length - 1]: "<prompt>" }) }),
     events: () => queue.events(),
     async send() { throw unsupportedOperation("Claude Code", "claude-interactive", "receive a message while it runs"); },
     async interrupt() { child.signal("SIGINT"); },

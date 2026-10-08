@@ -222,7 +222,7 @@ export async function startAppServerWorker(
     const status = await wait;
     if (!exitReported) publish({ kind: "exited", ...status });
   }
-  return { workerId: request.workerId, transport: "codex-app-server", pid: agent.pid,
+  return { workerId: request.workerId, transport: "codex-app-server", pid: agent.pid, argv: ["app-server"],
     events: () => queue.events(), send, interrupt, stop, wait: () => wait,
   };
 }

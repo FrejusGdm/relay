@@ -9,7 +9,7 @@ import { startHeadless } from "../process";
 import type { HeadlessProcess } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent } from "../worker";
+import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent } from "../worker";
 import { createClaudeStreamMapper } from "./stream";
 
 export async function startClaudeHeadless(
@@ -145,5 +145,6 @@ export async function startClaudeHeadless(
     return stopping;
   };
   return { workerId: request.workerId, transport: "claude-print", pid: agent.pid, presetSessionId: sessionId,
+    argv: recordedArgs(args, { [args.indexOf("--append-system-prompt") + 1]: "<instructions>" }),
     events: () => queue.events(), send, interrupt, stop, wait: () => wait };
 }

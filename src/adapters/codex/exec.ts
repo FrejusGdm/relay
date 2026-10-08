@@ -11,7 +11,7 @@ import { findProgram } from "../program";
 import { resetTimeFromText } from "../reset-time";
 import { tomlString } from "../text";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
 import { createExecMapper } from "./exec-stream";
 
 // Reset text uses the child's local clock, which can differ from relay's clock.
@@ -56,6 +56,7 @@ export async function startExecWorker(
     ? ["exec", "--json", "-C", request.cwd, "-s", sandbox]
     : ["exec", "resume", sessionIdForCommand(request.resumeSessionId), "--json", "-c", `sandbox_mode=${tomlString(sandbox)}`];
   args.push("-c", `developer_instructions=${tomlString(instructions)}`);
+  const instructionsAt = args.length - 1;
   if (request.resumeSessionId === undefined && request.model !== undefined) args.push("-m", request.model);
   // codex exec reads its prompt from standard input when the prompt is "-", so that one gets a space.
   args.push("--", prompt === "-" ? "- " : prompt);
@@ -138,6 +139,7 @@ export async function startExecWorker(
     return stopping;
   };
   return { workerId: request.workerId, transport: "codex-exec", pid: child.pid,
+    argv: recordedArgs(args, { [instructionsAt]: "developer_instructions=<instructions>", [args.length - 1]: "<prompt>" }),
     events: () => queue.events(),
     async send() { throw unsupportedOperation("Codex", "codex-exec", "receive a message while it runs"); },
     interrupt, stop, wait: () => wait,

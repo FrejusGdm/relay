@@ -56,6 +56,29 @@ On Linux (x64), use `relay-linux-x64` in place of `relay-darwin-arm64`. To run `
 name, add `~/.local/bin` to your PATH, for example with `export PATH="$HOME/.local/bin:$PATH"`
 in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 
+## Usage
+
+Set up relay in a project, add an account, and start an agent inside the job:
+
+```sh
+cd ~/projects/app
+relay init --title "Add the parser"
+relay account add claude personal --profile-dir ~/.claude
+relay run claude:personal
+```
+
+`relay run` gives your terminal to the agent and records what it did in `.relay/events.jsonl`.
+To let the agent work on its own, give it a task:
+
+```sh
+relay run claude:personal --headless --prompt "Fix the failing test."
+relay checkpoints
+```
+
+A headless run prints one line per command and changed file, and exits with 23 when the agent
+stops at a usage limit. [docs/cli.md](docs/cli.md) lists every command, and the section "Running
+an agent" of [docs/adapters.md](docs/adapters.md) explains `relay run`.
+
 ## Repository layout
 
 | Path | What it is |
