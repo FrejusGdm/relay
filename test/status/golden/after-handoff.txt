@@ -1,0 +1,8 @@
+Build authentication   job 3f9a2c1d · checkpoint 912ec1 · 2 min ago
+
+claude:work      ────────────┐      limit reached · reset unknown
+                             │
+codex:personal   ━━━━━━━━━━━━┷━━━   running · usage unknown
+claude:home      ────────────────   available · 9% used (5-hour window, checked 14:30)
+
+Continuing on Codex.

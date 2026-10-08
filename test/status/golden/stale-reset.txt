@@ -1,0 +1,5 @@
+Build authentication   job 3f9a2c1d · checkpoint 912ec1 · 2 min ago
+
+claude:work      ────────────────   unknown · reset time passed
+
+No agent is working on this job.

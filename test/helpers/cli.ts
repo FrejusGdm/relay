@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import type { CommandDef } from "../../src/cli/commands/registry";
+import { notBuilt } from "../../src/cli/commands/not-built";
+import { COMMANDS, type CommandDef, type CommandName } from "../../src/cli/commands/registry";
 import { runCli } from "../../src/cli/run";
 import { makeRelayHome } from "./home";
 
@@ -10,6 +11,27 @@ export interface RelayResult {
 }
 
 export const MAIN = join(import.meta.dir, "..", "..", "src", "cli", "main.ts");
+
+// A command that exists only in tests and is never built. Tests of the not-built path pass
+// WITH_UNBUILT as `commands`, so they keep working when the real commands get built.
+export const UNBUILT = "unbuilt-for-tests";
+export const WITH_UNBUILT: CommandDef[] = [
+  ...COMMANDS,
+  {
+    name: UNBUILT as CommandName,
+    usage: `relay ${UNBUILT} [<value>]`,
+    argsUsage: "[<value>]",
+    summary: "A command that is never built",
+    details: [],
+    examples: [],
+    options: [],
+    minArgs: 0,
+    maxArgs: 1,
+    quiet: false,
+    built: false,
+    handler: notBuilt,
+  },
+];
 
 // Without a relay folder in the options, each run gets a new one from makeRelayHome, so no test
 // writes to the preload's RELAY_HOME.
@@ -43,6 +65,7 @@ export async function runRelayInProcess(
       out: (text) => (stdout += text),
       err: (text) => (stderr += text),
       stdinIsTTY: options.answers !== undefined,
+      stdoutIsTTY: false,
       readStdin: async (maxBytes) => Buffer.from(options.stdin ?? "").subarray(0, maxBytes),
       isTerminal: options.terminal !== undefined,
       readLine: async () => {

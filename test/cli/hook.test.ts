@@ -30,7 +30,7 @@ test("a hook usage error reads at most 1 MiB of standard input for at most 200 m
     env: process.env,
     homedir: process.env.HOME!,
     uid: process.getuid!(),
-    io: { out: () => {}, err: () => {}, stdinIsTTY: false, isTerminal: false,
+    io: { out: () => {}, err: () => {}, stdinIsTTY: false, stdoutIsTTY: false, isTerminal: false,
       readStdin: async (maxBytes, timeoutMs) => (reads.push([maxBytes, timeoutMs]), Buffer.alloc(0)), readLine: async () => null },
   });
   expect({ code, reads }).toEqual({ code: 0, reads: [[1024 * 1024, 200]] });

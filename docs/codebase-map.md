@@ -3,7 +3,7 @@
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 8 of `add-provider-adapters`, task groups 1 to 4 of
 `add-relay-switch` (except tasks 1.5, 2.3 and 3.5), task groups 1 to 7 of
-`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 6 of
+`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 6, 9 and 10 of
 `add-daemon-api-and-status`, and task groups 1 to 3 of `add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
@@ -16,7 +16,7 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
     hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
@@ -27,6 +27,8 @@ flowchart TD
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
     daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list"]
     api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs, events"]
+    status["src/status/<br/>model.ts: rows, roles, closing sentence<br/>render-text.ts, render-json.ts, time-format.ts<br/>sources.ts: the saved state without the daemon"]
+    hooks["src/hooks/<br/>mapping.ts: what a hook event says about an account"]
     state["src/state/<br/>schema.sql, db.ts: relay.db<br/>index-builder.ts, apply-event.ts: filling it<br/>queries.ts, availability.ts: reading it<br/>projects-list.ts: projects.list"]
     client["src/client/<br/>api-client.ts: the only fetch, over the socket<br/>ensure-daemon.ts: starts the daemon"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
@@ -98,6 +100,10 @@ flowchart TD
   adaptertests -->|"check"| adapters
   adaptertests -->|"check"| accounts
   daemontests -->|"check"| state
+  commands -->|"status.ts builds its view with"| status
+  status -->|"asks the daemon through"| client
+  status -->|"without the daemon, indexes in memory with"| state
+  status -->|"reads spooled hooks with"| hooks
   daemon -->|"opens, rebuilds and follows the index with"| state
   api -->|"answers from"| state
   state -->|"reads checkpoints with"| checkpoint
@@ -174,9 +180,15 @@ then fills it from `config.toml`, `projects.list` (`src/state/projects-list.ts`)
 `src/daemon/follow.ts` reads new lines of each `events.jsonl` and new roots in `projects.list`, and
 writes each change to the event stream in `src/api/sse.ts`. The routes read the index through
 `src/state/queries.ts`, with `src/state/availability.ts` for the stale reset rule, and
-`src/api/snapshot.ts` adds the `Relay-Stream-Seq` header. `docs/daemon.md` describes the daemon,
-its files, the index and the checks on the way to an answer in diagrams, and `docs/api.md` describes
-every endpoint. The tests in `test/platform/`, `test/daemon/`, `test/api/` and `test/state/` use the
+`src/api/snapshot.ts` adds the `Relay-Stream-Seq` header. `src/cli/commands/status.ts` is `relay status`: it finds the job, asks the daemon through
+`src/client/api-client.ts`, or else builds the saved state with `src/status/sources.ts` (an index
+in memory, a read-only `relay.db` and the hook spool read with `src/hooks/mapping.ts`), turns the
+data into rows with `src/status/model.ts`, and prints them with `src/status/render-text.ts` or
+`render-json.ts`. `src/client/ensure-daemon.ts` also has `ensureDaemon`, which `relay run` and
+`relay switch` will call. `docs/daemon.md` describes the daemon,
+its files, the index, `relay status` and the checks on the way to an answer in diagrams, and `docs/api.md` describes
+every endpoint. The tests in `test/platform/`, `test/daemon/`, `test/api/`, `test/state/`,
+`test/client/` and `test/status/` (with its golden files in `test/status/golden/`) use the
 short relay folders and test daemons from `test/helpers/relay-home.ts`, because a socket path may
 have at most 103 bytes on macOS; `test/api/fixtures/` holds the expected answers of the read
 endpoints.

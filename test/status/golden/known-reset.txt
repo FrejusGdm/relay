@@ -1,0 +1,5 @@
+Build authentication   job 3f9a2c1d · checkpoint 912ec1 · 2 min ago
+
+claude:work      ────────────────   limit reached · resets 18:00
+
+No agent is working on this job.
