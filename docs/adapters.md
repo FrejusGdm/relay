@@ -555,16 +555,18 @@ exits with a code that says how the run ended.
 | 5 | The profile folder: a real folder you own that no one else can change | 78 |
 | 6 | The sign-in, or the variables named in `credential_env` | 22, "claude:work is not signed in. Run relay account login claude:work." |
 | 7 | `--permission full-access` | 25, "relay does not start agents with full access in this version." |
-| 8 | The project's allow list in `config.toml` | 25, "This project allows only claude:work. To hand the job to codex:personal, use relay switch, which asks before your code goes to another company." |
-| 9 | The worker lock | 6, "Another agent is already working on this job (claude:work, process 4121)." |
+| 8 | The project's allow list in `config.toml` | 7 without a terminal and without `--yes`: the first handoff to an account asks first (`docs/handoff.md`) |
+| 9 | The worker lock | 6, "relay: Claude Code · work is working on this job. To hand it over, run relay switch codex:personal." |
 | 10 | `--resume` | 2 when there is no earlier session to resume; 25 for a session started on another account |
 
 The first `relay run` in a project adds a `[[projects]]` entry for the job's worktree root to
 `config.toml`, allowing only the account used, and prints "Allowed claude:work on this project."
 relay looks for the entry again while it holds the lock on `config.toml`, so two first runs at the
 same time add one entry.
-In this version, a run on an account that the entry does not list is refused; `relay switch`, a
-later change, asks instead. When the provider's policy notes changed since the account last saw
+A run on an account that the entry does not list asks the same first-handoff question as
+`relay switch` (`add-relay-switch`), because it sends the code to that account's company. A run
+in a job that another agent worked on continues it through a handoff, and a run in a new job gives
+the agent relay's start prompt; `docs/handoff.md` describes both. When the provider's policy notes changed since the account last saw
 them, relay prints one line that says so before it starts the agent.
 
 ### What the agent receives
@@ -653,8 +655,10 @@ so only the agent handles it, and it reads the hook lines that relay's hooks wri
 every second (`docs/hooks.md`); without relay's hooks, relay records only the start and the end of
 the worker. SIGTERM and SIGHUP make relay stop the agent with SIGTERM. When the agent exits, relay
 restores the terminal (it leaves the alternate screen, shows the cursor, resets styles and runs
-`stty sane`, only when its output is a terminal), prints "Recorded worker 5d2e8f01 (claude:work)."
-and exits with the agent's exit code, or with 23 when the last turn stopped at a limit.
+`stty sane`, only when its output is a terminal), prints "Recorded worker 5d2e8f01 (claude:work).",
+then "Claude Code · work stopped (exit code 0)" and the checkpoint of kind `auto` it saves
+(`add-relay-switch`), and exits with the agent's exit code, or with 23 when the last turn stopped at
+a limit.
 
 ### Resuming a session
 

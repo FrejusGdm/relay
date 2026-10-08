@@ -2,14 +2,20 @@ Usage
   relay switch <provider[:account]>
 
 Hand the job to another agent or account.
-relay saves a checkpoint, writes the handoff and starts the next agent.
+relay stops the current agent, saves a checkpoint, writes the handoff and starts the next agent.
+The first handoff to an account asks first, because it sends your code to that account's company.
 
 Examples
   relay switch codex:personal
   relay switch claude:startup
+  relay switch codex:personal --no-start
 
 Options
+      --yes                Answer yes to relay's own questions
+      --no-summary         Do not ask the current agent for handoff notes
+      --no-start           Prepare the handoff without starting the next agent
+      --json               Print the result as one JSON object
+      --check <command>    A check relay runs at every handoff ("" clears them)
+      --permission <level>  headless jobs: read-only or edit-in-workspace
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.

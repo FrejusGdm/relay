@@ -87,3 +87,47 @@ describe("Permission never goes up", () => {
     });
   });
 });
+
+describe("No bypass flags", () => {
+  const BYPASS = ["--dangerously-skip-permissions", "bypassPermissions", "--dangerously-bypass-approvals-and-sandbox", "--yolo", "danger-full-access"];
+
+  test("the argument lists and messages the real adapters send hold none of the bypass strings", async () => {
+    const { switchFixture } = await import("./switch-helpers");
+    const { createAdapterRegistry } = await import("../../src/adapters/registry");
+    const { buildAgentEnv } = await import("../../src/accounts/environment");
+    const { loadConfig } = await import("../../src/core/config/load");
+    const { NOTES_REQUEST } = await import("../../src/handoff/notes-request");
+    const fixture = await switchFixture();
+    try {
+      fixture.scenarios.set({ claude: { turns: [{ steps: [{ say: "Ok." }] }] }, codex: { turns: [{ steps: [{ say: "Ok." }] }] } });
+      const config = loadConfig({ relayHome: fixture.relayHome, homedir: fixture.scratch.home, uid: process.getuid!() });
+      const env = { ...process.env, ...fixture.env };
+      const registry = createAdapterRegistry({}, env);
+      const cases = [
+        { mode: "interactive", permission: "edit-in-workspace", prompt: "Start." },
+        { mode: "headless", permission: "read-only", prompt: "Start." },
+        { mode: "headless", permission: "edit-in-workspace", prompt: "Start." },
+        { mode: "headless", permission: "read-only", prompt: NOTES_REQUEST, resume: "7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f" },
+      ] as const;
+      let index = 0;
+      for (const account of config.accounts) {
+        for (const item of cases) {
+          const record = join(fixture.scratch.root, `record-${index++}.json`);
+          const workerId = "0000000" + String(index % 10);
+          const handle = await registry.get(account.provider).start(account, {
+            jobId: fixture.jobId, workerId, cwd: fixture.scratch.repo, mode: item.mode, instructions: "Instructions.", prompt: item.prompt,
+            permission: item.permission, ...("resume" in item ? { resumeSessionId: item.resume } : {}),
+            env: { ...buildAgentEnv(account, env, { jobId: fixture.jobId, workerId }), RELAY_FAKE_RECORD: record, RELAY_KEEP_FAKE_ENV: "1" },
+            logPath: join(fixture.relayHome, "logs", "workers", `${fixture.jobId}-${workerId}.log`),
+          });
+          await Bun.sleep(300);
+          await handle.stop({ timeoutMs: 2000 });
+          const seen = `${JSON.stringify(handle.argv)}\n${readFileSync(record, "utf8")}`;
+          for (const flag of BYPASS) expect(seen).not.toContain(flag);
+        }
+      }
+    } finally {
+      fixture.cleanup();
+    }
+  }, 60_000);
+});

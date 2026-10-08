@@ -21,6 +21,7 @@ const policy = lazy(() => import("./policy"), "policy");
 const providers = lazy(() => import("./providers"), "providers");
 const rollback = lazy(() => import("./rollback"), "rollback");
 const run = lazy(() => import("./run"), "run");
+const switchCommand = lazy(() => import("./switch"), "switchCommand");
 const status = lazy(() => import("./status"), "status");
 const statusline = lazy(() => import("./statusline"), "statusline");
 const hooks: Handler = async (ctx) =>
@@ -95,7 +96,7 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "run",
-    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]",
+    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]",
     argsUsage: "[<provider[:account]>]",
     summary: "Start an agent inside a relay job",
     details: [
@@ -116,6 +117,9 @@ export const COMMANDS: CommandDef[] = [
       { name: "permission", value: "<level>", description: "headless: read-only or edit-in-workspace" },
       { name: "model", value: "<name>", description: "The model the agent uses" },
       { name: "json", description: "headless: print each worker event as JSON" },
+      { name: "check", value: "<command>", multiple: true, description: "A check relay runs at every handoff (\"\" clears them)" },
+      { name: "yes", description: "Answer yes to relay's own questions" },
+      { name: "no-summary", description: "Do not ask the previous agent for handoff notes" },
     ],
     minArgs: 0,
     maxArgs: 1,
@@ -198,14 +202,24 @@ export const COMMANDS: CommandDef[] = [
     usage: "relay switch <provider[:account]>",
     argsUsage: "<provider[:account]>",
     summary: "Hand the job to another agent or account",
-    details: ["relay saves a checkpoint, writes the handoff and starts the next agent."],
-    examples: ["relay switch codex:personal", "relay switch claude:startup"],
-    options: [],
+    details: [
+      "relay stops the current agent, saves a checkpoint, writes the handoff and starts the next agent.",
+      "The first handoff to an account asks first, because it sends your code to that account's company.",
+    ],
+    examples: ["relay switch codex:personal", "relay switch claude:startup", "relay switch codex:personal --no-start"],
+    options: [
+      { name: "yes", description: "Answer yes to relay's own questions" },
+      { name: "no-summary", description: "Do not ask the current agent for handoff notes" },
+      { name: "no-start", description: "Prepare the handoff without starting the next agent" },
+      { name: "json", description: "Print the result as one JSON object" },
+      { name: "check", value: "<command>", multiple: true, description: "A check relay runs at every handoff (\"\" clears them)" },
+      { name: "permission", value: "<level>", description: "headless jobs: read-only or edit-in-workspace" },
+    ],
     minArgs: 1,
     maxArgs: 1,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: switchCommand,
   },
   {
     name: "status",

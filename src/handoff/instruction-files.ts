@@ -120,6 +120,8 @@ interface InstructionQuestion {
 export async function confirmInstructionFiles(question: InstructionQuestion): Promise<AnswerHow> {
   const { asker } = question;
   const fromName = displayName(question.from);
+  const preset = asker.preset?.instructionFiles;
+  if (preset !== undefined && preset.paths.join("\0") === question.paths.join("\0")) return preset.how;
   if (asker.yes) return "flag";
   if (!asker.terminal) {
     throw new CommandError(ExitCode.NeedsPerson, [

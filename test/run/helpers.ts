@@ -1,7 +1,7 @@
 // Shared steps for the relay run tests: a scratch repository with a job and two accounts, relay run
 // in the same process or as its own process, and readers for the job's events and worker records.
 import { spawn, type ChildProcess } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startAccountRecord } from "../../src/accounts/record";
 import { policyOf } from "../../src/policies/load";
@@ -26,6 +26,11 @@ export interface RunFixture {
 // relay run processes a test started that may still run when the test ends, for example after a
 // failed expectation.
 const running = new Set<ChildProcess>();
+
+// Registers a relay process another helper started, so that cleanup stops it too.
+export function trackRun(child: ChildProcess): void {
+  running.add(child);
+}
 
 // SIGTERM makes relay stop its agent, which runs in its own process group, before relay exits.
 async function stopRunning(): Promise<void> {
@@ -107,4 +112,10 @@ export function resetTime(hours = 3): Date {
   const time = new Date(Date.now() + hours * 3600_000);
   time.setUTCSeconds(0, 0);
   return time;
+}
+
+// The first six characters of the job's latest checkpoint commit.
+export function latestCheckpoint(fixture: RunFixture): string {
+  const state = JSON.parse(readFileSync(join(fixture.scratch.repo, ".relay", "state.json"), "utf8")) as { latest_checkpoint: { commit: string } };
+  return state.latest_checkpoint.commit.slice(0, 6);
 }

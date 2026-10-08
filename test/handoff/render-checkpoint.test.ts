@@ -14,7 +14,7 @@ const NOTES = JSON.parse(readFileSync(join(ROOT, "test", "fixtures", "scenarios"
 
 const BUN_TEST: CheckResult = {
   command: "bun test", outcome: "failed", exitCode: 1, signal: null, seconds: 41, counts: { passed: 231, failed: 1, skipped: 0 },
-  logPath: "/r/logs/checks/3f9a2c1d-h3-1.log", timeoutSeconds: 600, changedFiles: [],
+  logPath: "/r/logs/checks/3f9a2c1d-h3-1.log", timeoutSeconds: 600, ranAt: new Date("2026-10-07T14:20:10Z"), changedFiles: [],
   excerpt: ["auth/google.test.ts:", "(fail) refreshes an expired token [12.00ms]", " 231 pass", " 1 fail"],
 };
 
