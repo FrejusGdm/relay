@@ -1,0 +1,21 @@
+{
+  "claude": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "write": "src/auth/callback.ts",
+            "content": "export function handleCallback(): string {\n  return \"ok\";\n}\n"
+          },
+          {
+            "limit": {
+              "window": "five_hour",
+              "resets_at": "2099-01-01T00:00:00Z"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

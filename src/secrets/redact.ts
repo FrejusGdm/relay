@@ -36,3 +36,19 @@ export function redact(text: string, maxLength = 500): string {
   for (const pattern of AFTER) result = result.replace(pattern, `$1${REDACTED}`);
   return result.slice(0, Math.min(maxLength, INPUT_LIMIT)).toWellFormed();
 }
+
+// Replaces the value of every environment variable whose name ends in _KEY, _TOKEN, _SECRET or
+// PASSWORD, and whose value has at least 8 characters, with [redacted: <NAME>] (add-relay-switch,
+// design decision 9). Check output passes through it before any of it reaches checkpoint.md.
+// Longer values go first, so a value that holds a shorter one is replaced whole.
+const SECRET_NAME = /(?:_KEY|_TOKEN|_SECRET|PASSWORD)$/i;
+const MIN_SECRET_LENGTH = 8;
+
+export function redactEnvValues(text: string, env: Record<string, string | undefined>): string {
+  const secrets = Object.entries(env)
+    .filter((entry): entry is [string, string] => SECRET_NAME.test(entry[0]) && (entry[1]?.length ?? 0) >= MIN_SECRET_LENGTH)
+    .sort((a, b) => b[1].length - a[1].length);
+  let result = text;
+  for (const [name, value] of secrets) result = result.split(value).join(`[redacted: ${name}]`);
+  return result;
+}

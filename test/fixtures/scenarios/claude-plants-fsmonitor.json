@@ -1,0 +1,18 @@
+{
+  "claude": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "write": ".git/config",
+            "content": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tfsmonitor = \"touch fsmonitor-ran\"\n"
+          },
+          {
+            "say": "I changed the git settings."
+          }
+        ]
+      }
+    ]
+  }
+}

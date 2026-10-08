@@ -14,6 +14,7 @@ export const ExitCode = Object.freeze({
   ProviderMissing: 20,
   NoSuchAccount: 21,
   NotSignedIn: 22,
+  WouldRaisePermission: 32,
   NotAvailable: 69,
   Internal: 70,
   Settings: 78,

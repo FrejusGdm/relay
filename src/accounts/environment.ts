@@ -50,6 +50,13 @@ export function credentialNameProblem(provider: Provider, name: string): string 
   return CREDENTIAL_NAMES[provider].test(name) ? null : `${provider} accounts may only receive ${CREDENTIAL_HINT[provider]}`;
 }
 
+// Whether relay removes this variable from the environment of the programs it starts: credential
+// variables of every provider, profile variables and the markers of an outer agent session. The
+// job's checks run without them too (add-relay-switch, design decision 9).
+export function isRemovedVariable(name: string): boolean {
+  return REMOVED_NAMES.has(name) || REMOVED_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
 export interface WorkerContext {
   jobId: string;
   workerId: string;
@@ -64,8 +71,7 @@ export function buildAgentEnv(
   const keepFakes = base.RELAY_KEEP_FAKE_ENV === "1";
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(base)) {
-    if (value === undefined || REMOVED_NAMES.has(name)) continue;
-    if (REMOVED_PREFIXES.some((prefix) => name.startsWith(prefix))) continue;
+    if (value === undefined || isRemovedVariable(name)) continue;
     if (name.startsWith(FAKE_PREFIX) && !keepFakes) continue;
     env[name] = value;
   }

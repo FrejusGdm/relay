@@ -1,0 +1,17 @@
+{
+  "codex": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "say": "Reading .relay/checkpoint.md and .relay/task.md."
+          },
+          {
+            "hang": true
+          }
+        ]
+      }
+    ]
+  }
+}
