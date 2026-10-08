@@ -41,15 +41,17 @@ export interface SwitchFixture extends RunFixture {
   config(extra?: string): void;
 }
 
-// `allow` lists the accounts on the project's allow list; `extra` is appended to config.toml.
-export async function switchFixture(options: { allow?: string[]; extra?: string; accounts?: string; kind?: "full" | "empty" } = {}): Promise<SwitchFixture> {
+// `allow` lists the accounts on the project's allow list, and null leaves the project without an
+// entry in config.toml, as before its first relay run; `extra` is appended to config.toml.
+export async function switchFixture(options: { allow?: string[] | null; extra?: string; accounts?: string; kind?: "full" | "empty" } = {}): Promise<SwitchFixture> {
   const accounts = options.accounts ?? '[accounts."claude:work"]\n\n[accounts."codex:personal"]\n';
   const fixture = await runFixture(accounts, options.kind ?? "full");
   const scenarios = new Scenarios();
   const write = (extra = options.extra ?? "") => {
-    const allow = options.allow ?? ["claude:work", "codex:personal"];
+    const allow = options.allow === undefined ? ["claude:work", "codex:personal"] : options.allow;
+    const project = allow === null ? "" : `\n[[projects]]\npath = ${JSON.stringify(fixture.scratch.repo)}\nallow = ${JSON.stringify(allow)}\n`;
     writeFileSync(join(fixture.relayHome, "config.toml"),
-      `${accounts}\n[handoff]\nstart_check_seconds = 1\nsummary_timeout_seconds = 10\nstop_timeout_seconds = 5\n\n[[projects]]\npath = ${JSON.stringify(fixture.scratch.repo)}\nallow = ${JSON.stringify(allow)}\n${extra}`,
+      `${accounts}\n[handoff]\nstart_check_seconds = 1\nsummary_timeout_seconds = 10\nstop_timeout_seconds = 5\n${project}${extra}`,
       { mode: 0o600 });
   };
   write();
