@@ -134,7 +134,10 @@ function usageMessage(time: string): string {
   const clock = `${hours % 12 || 12}:${String(reset.getMinutes()).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
   const today = reset.getFullYear() === now.getFullYear() && reset.getMonth() === now.getMonth() && reset.getDate() === now.getDate();
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const formatted = today ? clock : `${months[reset.getMonth()]} ${reset.getDate()}, ${clock}`;
+  // As codex-rs/protocol/src/error.rs (format_retry_timestamp) writes another day: "Oct 9th, 2026 3:45 PM".
+  const day = reset.getDate();
+  const suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][day % 10] ?? "th";
+  const formatted = today ? clock : `${months[reset.getMonth()]} ${day}${suffix}, ${reset.getFullYear()} ${clock}`;
   return `You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at ${formatted}.`;
 }
 const RATE_MESSAGE = "exceeded retry limit, last status: 429 Too Many Requests";

@@ -154,6 +154,15 @@ test("an interactive child inherits the terminal while relay ignores SIGINT and 
   expect(agent.signal("SIGTERM")).toBe(false);
 }, 10_000);
 
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 test("a child still running when relay exits is stopped", async () => {
   const cwd = folder();
   const script = join(cwd, "exit.ts");
@@ -168,16 +177,52 @@ test("a child still running when relay exits is stopped", async () => {
   const pid = Number((await new Response(relay.stdout).text()).trim());
   expect(await relay.exited).toBe(0);
   expect(pid).toBeGreaterThan(0);
-  const alive = () => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  await waitFor(() => !alive());
+  await waitFor(() => !alive(pid));
 }, 10_000);
+
+// src/cli/main.ts ends relay on SIGHUP the same way; the script below does the same.
+test("when a closed terminal ends relay, the agent and the programs it started are stopped", async () => {
+  const cwd = folder();
+  const script = join(cwd, "hangup.ts");
+  const pids = join(cwd, "pids.txt");
+  writeFileSync(script, [
+    `import { writeFileSync } from "node:fs";`,
+    `import { startHeadless } from ${JSON.stringify(PROCESS_MODULE)};`,
+    `process.on("SIGHUP", () => process.exit(143));`,
+    `let sleepPid = "";`,
+    `const agent = await startHeadless({ path: "/bin/sh", args: ["-c", "sleep 60 & echo $!; wait"], cwd: ${JSON.stringify(cwd)},`,
+    `  env: process.env, input: "eof", logPath: ${JSON.stringify(join(cwd, "worker.log"))}, onLine: (_stream, line) => { sleepPid = line; } });`,
+    `setInterval(() => { if (sleepPid !== "") writeFileSync(${JSON.stringify(pids)}, agent.pid + " " + sleepPid); }, 10);`,
+  ].join("\n"));
+  const relay = Bun.spawn([process.execPath, script], { cwd, env: env(), stdout: "ignore", stderr: "pipe" });
+  await waitFor(() => existsSync(pids) && /^[1-9]\d* \d+$/.test(readFileSync(pids, "utf8")));
+  const [agentPid, sleepPid] = readFileSync(pids, "utf8").split(" ").map(Number) as [number, number];
+  expect(alive(agentPid) && alive(sleepPid)).toBe(true);
+  relay.kill("SIGHUP");
+  expect(await relay.exited).toBe(143);
+  await waitFor(() => !alive(agentPid) && !alive(sleepPid));
+}, 10_000);
+
+test("old worker logs are not deleted through a linked logs or workers folder", () => {
+  const day = 24 * 60 * 60 * 1000;
+  const elsewhere = folder();
+  const victim = join(elsewhere, "3f9a2c1d-5d2e8f01.log");
+  writeFileSync(victim, "keep me\n");
+  utimesSync(victim, new Date(Date.now() - 30 * day), new Date(Date.now() - 30 * day));
+  const linkedWorkers = folder();
+  mkdirSync(join(linkedWorkers, "logs"));
+  symlinkSync(elsewhere, join(linkedWorkers, "logs", "workers"));
+  deleteOldWorkerLogs(linkedWorkers);
+  const linkedLogs = folder();
+  mkdirSync(join(elsewhere, "workers"));
+  const victimInWorkers = join(elsewhere, "workers", "3f9a2c1d-5d2e8f01.log");
+  writeFileSync(victimInWorkers, "keep me\n");
+  utimesSync(victimInWorkers, new Date(Date.now() - 30 * day), new Date(Date.now() - 30 * day));
+  symlinkSync(elsewhere, join(linkedLogs, "logs"));
+  deleteOldWorkerLogs(linkedLogs);
+  expect(existsSync(victim)).toBe(true);
+  expect(existsSync(victimInWorkers)).toBe(true);
+});
 
 test("worker logs last changed more than 14 days ago are deleted", () => {
   const relayHome = folder();
@@ -191,15 +236,17 @@ test("worker logs last changed more than 14 days ago are deleted", () => {
     utimesSync(path, time, time);
     return path;
   };
-  const old = age("old.log", 15);
-  const recent = age("recent.log", 13);
+  const old = age("3f9a2c1d-5d2e8f01.log", 15);
+  const recent = age("3f9a2c1d-0a1b2c3d.log", 13);
+  const other = age("notes.txt", 30);
   const folderInside = join(logs, "folder");
   mkdirSync(folderInside);
   utimesSync(folderInside, new Date(Date.now() - 20 * day), new Date(Date.now() - 20 * day));
-  symlinkSync(recent, join(logs, "link.log"));
+  symlinkSync(recent, join(logs, "aaaaaaaa-bbbbbbbb.log"));
   deleteOldWorkerLogs(relayHome);
   expect(existsSync(old)).toBe(false);
   expect(existsSync(recent)).toBe(true);
+  expect(existsSync(other)).toBe(true);
   expect(existsSync(folderInside)).toBe(true);
   setClock(() => new Date(Date.now() + 2 * day));
   try {

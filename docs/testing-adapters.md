@@ -259,7 +259,7 @@ gets the error `Not initialized`. For each step it sends:
 | `run` | `item/started` and `item/completed` of a `commandExecution` with `command`, `exitCode` and `status` | `item.started` and `item.completed` with a `command_execution` |
 | `write` | `item/started` and `item/completed` of a `fileChange` with `changes` | `item.completed` with a `file_change` |
 | `approval` | the request `item/commandExecution/requestApproval` or `item/fileChange/requestApproval`; the turn waits for an answer | a `command_execution` with status `declined` or a failed `file_change` (exec never asks) |
-| `limit` | `account/rateLimits/updated`, an `error` notification, then `turn/completed` with status `failed` and `codexErrorInfo` `usageLimitExceeded` | an `error` line and `turn.failed` with `You’ve hit your usage limit. … try again at 3:45 PM.` |
+| `limit` | `account/rateLimits/updated`, an `error` notification, then `turn/completed` with status `failed` and `codexErrorInfo` `usageLimitExceeded` | an `error` line and `turn.failed` with `You’ve hit your usage limit. … try again at 3:45 PM.`, or `… at Oct 9th, 2026 3:45 PM.` for another day, as Codex writes it |
 | `error` | an `error` notification and a failed `turn/completed` with `codexErrorInfo` `unauthorized`, `serverOverloaded`, `other` or `internalServerError` | an `error` line and `turn.failed` |
 | end of the turn | `thread/tokenUsage/updated`, then `turn/completed` with status `completed` | `turn.completed` with `usage` |
 

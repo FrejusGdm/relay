@@ -124,7 +124,7 @@ test("exec uses its argument prompt, records EOF input and writes under -C", asy
 
 test("exec prints the exact Plus-plan usage-limit text in local time", async () => {
   const result = await run(["exec", "--json", "x"], { turns: [{ steps: [{ limit: { window: "primary", resets_at: "2027-01-05T15:45:00Z" } }] }] }, { env: { TZ: "UTC" } });
-  const message = "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at Jan 5, 3:45 PM.";
+  const message = "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at Jan 5th, 2027 3:45 PM.";
   const lines = jsonLines(result.stdout);
   expect(lines[2]).toEqual({ type: "error", message });
   expect(lines[3]).toEqual({ type: "turn.failed", error: { message } });

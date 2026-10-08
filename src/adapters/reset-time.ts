@@ -1,13 +1,14 @@
 // Reads the reset time of a usage limit (add-provider-adapters, design decision 8). Structured
 // fields give a number or an ISO 8601 string; limit messages give a local time such as "3:45pm",
-// "Mon 12:00am" or "Oct 9, 3:45 PM", which means the next time the clock shows it.
+// "Mon 12:00am" or "Oct 9, 3:45 PM", which means the next time the clock shows it. Codex writes a
+// reset on another day as "Oct 9th, 2026 3:45 PM", with the year.
 import { now } from "../platform/clock";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:T|$)/;
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const LOCAL_TIME = new RegExp(
-  "^(?:(?<weekday>" + WEEKDAYS.join("|") + ")\\s+|(?<month>" + MONTHS.join("|") + ")\\s+(?<day>\\d{1,2}),?\\s+)?" +
+  "^(?:(?<weekday>" + WEEKDAYS.join("|") + ")\\s+|(?<month>" + MONTHS.join("|") + ")\\s+(?<day>\\d{1,2})(?:st|nd|rd|th)?,?\\s+(?:(?<year>\\d{4}),?\\s+)?)?" +
     "(?<hour>\\d{1,2})(?::(?<minute>\\d{2}))?\\s*(?<half>am|pm)$",
   "i",
 );
@@ -38,10 +39,11 @@ export function resetTimeFromText(text: string, after: Date = now()): Date | und
   if (parts.month !== undefined) {
     const month = MONTHS.indexOf(parts.month.toLowerCase());
     const day = Number(parts.day);
-    for (const year of [after.getFullYear(), after.getFullYear() + 1]) {
+    const years = parts.year === undefined ? [after.getFullYear(), after.getFullYear() + 1] : [Number(parts.year)];
+    for (const year of years) {
       const candidate = new Date(year, month, day, hours, minute);
       if (candidate.getMonth() !== month || candidate.getDate() !== day) return undefined;
-      if (candidate > after) return candidate;
+      if (candidate > after || parts.year !== undefined) return candidate;
     }
     return undefined;
   }

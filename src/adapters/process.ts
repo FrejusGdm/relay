@@ -1,9 +1,10 @@
 // The only module that starts agent processes (add-provider-adapters, design decision 5).
 // test/adapters/no-other-spawn.test.ts fails if another file under src/adapters/ starts one.
 //
-// relay sends signals only through the child object it holds, and only while that child has not
-// been reaped, so a signal can never reach a process that later reused the same process ID. It
-// never signals a process found by name, by port or by a process ID read from a file.
+// relay sends signals only to the child it holds (for a headless child, to the process group the
+// child leads), and only while that child has not been reaped, so a signal can never reach a
+// process that later reused the same process ID. It never signals a process found by name, by
+// port or by a process ID read from a file.
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { chmodSync, closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, writeSync } from "node:fs";
@@ -50,6 +51,7 @@ export interface InteractiveOptions {
 }
 
 const LOG_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const WORKER_LOG_NAME = /^[0-9a-f]{8}-[0-9a-f]{8}\.log$/;
 // After the child exits, how long relay waits for the last output a program that the child
 // started in the background might still hold open.
 const OUTPUT_GRACE_MS = 2000;
@@ -72,13 +74,18 @@ function track(child: { signal(name: AgentSignal): boolean }): () => void {
 // Opens the worker log for appending, creating it with mode 0600 in a folder with mode 0700. It
 // refuses a folder or file that is a symbolic link, belongs to someone else or is not a regular
 // file, such as a named pipe, which could otherwise block relay.
+// True when the folder is a real folder, not a symbolic link, and belongs to the current user.
+function isOwnFolder(path: string): boolean {
+  const stat = lstatSync(path, { throwIfNoEntry: false });
+  return stat !== undefined && stat.isDirectory() && stat.uid === process.getuid!();
+}
+
 function openWorkerLog(path: string): number {
   const folder = dirname(path);
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   const uid = process.getuid!();
-  const folderStat = lstatSync(folder);
-  if (!folderStat.isDirectory() || folderStat.uid !== uid) throw new Error(`The worker log folder ${folder} is not safe to use.`);
-  if ((folderStat.mode & 0o077) !== 0) chmodSync(folder, 0o700);
+  if (!isOwnFolder(folder)) throw new Error(`The worker log folder ${folder} is not safe to use.`);
+  if ((lstatSync(folder).mode & 0o077) !== 0) chmodSync(folder, 0o700);
   const flags = constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK;
   const fd = openSync(path, flags, 0o600);
   try {
@@ -170,9 +177,17 @@ export function startHeadless(options: HeadlessOptions): Promise<HeadlessProcess
       });
     }),
     running: () => !reaped,
+    // The child leads its own process group, so the signal goes to the group and also reaches the
+    // programs the agent started, as Ctrl+C in a terminal would. Until the child is reaped, its
+    // process ID, and so its group ID, cannot belong to any other process.
     signal(name) {
-      if (reaped || child.exitCode !== null || child.signalCode !== null) return false;
-      return child.kill(name);
+      if (reaped || child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return false;
+      try {
+        process.kill(-child.pid, name);
+        return true;
+      } catch {
+        return child.kill(name);
+      }
     },
     write(text) {
       const input = child.stdin;
@@ -238,9 +253,13 @@ export function startInteractive(options: InteractiveOptions): AgentProcess {
   return handle;
 }
 
-// Deletes worker logs last changed more than 14 days ago, in RELAY_HOME/logs/workers/.
+// Deletes worker logs, named <job>-<worker>.log, last changed more than 14 days ago, in
+// RELAY_HOME/logs/workers/. It does nothing when logs/ or logs/workers/ is a symbolic link or
+// belongs to someone else, so it can never delete files elsewhere.
 export function deleteOldWorkerLogs(relayHome: string): void {
-  const folder = join(relayHome, "logs", "workers");
+  const logs = join(relayHome, "logs");
+  const folder = join(logs, "workers");
+  if (!isOwnFolder(logs) || !isOwnFolder(folder)) return;
   let names: string[];
   try {
     names = readdirSync(folder);
@@ -248,7 +267,7 @@ export function deleteOldWorkerLogs(relayHome: string): void {
     return;
   }
   const oldest = now().getTime() - LOG_MAX_AGE_MS;
-  for (const name of names) {
+  for (const name of names.filter((name) => WORKER_LOG_NAME.test(name))) {
     const path = join(folder, name);
     try {
       const stat = lstatSync(path);

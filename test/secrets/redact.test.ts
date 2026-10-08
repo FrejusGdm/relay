@@ -48,3 +48,25 @@ test("ordinary commands are left alone", () => {
     expect(redact(command)).toBe(command);
   }
 });
+
+test("a 1 MB command is redacted in well under 100 ms and cut to 500 characters", () => {
+  for (const line of [
+    `MY_TOKEN${"TOKEN".repeat(200_000)} run`,
+    `${"x".repeat(1024 * 1024)} API_KEY=${letters(8)}`,
+    `Bearer ${" ".repeat(1024 * 1024)}`,
+    `${"eyJ".repeat(350_000)}`,
+  ]) {
+    const start = performance.now();
+    const result = redact(line);
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(result.length).toBeLessThanOrEqual(500);
+  }
+});
+
+test("the result is cut to the length the caller gives, after the redaction", () => {
+  const token = `${"ghp_"}${letters(36)}`;
+  expect(redact(`echo ${token} ${"y".repeat(1000)}`)).toBe(`echo [redacted] ${"y".repeat(500 - 16)}`);
+  expect(redact(`approve ${token}`, 12)).toBe("approve [red");
+  const value = `MY_TOKEN=${letters(5000)}`;
+  expect(redact(`run ${value}`)).toBe("run MY_TOKEN=[redacted]");
+});

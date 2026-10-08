@@ -36,6 +36,12 @@ const ZONES = {
     ["2026-10-07T13:00:00Z", "Wed 2:45pm", "2026-10-14T12:45:00Z"],
     ["2026-10-07T13:00:00Z", "Oct 9, 3:45 PM", "2026-10-09T13:45:00Z"],
     ["2026-10-07T13:00:00Z", "Oct 5, 3:45 PM", "2027-10-05T13:45:00Z"],
+    // Codex's form for another day, with the year and an ordinal suffix.
+    ["2026-10-07T13:00:00Z", "Oct 9th, 2026 3:45 PM", "2026-10-09T13:45:00Z"],
+    ["2026-10-07T13:00:00Z", "Oct 22nd, 2026 3:45 PM.", "2026-10-22T13:45:00Z"],
+    ["2026-10-07T13:00:00Z", "Jan 1st, 2027 12:05 AM", "2026-12-31T23:05:00Z"],
+    ["2026-10-07T13:00:00Z", "Oct 3rd 3:45 PM", "2027-10-03T13:45:00Z"],
+    ["2026-10-07T13:00:00Z", "Oct 1st, 2026 3:45 PM", "2026-10-01T13:45:00Z"],
     // Saturday 2026-10-10, the weekly-limit scenario of the claude-code-adapter spec.
     ["2026-10-10T10:00:00Z", "Mon 12:00am", "2026-10-11T22:00:00Z"],
     // Summer time ends in Paris on 2026-10-25, so the next 3:45pm is at UTC+1.

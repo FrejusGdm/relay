@@ -159,13 +159,16 @@ not valid JSON is skipped and counted; an empty line is ignored. relay refuses a
 file that is a symbolic link, belongs to another user or is not a regular file, and makes an
 existing log folder private. If a program that the agent started keeps the agent's output open
 after the agent exits, relay stops reading 2 seconds after the exit; a last line cut off this way
-goes to the log but not to the mapper. `relay run` deletes worker logs last changed more than 14
-days ago when it starts.
+goes to the log but not to the mapper. `relay run` deletes worker logs, named
+`<job>-<worker>.log`, last changed more than 14 days ago when it starts; it deletes nothing when
+`logs/` or `logs/workers/` is a symbolic link or belongs to another user.
 
-relay signals only the child process it started and still holds. Once the child has exited, a
-signal sends nothing, so a signal can never reach another process that later got the same process
-ID. relay never signals a process found by name, by port or by a process ID read from a file. When
-relay itself exits while an agent still runs, it sends that agent SIGTERM.
+relay signals only the child process it started and still holds. A headless agent leads its own
+process group, so relay sends the signal to that group, which also reaches the programs the agent
+started, as Ctrl+C in a terminal would. Once the child has exited, a signal sends nothing, so a
+signal can never reach another process that later got the same process ID. relay never signals a
+process found by name, by port or by a process ID read from a file. When relay itself exits while
+an agent still runs, including after SIGHUP from a closed terminal, it sends that agent SIGTERM.
 
 ## Stopping a worker
 
@@ -245,8 +248,9 @@ minutes), or `<n>_minutes` for any other length.
 larger one as Unix milliseconds, because the unit of Claude Code's `resetsAt` is not documented; a
 string is read as an ISO 8601 time. Limit messages give a local time such as `3:45pm`, `3:45 PM`,
 `Mon 12:00am` or `Oct 9, 3:45 PM`; relay reads it as the next moment the local clock shows that
-time, and ignores a final full stop and a time zone name in parentheses. Every comparison with a
-reset time, a log's age or a policy's age reads the time through `now()` in
+time. Codex writes a reset on another day with the year, as in `Oct 9th, 2026 3:45 PM`, which
+relay reads as that exact time. relay ignores a final full stop and a time zone name in
+parentheses. Every comparison with a reset time, a log's age or a policy's age reads the time through `now()` in
 `src/platform/clock.ts`, which tests replace with `setClock()`.
 
 ## The agent's environment
@@ -254,18 +258,21 @@ reset time, a log's age or a policy's age reads the time through `now()` in
 `buildAgentEnv(account)` in `src/accounts/environment.ts` builds the environment of every agent
 and of the provider's own login and status commands, starting from relay's own:
 
-1. It removes every variable whose name starts with `ANTHROPIC_` or `OPENAI_`, and
-   `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`,
+1. It removes every variable whose name starts with `ANTHROPIC_`, `OPENAI_`, `CLAUDE_CODE_USE_`
+   (the switches to Bedrock, Vertex and Foundry) or `CODEX_SANDBOX`, and `CLAUDE_CODE_OAUTH_TOKEN`,
    `AWS_BEARER_TOKEN_BEDROCK`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `CURSOR_API_KEY`,
-   `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. It also removes the test variables that start with
+   `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. It also removes `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`
+   and `CODEX_THREAD_ID`, which an outer Claude Code or Codex session sets: Claude Code refuses to
+   start when `CLAUDECODE` is set, so `relay run` from a terminal inside an agent would fail. It also removes the test variables that start with
    `RELAY_FAKE_` unless `RELAY_KEEP_FAKE_ENV=1` is set, and any `RELAY_JOB`, `RELAY_TARGET` or
    `RELAY_WORKER` inherited from an outer agent.
 2. It sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME` to the account's profile folder, except when that
    folder is the provider's own `~/.claude` or `~/.codex`, where the variable stays unset.
 3. It copies each variable the account names in `credential_env`. A Claude Code account may name
    only `ANTHROPIC_` variables and `CLAUDE_CODE_OAUTH_TOKEN`, and a Codex account only `OPENAI_` and
-   `CODEX_` variables other than `CODEX_HOME`, so one provider's key never reaches another
-   provider's program. Any other name stops relay with exit code 78.
+   `CODEX_` variables other than `CODEX_HOME`, `CODEX_THREAD_ID` and the `CODEX_SANDBOX` ones, so
+   one provider's key never reaches another provider's program. The settings check reports any
+   other name when it reads `config.toml`, and relay stops with exit code 78.
 4. It sets `RELAY_HOME`, and `RELAY_JOB`, `RELAY_TARGET` (the account, for example `claude:work`) and
    `RELAY_WORKER` when a worker is known, so hooks can name their job, account and worker.
 
