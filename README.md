@@ -64,6 +64,7 @@ in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 | `docs/research/` | Provider control surfaces, architecture, security, prior art and pricing, lessons from jstack, published advice on agent handoffs, T3 Code's door for outside programs |
 | `docs/ROADMAP.md` | Phases, and the decisions still open |
 | `docs/first-version-index.md` | Every command, exit code, event, job file and module of the first version |
+| [docs/architecture.md](docs/architecture.md), [docs/progress.md](docs/progress.md) | How relay works, and how far the build has come, with diagrams |
 | [Codebase map](docs/codebase-map.md) | The folders of the source code and tests, with a diagram |
 | [docs/cli.md](docs/cli.md) | The `relay` command line: commands, output and exit codes |
 | [docs/daemon.md](docs/daemon.md) | The background service: its files, the `relay daemon` commands and the private socket |
