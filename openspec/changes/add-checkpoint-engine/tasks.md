@@ -54,7 +54,7 @@ Each numbered task fits in one small pull request. Following AGENTS.md, edit on 
 ## 9. End-to-end check and CI
 
 - [ ] 9.1 Add `test/checkpoint/e2e.test.ts`, which builds the binary with the scaffold's build command and runs it as a separate process on a scratch repository: `relay init`, edits, `relay checkpoint -m`, `relay checkpoints --json`, a tampered `core.fsmonitor` refused, the change reverted, `relay rollback 1 --yes`, then the printed undo command; it asserts exit codes, `captureState()` equal before and after for everything except working-tree files, the final files equal to those before the rollback, and that the runner's call log (written to `$RELAY_HOME/logs/git-calls.jsonl` when `RELAY_TEST_GIT_LOG=1`) contains no `push`, `fetch`, `pull`, `ls-remote` or denied command. Verify with `bun test test/checkpoint/e2e.test.ts`.
-- [ ] 9.2 Add gitleaks to the scaffold's CI workflow for macOS and Linux, downloading the official 8.30.1 release archive from GitHub and checking its SHA-256 checksum from the release's checksums file before use. Verify by pushing the branch and seeing `bun test` pass on both runners, and by checking that a CI run with the checksum changed by one character fails.
+- [x] 9.2 Add gitleaks to the scaffold's CI workflow for macOS and Linux, downloading the official 8.30.1 release archive from GitHub and checking its SHA-256 checksum from the release's checksums file before use. Verify by pushing the branch and seeing `bun test` pass on both runners, and by checking that a CI run with the checksum changed by one character fails.
 
 ## Workflow follow-up
 
