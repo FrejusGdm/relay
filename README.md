@@ -66,6 +66,8 @@ in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 | `docs/first-version-index.md` | Every command, exit code, event, job file and module of the first version |
 | [Codebase map](docs/codebase-map.md) | The folders of the source code and tests, with a diagram |
 | [docs/cli.md](docs/cli.md) | The `relay` command line: commands, output and exit codes |
+| [docs/adapters.md](docs/adapters.md) | How relay starts, watches and stops Claude Code and Codex, and the events adapters report |
+| [docs/testing-adapters.md](docs/testing-adapters.md) | The fake agents and scenario files that tests use instead of real providers |
 | `DESIGN.md`, `docs/design/` | The design direction and its working preview |
 | `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |
 | `openspec/` | Project rules (`config.yaml`) and detailed change proposals for the first version |
