@@ -84,3 +84,10 @@ export async function readJunit(path: string, expectedTotal?: number): Promise<T
     extra,
   };
 }
+
+// The names of the tests that passed, which the regression check compares between two reports.
+export async function passingTests(path: string): Promise<string[]> {
+  const file = Bun.file(path);
+  const cases = (await file.exists() ? parse(await file.text()) : null) ?? [];
+  return cases.filter((test) => !test.failure && !test.error && !test.skipped).map((test) => test.name);
+}

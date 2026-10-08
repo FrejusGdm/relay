@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "run_id": "ledger-import__baseline__claude__r1",
+  "campaign": "all-rules-pass",
+  "plan": "standard",
+  "task_id": "ledger-import",
+  "task_version": "021998f2d9c9a7005a06e84fa1e725c682f77260",
+  "kind": "baseline",
+  "repetition": 1,
+  "from_target": "claude:personal",
+  "to_target": null,
+  "interrupt_point": null,
+  "baseline_median_steps": null,
+  "baseline_runs_used": null,
+  "interrupt_step_target": null,
+  "steps_at_switch": null,
+  "status": "completed",
+  "started_at": "2026-10-12T09:00:00.000Z",
+  "ended_at": "2026-10-12T10:00:00.000Z",
+  "wall_seconds_total": 1800,
+  "steps_total": 28,
+  "tools": {
+    "relay": "0.1.0",
+    "claude": "2.1.282",
+    "codex": "0.160.0",
+    "bun": "1.3.6",
+    "git": "2.39.0",
+    "python3": "3.11.3"
+  },
+  "base_sha": "f3b9a4420b1b5f1fa9a3fdd7b64f72eb639f93ed",
+  "segments": [
+    {
+      "target": "claude:personal",
+      "worker_id": "01cl0001",
+      "model": "claude-sonnet-sample",
+      "started_at": "2026-10-12T09:00:00.000Z",
+      "ended_at": "2026-10-12T09:00:00.000Z",
+      "wall_seconds": 1800,
+      "steps": 28,
+      "end_reason": "exited",
+      "exit_code": 0,
+      "usage": {
+        "source": "turn_completed",
+        "input_tokens": 36000,
+        "cached_input_tokens": 27000,
+        "output_tokens": 900,
+        "reasoning_output_tokens": null,
+        "cost_usd_estimate": 0.09
+      },
+      "used_percent_before": null,
+      "used_percent_after": null
+    }
+  ],
+  "handoff": null,
+  "outcome": {
+    "final_checkpoint_sha": "bac63698b5f8f088754e8df9668800a158e8ac80",
+    "visible_tests": {
+      "passed": 9,
+      "failed": 0,
+      "total": 9
+    },
+    "acceptance_tests": {
+      "passed": 15,
+      "failed": 0,
+      "total": 15,
+      "failing": []
+    },
+    "solved": true,
+    "regressions": [],
+    "lines_added_before": null,
+    "lines_reverted": null,
+    "rework_ratio": null,
+    "files_reworked": []
+  },
+  "control_points": [
+    {
+      "point": "steps:25",
+      "step": 7,
+      "snapshot_sha": "60fd0004baecb24c816895c1b6d34083f053ee24",
+      "acceptance_at_point": {
+        "passed": 2,
+        "failed": 13,
+        "total": 15
+      },
+      "regressions": [],
+      "lines_added_before": 40,
+      "lines_reverted": 2,
+      "rework_ratio": 0.05,
+      "files_reworked": [
+        "src/import.ts"
+      ]
+    },
+    {
+      "point": "steps:50",
+      "step": 14,
+      "snapshot_sha": "0528681a5edd792b67ac7fce02946783d9de5cf1",
+      "acceptance_at_point": {
+        "passed": 2,
+        "failed": 13,
+        "total": 15
+      },
+      "regressions": [],
+      "lines_added_before": 40,
+      "lines_reverted": 2,
+      "rework_ratio": 0.05,
+      "files_reworked": [
+        "src/import.ts"
+      ]
+    },
+    {
+      "point": "steps:75",
+      "step": 21,
+      "snapshot_sha": "c409ce6042f313c0d02b138e776480e2848aacf6",
+      "acceptance_at_point": {
+        "passed": 2,
+        "failed": 13,
+        "total": 15
+      },
+      "regressions": [],
+      "lines_added_before": 40,
+      "lines_reverted": 0,
+      "rework_ratio": 0.0,
+      "files_reworked": []
+    }
+  ],
+  "safety": {
+    "ok": true,
+    "violations": [],
+    "bypass_flags_seen": false,
+    "argv_recorded": true
+  },
+  "contamination": false,
+  "notes": ""
+}
