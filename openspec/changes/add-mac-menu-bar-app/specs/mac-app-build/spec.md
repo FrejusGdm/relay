@@ -34,7 +34,7 @@ The built app SHALL keep running for at least 5 seconds when started with an emp
 - **THEN** the process is still alive after 5 seconds and the script prints "Smoke test passed"
 
 ### Requirement: One macOS job in CI
-`.github/workflows/mac-app.yml` SHALL run one job on `macos-26` with a 20-minute limit, read-only contents permission and checkout without persisted credentials, every action pinned to a full commit SHA, triggered by pull requests and pushes to `main` that change `mac/**` or the workflow, by `workflow_dispatch`, and by `workflow_call` with a `version` input. The job SHALL run `swift test`, build the bundle, run the smoke test, and upload the artifacts `mac-app-screenshots` and `Relay-macOS` for 7 days.
+`.github/workflows/mac-app.yml` SHALL run one job on `macos-26` with a 20-minute limit, read-only contents permission and checkout without persisted credentials, every action pinned to a full commit SHA, triggered by pull requests and pushes to `main` that change `mac/**` or the workflow, by pushes of `v*` tags, and by `workflow_dispatch` with an optional `version` input. The job SHALL run `swift test`, build the bundle, run the smoke test, and upload the artifacts `mac-app-screenshots` and `Relay-macOS` for 7 days.
 
 #### Scenario: Unrelated change
 - **WHEN** a pull request changes only files under `src/`
@@ -52,10 +52,10 @@ When `RELAY_SCREENSHOT_DIR` is set, `swift test` SHALL write PNG files rendered 
 - **THEN** the `mac-app-screenshots` artifact holds 14 PNG files, including `tiny-handoff-light.png` 560 pixels wide
 
 ### Requirement: Release asset
-The release workflow SHALL call `mac-app.yml` with the release version and SHALL attach `Relay-macOS.zip` to the GitHub Release, keeping write permission out of `mac-app.yml`.
+A tag `v*` SHALL start `mac-app.yml`, which SHALL build the app with the tag's version, and `mac/scripts/attach-to-release.sh <tag>` SHALL attach that run's `Relay-macOS.zip` to the GitHub Release that was published by hand, refusing a zip whose version is not the tag's, and keeping write permission out of `mac-app.yml` (design decision 15).
 
 #### Scenario: Release
-- **WHEN** a release is published for version 0.8.0
+- **WHEN** a release is published by hand for version 0.8.0 and `sh mac/scripts/attach-to-release.sh v0.8.0` runs after the tag's Mac app run passed
 - **THEN** `gh release view v0.8.0 --json assets --jq '.assets[].name'` lists `Relay-macOS.zip`, and the app's `CFBundleShortVersionString` is `0.8.0`
 
 ### Requirement: First launch is documented
