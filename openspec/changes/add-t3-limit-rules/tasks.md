@@ -8,14 +8,13 @@ provider or a real T3 Code: they use the fake T3 server of task 4.1, phase 3's `
 
 ## 1. Checks before building
 
-- [ ] 1.1 Needs Josué's Mac and Josué. Install the latest T3 Code nightly, turn on Settings →
-  Auto-resume limited threads, and run a throwaway script built on `@modelcontextprotocol/sdk`
-  from the scratchpad that signs in to `/mcp` with a loopback redirect address and a pairing code
-  from `t3 auth pairing create`, calls `orchestrator_capabilities`, restarts T3, and calls it
-  again. Write the answers in `docs/research/t3-outside-access.md` under "What I could not
-  verify": whether the loopback redirect was accepted, the instance IDs before and after the
-  restart, and the T3 build. Verify by reading the updated section; if the redirect was refused,
-  stop this change and ask Josué (design.md 3).
+- [ ] 1.1 The loopback redirect was confirmed in T3's source; it accepts any port
+  (`docs/research/t3-outside-access.md`, "Checked later"). Only the instance-ID check and the
+  T3 build check remain, and need Josué's Mac and Josué. Install the latest T3 Code nightly,
+  turn on Settings → Auto-resume limited threads, sign in to `/mcp` with a pairing code from
+  `t3 auth pairing create`, call `orchestrator_capabilities`, restart T3, and call it again.
+  Write the instance IDs before and after the restart and the T3 build in the research file
+  under "What I could not verify". Verify by reading the updated section.
 - [ ] 1.2 Run `claude -p "/usage"` three times on the Omarchy machine with a signed-in
   Claude account, with `/usage` in the account's statistics before and after, and check whether a
   session transcript appears under `~/.claude/projects/`. Also check whether
@@ -76,13 +75,15 @@ provider or a real T3 Code: they use the fake T3 server of task 4.1, phase 3's `
   which checks that calling `t3_thread_merge_back` throws before any request reaches the fake
   server, the retry timing with the injectable clock, and that the log never contains the fake
   token or a thread title.
-- [ ] 4.3 Add `src/t3/oauth.ts` (design.md 3 and 4): the `OAuthClientProvider`, the loopback
-  listener, and storage with `Bun.secrets`. Add OAuth endpoints with a fixed pairing code to
+- [x] 4.3 Add `src/t3/oauth.ts`, `src/t3/secrets.ts` and `src/t3/connection.ts` (design.md 3 and
+  4): the `OAuthClientProvider`, the loopback listener, storage with `Bun.secrets`, and the
+  private connection record. Add OAuth endpoints with a fixed pairing code to
   `test/fakes/fake-t3.ts`. First confirm that the pinned Bun has `Bun.secrets`;
-  if not, stop and report it. Verify with `bun test test/t3/oauth.test.ts`, which signs in to the
+  if not, stop and report it. Verify with `bun test test/t3/oauth.test.ts test/t3/connection.test.ts`, which signs in to the
   fake server with an injected browser opener, checks a wrong `state` is refused, checks the
   listener closes after 120 seconds, and checks the scenario "Nothing on disk" by searching every
-  file under `RELAY_HOME`.
+  file under `RELAY_HOME`, and checks expiry, private file modes and disconnection.
+  Implemented here; tests and type checking have not been run on this Mac, as instructed.
 - [ ] 4.4 Add `relay t3 connect` with the version check and the instance mapping questions
   (`t3-connection` requirements "Connecting" and "Mapping T3 providers to relay accounts"). Verify
   with `bun test test/t3/connect.test.ts`, which runs the command in a pseudo-terminal against the
