@@ -33,10 +33,17 @@ export function applyReading(
   for (const rule of rules) {
     if (rule.account !== reading.account) continue;
     const window = reading.windows.find((item) => item.name === rule.window);
-    if (window === undefined) continue;
+    // A window whose reset has passed describes a period that is over, even if the reading is fresh.
+    if (window === undefined || (window.resetsAt !== null && window.resetsAt <= now)) continue;
     const key = `${rule.account} ${rule.window}`;
     const active = next.get(key);
-    if (window.usedPercent >= rule.threshold && active === undefined) {
+    if (window.usedPercent >= rule.threshold && active !== undefined) {
+      // Same period: keep the crossing, but learn a reset time that was unknown or has moved, so
+      // expireCrossings can end it.
+      if (window.resetsAt !== null && window.resetsAt !== active.resetsAt) {
+        next.set(key, { ...active, usedPercent: window.usedPercent, resetsAt: window.resetsAt });
+      }
+    } else if (window.usedPercent >= rule.threshold) {
       const crossing: Crossing = {
         account: rule.account, window: rule.window, usedPercent: window.usedPercent,
         threshold: rule.threshold, action: rule.action, switchTo: rule.switchTo,

@@ -132,3 +132,27 @@ describe("Crossing a threshold", () => {
     });
   });
 });
+
+describe("Review findings", () => {
+  test("a fresh reading of a window whose reset has passed starts nothing", () => {
+    const first = applyReading(new Map(), reading(95, now + 1_000), [rule], now);
+    expect(first.started).toHaveLength(1);
+    const later = now + 2_000;
+    const again = applyReading(first.state, reading(95, now + 1_000, now), [rule], later);
+    expect(again.ended).toEqual([{ crossing: first.started[0]!, reason: "reset_passed" }]);
+    expect(again.started).toEqual([]);
+    const third = applyReading(again.state, reading(95, now + 1_000, now), [rule], later);
+    expect(third.started).toEqual([]);
+    expect(third.ended).toEqual([]);
+  });
+
+  test("a crossing that started without a reset time learns it and then expires", () => {
+    const first = applyReading(new Map(), reading(95, null), [rule], now);
+    const learned = applyReading(first.state, reading(96, now + 5_000), [rule], now + 1);
+    expect(learned.started).toEqual([]);
+    expect(learned.state.get(`${rule.account} ${rule.window}`)?.resetsAt).toBe(now + 5_000);
+    expect(first.state.get(`${rule.account} ${rule.window}`)?.resetsAt).toBeNull();
+    const expired = expireCrossings(learned.state, now + 5_000);
+    expect(expired.ended.map((item) => item.reason)).toEqual(["reset_passed"]);
+  });
+});
