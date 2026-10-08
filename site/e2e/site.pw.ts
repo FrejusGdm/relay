@@ -307,3 +307,105 @@ test("unknown address shows the 404 page", async ({ page, problems }) => {
   const own = problems.findIndex((p) => p.url === page.url() && p.text.includes("status of 404"));
   if (own >= 0) problems.splice(own, 1);
 });
+
+// The task graph's connectors start and end at the tasks' ports: the middle of the right and left
+// sides in the wide layout, the middle of the bottom and top in the narrow one.
+for (const width of [1440, 1024, 390]) {
+  test(`task graph connectors meet the ports at ${width} pixels`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    await page.locator("#tg").scrollIntoViewIfNeeded();
+    const result = await page.evaluate(() => {
+      const tg = document.getElementById("tg")!;
+      const base = tg.getBoundingClientRect();
+      const vertical = tg.classList.contains("vertical");
+      const box = (id: string) => document.querySelector(`.tg-node[data-node="${id}"]`)!.getBoundingClientRect();
+      const misses: string[] = [];
+      const paths = Array.from(document.querySelectorAll<SVGPathElement>("#tg-edges path"));
+      for (const path of paths) {
+        const from = box(path.dataset.from!), to = box(path.dataset.to!);
+        const start = path.getPointAtLength(0), end = path.getPointAtLength(path.getTotalLength());
+        const want = vertical
+          ? [from.left + from.width / 2, from.bottom, to.left + to.width / 2, to.top]
+          : [from.right, from.top + from.height / 2, to.left, to.top + to.height / 2];
+        const got = [start.x + base.left, start.y + base.top, end.x + base.left, end.y + base.top];
+        if (got.some((v, i) => Math.abs(v - want[i]!) > 1)) misses.push(`${path.dataset.from}→${path.dataset.to}`);
+      }
+      return { count: paths.length, vertical, misses };
+    });
+    expect(result.count).toBe(11);
+    expect(result.vertical).toBe(width < 900);
+    expect(result.misses).toEqual([]);
+  });
+}
+
+test("a task can be selected from the keyboard to highlight its connections", async ({ page }) => {
+  await page.goto("/");
+  const task = page.locator('.tg-node[data-node="cb"]');
+  await task.focus();
+  await page.keyboard.press("Enter");
+  await expect(task).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#tg-edges .focused-edge")).toHaveCount(3);
+  await expect(page.locator(".tg-node.related-node")).toHaveCount(3);
+  await expect(page.locator("#tg-announce")).toHaveText("Callback route depends on Plan the job. Callback tests and Token refresh depend on it.");
+  await page.keyboard.press("Space");
+  await expect(task).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#tg-edges .focused-edge")).toHaveCount(0);
+  await expect(page.locator("#tg-announce")).toHaveText("No task selected.");
+});
+
+test("the task graph plays once, holds its last moment, and can be paused and replayed", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/");
+  await page.locator(".tg-fig").scrollIntoViewIfNeeded();
+  const moment = (n: number) => page.locator(`#tg-phase > [data-ph="${n}"]`);
+  const pause = page.locator("#tg-pause");
+  await expect(pause).toBeEnabled();
+  await page.clock.runFor(8000);
+  await expect(moment(1)).toHaveCSS("opacity", "1");
+  await expect(page.locator(".tg-node.is-paused")).toHaveCount(4);
+  await page.clock.runFor(5000);
+  await expect(moment(2)).toHaveCSS("opacity", "1");
+  await expect(page.locator(".tg-node.is-paused")).toHaveCount(0);
+  await expect(pause).toBeDisabled();
+  await page.clock.runFor(30000);
+  await expect(moment(2)).toHaveCSS("opacity", "1");
+
+  await page.locator("#tg-replay").click();
+  await expect(moment(0)).toHaveCSS("opacity", "1");
+  await pause.click();
+  await expect(pause).toHaveText("Resume");
+  await page.clock.runFor(10000);
+  await expect(moment(0)).toHaveCSS("opacity", "1");
+  await pause.click();
+  await page.clock.runFor(12000);
+  await expect(moment(2)).toHaveCSS("opacity", "1");
+});
+
+test.describe("with reduced motion", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("the hero and the task graph show their last state", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#hero-card .rc")).toHaveAttribute("data-step", "5");
+    await expect(page.locator('[data-rc="drawing-hash"]')).toHaveText("912ec1");
+    await expect(page.locator('#tg-phase > [data-ph="2"]')).toHaveCSS("opacity", "1");
+    await expect(page.locator("#tg-pause")).toBeDisabled();
+  });
+});
+
+test("every provider logo loads, and the monochrome ones are inverted in the dark theme", async ({ page }) => {
+  await page.goto("/");
+  const logos = page.locator("img.brand-mark");
+  await expect(logos).toHaveCount(3 + 2 + 2 + 9);
+  for (const img of await logos.all()) {
+    await img.scrollIntoViewIfNeeded();
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+  }
+  await themeToggle(page).click();
+  expect(await page.locator(".providers .brand-mono").first().evaluate((el) => getComputedStyle(el).filter)).toBe("invert(1)");
+  expect(await page.locator(".providers .brand-mark:not(.brand-mono)").evaluate((el) => getComputedStyle(el).filter)).toBe("none");
+  await expect(page.locator("#hero-card .rc-logo.for-dark")).toBeVisible();
+  await expect(page.locator("#hero-card .rc-logo.for-light")).toBeHidden();
+});
