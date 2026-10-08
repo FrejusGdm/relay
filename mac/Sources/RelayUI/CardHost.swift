@@ -22,6 +22,7 @@ public struct CardHost: View {
             CheckpointSheet(details: details, copy: actions.copy) { panel = nil }
         case .switchWorker(let flow):
             SwitchSheet(flow: flow, copy: actions.copy) { panel = nil }
+                .onDisappear { flow.dismiss() }
         case nil:
             ExpandedCard(model: model, actions: actions, showLess: showLess) { panel = $0 }
         }
@@ -30,17 +31,20 @@ public struct CardHost: View {
 
 /// The card of the store's state: the menu-bar card when `jobID` is `nil`, which starts tiny and
 /// expands on a click, or the expanded card of one job in a `relay://` window. The app that runs
-/// the agent is looked up when the view appears.
+/// the agent is looked up when the view appears, when the agent's process changes (after a switch,
+/// or when a link's job arrives), and each time `lookup` changes (a link window shown again).
 public struct StoreCard: View {
     let store: RelayStore
     let jobID: String?
     let actions: CardActions
+    let lookup: Int
     @State private var host: AgentHost?
 
-    public init(store: RelayStore, jobID: String? = nil, actions: CardActions) {
+    public init(store: RelayStore, jobID: String? = nil, actions: CardActions, lookup: Int = 0) {
         self.store = store
         self.jobID = jobID
         self.actions = actions
+        self.lookup = lookup
     }
 
     public var body: some View {
@@ -57,12 +61,13 @@ public struct StoreCard: View {
                 CardHost(model: model, actions: actions)
             }
         }
-        .onAppear {
-            if let pid = store.agentPID(jobID: jobID) {
-                host = actions.findHost(pid)
-            } else {
-                host = nil
-            }
+        .task(id: HostLookup(agentPID: store.agentPID(jobID: jobID), lookup: lookup)) {
+            host = store.agentPID(jobID: jobID).flatMap { actions.findHost($0) }
         }
     }
+}
+
+private struct HostLookup: Equatable {
+    let agentPID: Int32?
+    let lookup: Int
 }

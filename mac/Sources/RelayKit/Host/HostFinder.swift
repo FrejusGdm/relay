@@ -2,10 +2,14 @@
 public struct AgentHost: Equatable, Sendable {
     public let pid: Int32
     public let name: String
+    /// The agent's process ID the app was found for. The card uses the host only while this is
+    /// still the current worker's process ID.
+    public let agentPID: Int32
 
-    public init(pid: Int32, name: String) {
+    public init(pid: Int32, name: String, agentPID: Int32) {
         self.pid = pid
         self.name = name
+        self.agentPID = agentPID
     }
 }
 
@@ -30,7 +34,7 @@ public struct HostFinder {
         for _ in 0..<Self.maxSteps {
             guard current > 1 else { return nil }
             if let name = workspace.regularAppName(pid: current) {
-                return AgentHost(pid: current, name: name)
+                return AgentHost(pid: current, name: name, agentPID: pid)
             }
             guard let parent = table.parent(of: current), parent != current else { return nil }
             current = parent

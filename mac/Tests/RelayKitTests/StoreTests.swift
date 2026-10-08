@@ -213,6 +213,24 @@ struct StoreTests {
         try await harness.until { harness.fake.openedFeeds.count == 2 }
     }
 
+    @Test func linkedJobThatFailsToLoadSaysWhy() async throws {
+        let harness = try StoreHarness { fake in
+            fake.reply("GET", "/v1/jobs/3f9a2c1d", with: .json(
+                #"{"error":{"code":"internal_error","message":"Something went wrong inside relay. Details are in the daemon log."}}"#,
+                status: 500
+            ))
+        }
+        defer { harness.finish() }
+        harness.store.openLink("3f9a2c1d")
+        try await harness.until { harness.store.linkProblems["3f9a2c1d"] != nil }
+        let model = CardModel.make(harness.store.cardInput(jobID: "3f9a2c1d"), now: harness.clock.now, calendar: Sample.calendar, locale: Sample.locale)
+        guard case .state(let card) = model else {
+            Issue.record("Expected a state card, got \(model)")
+            return
+        }
+        #expect(card.message.plain == "Something went wrong inside relay. Details are in the daemon log.")
+    }
+
     @Test func atMostSevenAttemptsAMinuteWithoutASocket() async throws {
         let home = try makeTemporaryFolder()
         defer { try? FileManager.default.removeItem(atPath: home) }

@@ -11,10 +11,35 @@ public final class SwitchFlow {
         case sending
         /// The engine asked to confirm the first handoff to a new provider.
         case confirming(message: String)
-        /// A question the API cannot answer; the person runs `command` in a terminal.
-        case runInTerminal(message: String, command: String)
+        /// A question the API cannot answer; the person runs `command` in a terminal. `command` is
+        /// `nil` when the project path cannot be quoted safely for every shell.
+        case runInTerminal(message: String, command: String?)
         case failed(message: String)
+        /// The connection closed or the 15 minutes passed: the switch may still be running.
         case noAnswer
+        /// The person pressed "Cancel"; nothing more is sent.
+        case cancelled
+    }
+
+    /// A button of the sheet. The views draw exactly these, in this order.
+    public struct Button: Equatable, Sendable {
+        public enum Role: Equatable, Sendable {
+            case send, sendConfirmed, cancel, close
+            case copyCommand(String)
+        }
+
+        public enum Key: Equatable, Sendable {
+            /// The Return key (the default button).
+            case returnKey
+            /// The Escape key.
+            case escapeKey
+        }
+
+        public let title: String
+        public let role: Role
+        public let isPrimary: Bool
+        public let isEnabled: Bool
+        public let key: Key?
     }
 
     public struct Option: Equatable, Sendable, Identifiable {
@@ -73,9 +98,34 @@ public final class SwitchFlow {
         }
     }
 
-    /// "Switch to codex:personal", or "Switching…" while the request runs.
-    public var switchLabel: String {
-        phase == .sending ? "Switching…" : "Switch to " + (selectedTarget ?? "…")
+    /// The sheet's buttons in the current phase. "Send and switch" has no key, so a second press of
+    /// Return cannot answer the provider question before the person has read it.
+    public var buttons: [Button] {
+        let target = selectedTarget ?? "…"
+        switch phase {
+        case .choosing:
+            return [
+                Button(title: "Cancel", role: .cancel, isPrimary: false, isEnabled: true, key: .escapeKey),
+                Button(title: "Switch to " + target, role: .send, isPrimary: true, isEnabled: selectedTarget != nil, key: .returnKey),
+            ]
+        case .sending:
+            return [
+                Button(title: "Close", role: .close, isPrimary: false, isEnabled: true, key: .escapeKey),
+                Button(title: "Switching…", role: .send, isPrimary: true, isEnabled: false, key: nil),
+            ]
+        case .confirming:
+            return [
+                Button(title: "Cancel", role: .cancel, isPrimary: false, isEnabled: true, key: .escapeKey),
+                Button(title: "Send and switch", role: .sendConfirmed, isPrimary: true, isEnabled: true, key: nil),
+            ]
+        case .runInTerminal(_, let command):
+            let copy = command.map { [Button(title: "Copy command", role: .copyCommand($0), isPrimary: false, isEnabled: true, key: nil)] }
+            return (copy ?? []) + [Button(title: "Close", role: .close, isPrimary: false, isEnabled: true, key: .escapeKey)]
+        case .failed, .noAnswer:
+            return [Button(title: "Close", role: .close, isPrimary: false, isEnabled: true, key: .escapeKey)]
+        case .cancelled:
+            return []
+        }
     }
 
     /// The first request, with `confirm_new_provider` false.
@@ -90,13 +140,26 @@ public final class SwitchFlow {
         await request(target: target, confirm: true)
     }
 
+    /// "Cancel": ends the flow; nothing more is ever sent.
     public func cancel() {
+        guard phase != .sending else { return }
+        phase = .cancelled
         isClosed = true
     }
 
-    /// `cd '<project_root>' && relay switch <target>`, with each `'` written as `'\''`.
-    public static func command(projectRoot: String, target: String) -> String {
-        "cd '" + projectRoot.replacingOccurrences(of: "'", with: #"'\''"#) + "' && relay switch " + target
+    /// "Close", or the window going away. While the request runs the flow stays open, so a later
+    /// question from the daemon is shown when the person opens "Switch worker…" again.
+    public func dismiss() {
+        if phase != .sending { isClosed = true }
+    }
+
+    /// `cd '<project_root>' && relay switch <target>`, with each `'` written as `'\''`. That quoting
+    /// is right for sh, bash and zsh; fish also treats a backslash inside single quotes, so a path
+    /// with a backslash or a control character gets no command (design.md decision 11).
+    public static func command(projectRoot: String, target: String) -> String? {
+        let unsafe = projectRoot.unicodeScalars.contains { $0 == "\\" || $0.value < 0x20 || $0.value == 0x7F }
+        guard !unsafe else { return nil }
+        return "cd '" + projectRoot.replacingOccurrences(of: "'", with: #"'\''"#) + "' && relay switch " + target
     }
 
     private func request(target: String, confirm: Bool) async {
@@ -116,8 +179,19 @@ public final class SwitchFlow {
             default:
                 phase = .failed(message: error.message)
             }
-        } catch {
+        } catch let error as HTTPError where error == .timedOut || error == .closedEarly {
             phase = .noAnswer
+        } catch let error as SocketError {
+            switch error {
+            case .notRunning, .timedOut, .system:
+                phase = .failed(message: "The switch was not sent, because relay is not running. " + error.message)
+            default:
+                phase = .failed(message: "The switch was not sent. " + error.message)
+            }
+        } catch ClientError.invalidTarget(let target) {
+            phase = .failed(message: "The switch was not sent, because \(target) is not an account name.")
+        } catch {
+            phase = .failed(message: "relay sent an answer this app cannot read. The switch may have run; this card updates when relay reports it.")
         }
     }
 }

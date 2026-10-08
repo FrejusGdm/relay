@@ -24,6 +24,7 @@ struct LinkWindowTests {
         windows.open(link)
         #expect(windows.windows.keys.sorted() == ["3f9a2c1d"])
         #expect(presented == 2)
+        #expect(windows.presentations["3f9a2c1d"] == 2)
         try await until { store.jobsByID["3f9a2c1d"] != nil && store.workersByJob["3f9a2c1d"]?.count == 2 }
 
         windows.open(try #require(URL(string: "relay://job/3f9a2c1d?switch=codex:personal")))
@@ -31,7 +32,7 @@ struct LinkWindowTests {
         #expect(windows.windows.count == 1)
 
         windows.open(try #require(URL(string: "relay://job/ffffffff")))
-        try await until { store.missingJobs["ffffffff"] != nil }
+        try await until { store.linkProblems["ffffffff"] != nil }
         let model = CardModel.make(store.cardInput(jobID: "ffffffff"), now: Date(), calendar: Sample.calendar, locale: Sample.locale)
         guard case .state(let card) = model else {
             Issue.record("Expected a state card, got \(model)")

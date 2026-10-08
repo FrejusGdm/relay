@@ -12,8 +12,8 @@ public struct CardInput: Sendable {
     public var host: AgentHost?
     /// The job a `relay://` window shows; `nil` for the menu-bar card, which chooses its job.
     public var jobID: String?
-    /// The API's message when the daemon does not know `jobID`.
-    public var missingJobMessage: String?
+    /// Why the job `jobID` could not be loaded, for example the API's `job_not_found` message.
+    public var linkProblem: String?
 
     public init(
         connection: ConnectionState,
@@ -23,7 +23,7 @@ public struct CardInput: Sendable {
         capabilities: [String],
         host: AgentHost? = nil,
         jobID: String? = nil,
-        missingJobMessage: String? = nil
+        linkProblem: String? = nil
     ) {
         self.connection = connection
         self.jobs = jobs
@@ -32,7 +32,7 @@ public struct CardInput: Sendable {
         self.capabilities = capabilities
         self.host = host
         self.jobID = jobID
-        self.missingJobMessage = missingJobMessage
+        self.linkProblem = linkProblem
     }
 }
 
@@ -131,7 +131,7 @@ public enum CardModel: Equatable, Sendable {
     }
 
     public static func make(_ input: CardInput, now: Date, calendar: Calendar, locale: Locale) -> CardModel {
-        if let message = input.missingJobMessage {
+        if let message = input.linkProblem {
             return .state(StateCard(title: "relay", message: .text(message), command: nil))
         }
         switch input.connection {
@@ -263,7 +263,8 @@ public enum CardModel: Equatable, Sendable {
         let primary: PrimaryAction?
         if job.projectMissing {
             primary = nil
-        } else if let current, current.state == .running || current.state == .starting, current.pid != nil, let host = input.host {
+        } else if let current, current.state == .running || current.state == .starting, let pid = current.pid,
+                  let host = input.host, host.agentPID == pid {
             primary = .openHost(provider: name(current), app: host.name, pid: host.pid)
         } else {
             primary = .showInFinder(path: job.projectRoot)

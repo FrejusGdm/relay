@@ -4,6 +4,8 @@ import SwiftUI
 struct PrimaryButton: View {
     let label: String
     var isEnabled = true
+    /// Whether Return presses this button.
+    var isDefault = true
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -26,13 +28,15 @@ struct PrimaryButton: View {
         }
         .buttonStyle(PressStyle())
         .disabled(!isEnabled)
-        .keyboardShortcut(.defaultAction)
+        .keyboardShortcut(isDefault ? .defaultAction : nil)
     }
 }
 
 /// A quiet button with a border, for "Cancel", "Close" and "Copy" (`.rc-control`).
 struct SecondaryButton: View {
     let title: String
+    /// Whether Escape presses this button.
+    var isCancel = false
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -48,6 +52,7 @@ struct SecondaryButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+        .keyboardShortcut(isCancel ? .cancelAction : nil)
     }
 }
 

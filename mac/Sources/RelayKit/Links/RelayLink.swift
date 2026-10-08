@@ -4,14 +4,14 @@ import Foundation
 /// link is ignored without a message and without a request.
 public enum RelayLink {
     public static func parse(_ url: URL) -> String? {
-        guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              parts.scheme?.lowercased() == "relay",
-              parts.host == "job",
-              parts.user == nil, parts.password == nil, parts.port == nil,
-              parts.query == nil, parts.fragment == nil,
-              parts.percentEncodedPath.hasPrefix("/")
+        // Compared as text: `URLComponents` reads "relay://job:/…" as having no port and
+        // "relay://@job/…" as having no user, and both must be ignored.
+        let text = url.absoluteString
+        let prefix = "relay://job/"
+        guard text.count == prefix.count + 8, text.lowercased().hasPrefix("relay:"),
+              text.dropFirst(6).hasPrefix("//job/")
         else { return nil }
-        let id = String(parts.percentEncodedPath.dropFirst())
+        let id = String(text.suffix(8))
         return RelayID.isJobID(id) ? id : nil
     }
 }

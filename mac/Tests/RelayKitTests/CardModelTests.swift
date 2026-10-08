@@ -178,6 +178,13 @@ struct CardModelTests {
         #expect(card.primaryAction?.label == "Show project in Finder")
     }
 
+    @Test func hostOfAnotherAgentIsNotUsed() throws {
+        var input = try Sample.handoff(host: nil)
+        input.host = AgentHost(pid: 400, name: "Terminal", agentPID: 4890)
+        let card = try jobCard(input)
+        #expect(card.primaryAction?.label == "Show project in Finder")
+    }
+
     @Test func missingProject() throws {
         let input = try Sample.input(jobs: [Sample.jobJSON(projectMissing: true)], workers: [Sample.workerJSON()])
         let card = try jobCard(input)

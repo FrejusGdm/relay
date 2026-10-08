@@ -50,9 +50,69 @@ struct SwitchFlowTests {
         #expect(flow.options.map(\.providerName) == ["Claude Code", "Codex"])
         #expect(flow.explanation == "relay saves a checkpoint, stops Claude Code and starts the next agent with the same repository and plan.")
         flow.selectedTarget = nil
-        #expect(flow.switchLabel == "Switch to …")
+        #expect(flow.buttons.map(\.title) == ["Cancel", "Switch to …"])
+        #expect(flow.buttons.last?.isEnabled == false)
         flow.selectedTarget = "codex:personal"
-        #expect(flow.switchLabel == "Switch to codex:personal")
+        #expect(flow.buttons.map(\.title) == ["Cancel", "Switch to codex:personal"])
+        #expect(flow.buttons.map(\.key) == [.escapeKey, .returnKey])
+    }
+
+    @Test func returnDoesNotAnswerTheProviderQuestion() async throws {
+        defer { fake.stop() }
+        fake.reply("POST", Self.path, with: error("confirmation_required", Self.question))
+        let flow = try flow()
+        await flow.send()
+        #expect(flow.buttons.map(\.title) == ["Cancel", "Send and switch"])
+        #expect(flow.buttons.map(\.key) == [.escapeKey, nil])
+    }
+
+    @Test func closingWhileSendingKeepsTheLaterQuestion() async throws {
+        let harness = try StoreHarness { fake in
+            fake.reply("POST", Self.path, with: .delayed(0.5, .json(
+                Sample.text(["error": ["code": "confirmation_required", "message": Self.question]]), status: 409
+            )))
+        }
+        defer {
+            harness.finish(posts: 1)
+            fake.stop()
+        }
+        _ = try await harness.connect()
+        let flow = try #require(harness.store.switchFlow(jobID: "3f9a2c1d"))
+        flow.selectedTarget = "claude:personal"
+        let sending = Task { await flow.send() }
+        try await harness.until { flow.phase == .sending }
+        #expect(flow.buttons.first?.title == "Close")
+        flow.dismiss()
+        #expect(!flow.isClosed)
+        await sending.value
+        #expect(flow.phase == .confirming(message: Self.question))
+        #expect(harness.store.switchFlow(jobID: "3f9a2c1d") === flow)
+        flow.cancel()
+        #expect(harness.store.switchFlow(jobID: "3f9a2c1d") !== flow)
+    }
+
+    @Test func failedConnectionSaysTheSwitchWasNotSent() async throws {
+        fake.stop()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let flow = try flow()
+        await flow.send()
+        guard case .failed(let message) = flow.phase else {
+            Issue.record("Expected a failure, got \(flow.phase)")
+            return
+        }
+        #expect(message == "The switch was not sent, because relay is not running. Start it in a terminal: relay daemon start")
+    }
+
+    @Test(arguments: ["/Users/dev/back\\slash", "/Users/dev/new\nline", "/Users/dev/tab\there"])
+    func pathsThatCannotBeQuotedGetNoCommand(path: String) async throws {
+        defer { fake.stop() }
+        #expect(SwitchFlow.command(projectRoot: path, target: "codex:personal") == nil)
+        let message = "This switch needs a terminal. Run relay switch codex:personal in the project."
+        fake.reply("POST", Self.path, with: error("interactive_start_required", message))
+        let flow = try flow(projectRoot: path)
+        await flow.send()
+        #expect(flow.phase == .runInTerminal(message: message, command: nil))
+        #expect(flow.buttons.map(\.title) == ["Close"])
     }
 
     @Test func oneRequestAndASuccessCloses() async throws {
@@ -90,6 +150,8 @@ struct SwitchFlowTests {
         await flow.send()
         flow.cancel()
         #expect(flow.isClosed)
+        #expect(flow.phase == .cancelled)
+        await flow.confirm()
         try await Task.sleep(nanoseconds: 100_000_000)
         #expect(posts.count == 1)
     }
@@ -185,6 +247,10 @@ struct RelayLinkTests {
         "relay://checkpoint/3f9a2c1d",
         "https://job/3f9a2c1d",
         "relay:job/3f9a2c1d",
+        "relay://job:/3f9a2c1d",
+        "relay://@job/3f9a2c1d",
+        "relay://JOB/3f9a2c1d",
+        "relay:///job/3f9a2c1d",
     ])
     func ignored(link: String) throws {
         let url = try #require(URL(string: link))

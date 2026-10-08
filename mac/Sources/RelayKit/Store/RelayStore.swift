@@ -29,8 +29,9 @@ public final class RelayStore {
     public private(set) var now: Date
     /// The jobs that `relay://` windows show.
     public private(set) var linkedJobs: Set<String> = []
-    /// The API's message for each linked job the daemon does not know.
-    public private(set) var missingJobs: [String: String] = [:]
+    /// Why each linked job that is not loaded could not be loaded, for example the API's
+    /// `job_not_found` message.
+    public private(set) var linkProblems: [String: String] = [:]
 
     let client: DaemonClient
     let clock: any RelayClock
@@ -44,6 +45,7 @@ public final class RelayStore {
     @ObservationIgnored private var openWindows = 0
     @ObservationIgnored private var reconnectWait: Task<Void, Error>?
     @ObservationIgnored private var refreshWait: Task<Void, Error>?
+    @ObservationIgnored private var switches: [String: SwitchFlow] = [:]
     /// How many connection cycles have started, for tests.
     @ObservationIgnored private(set) var cycleCount = 0
     /// Whether the current event stream has delivered anything after its head, for tests.
@@ -85,7 +87,7 @@ public final class RelayStore {
             capabilities: capabilities,
             host: host,
             jobID: jobID,
-            missingJobMessage: jobID.flatMap { missingJobs[$0] }
+            linkProblem: jobID.flatMap { linkProblems[$0] }
         )
     }
 
@@ -96,12 +98,22 @@ public final class RelayStore {
         return worker.pid
     }
 
-    /// A switch sheet for the job, which hands the new worker to the store when it succeeds.
+    /// The switch sheet for the job, which hands the new worker to the store when it succeeds. A
+    /// switch that is still open, for example one whose request is running while its sheet is
+    /// hidden, is returned again, so its answer is not lost.
     public func switchFlow(jobID: String) -> SwitchFlow? {
+        if let open = switches[jobID], !open.isClosed { return open }
         guard let job = jobsByID[jobID] else { return nil }
-        return SwitchFlow(job: job, accounts: accounts, client: client, now: clock.now) { [weak self] worker in
+        let flow = SwitchFlow(job: job, accounts: accounts, client: client, now: clock.now) { [weak self] worker in
             self?.adopt(worker)
         }
+        switches[jobID] = flow
+        return flow
+    }
+
+    /// Opens the view a primary action names. It never sends a request to the daemon.
+    public func perform(_ action: PrimaryAction, in workspace: any Workspace) {
+        action.perform(in: workspace)
     }
 
     /// A `relay://` window opened for `jobID`: load the job and follow it while the window is open.
@@ -127,15 +139,36 @@ public final class RelayStore {
     private func loadLinkedJob(_ jobID: String) async {
         do {
             let job = try await client.job(jobID)
-            missingJobs.removeValue(forKey: jobID)
+            linkProblems.removeValue(forKey: jobID)
             applyJob(job.value, sequenceNumber: job.streamSeq, fromSnapshot: true)
             let workers = try await client.workers(jobID: jobID)
             for worker in workers.value {
                 applyWorker(worker, sequenceNumber: workers.streamSeq, fromSnapshot: true)
             }
-        } catch let error as APIError where error.code == "job_not_found" {
-            missingJobs[jobID] = error.message
-        } catch {}
+        } catch {
+            let notFound = (error as? APIError)?.code == "job_not_found"
+            if notFound {
+                jobsByID.removeValue(forKey: jobID)
+            }
+            if jobsByID[jobID] == nil {
+                linkProblems[jobID] = Self.linkProblem(error)
+            }
+        }
+    }
+
+    /// What a `relay://` window shows when its job could not be loaded.
+    static func linkProblem(_ error: Error) -> String {
+        switch error {
+        case let apiError as APIError:
+            return apiError.message
+        case let socketError as SocketError:
+            switch socketError {
+            case .notRunning, .timedOut, .system: return "relay is not running. " + socketError.message
+            default: return socketError.message
+            }
+        default:
+            return "relay did not answer."
+        }
     }
 
     /// Follows the daemon until the task is cancelled.
@@ -273,7 +306,7 @@ public final class RelayStore {
             case .notRunning, .timedOut, .system: return .notRunning
             default: return .refused(socketError)
             }
-        case let httpError as HTTPError where httpError == .timedOut:
+        case let httpError as HTTPError where httpError == .timedOut || httpError == .closedEarly:
             return .notRunning
         default:
             return duringVersion ? .tooOld : .notRunning

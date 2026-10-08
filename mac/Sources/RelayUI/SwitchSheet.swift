@@ -17,21 +17,24 @@ public struct SwitchSheet: View {
 
     public var body: some View {
         let palette = Palette(scheme: scheme)
-        Group {
+        SheetFrame(title: "Switch worker") {
             switch flow.phase {
-            case .choosing, .sending:
-                choosing(palette)
-            case .confirming(let message):
-                SheetFrame(title: "Switch worker") {
-                    paragraph(message, palette(.ink))
-                } buttons: {
-                    SecondaryButton(title: "Cancel") { flow.cancel() }
-                    PrimaryButton(label: "Send and switch") { Task { await flow.confirm() } }
-                        .fixedSize()
+            case .choosing, .sending, .cancelled:
+                paragraph(flow.explanation, palette(.muted))
+                VStack(spacing: 8) {
+                    ForEach(flow.options) { option in
+                        optionRow(option, palette)
+                    }
                 }
+                .padding(.top, 14)
+                if flow.phase == .sending {
+                    paragraph(SwitchFlow.sendingNote, palette(.muted)).padding(.top, 12)
+                }
+            case .confirming(let message), .failed(let message):
+                paragraph(message, palette(.ink))
             case .runInTerminal(let message, let command):
-                SheetFrame(title: "Switch worker") {
-                    paragraph(message, palette(.ink))
+                paragraph(message, palette(.ink))
+                if let command {
                     paragraph("Run this in a terminal:", palette(.muted)).padding(.top, 12)
                     Text(command)
                         .font(RelayFont.mono(12))
@@ -43,21 +46,21 @@ public struct SwitchSheet: View {
                         .background(RoundedRectangle(cornerRadius: 6).fill(palette(.raised)))
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(palette(.rule), lineWidth: 1))
                         .padding(.top, 8)
-                } buttons: {
-                    SecondaryButton(title: "Copy command") { copy(command) }
-                    SecondaryButton(title: "Close", action: close)
-                }
-            case .failed(let message):
-                SheetFrame(title: "Switch worker") {
-                    paragraph(message, palette(.ink))
-                } buttons: {
-                    SecondaryButton(title: "Close", action: close)
                 }
             case .noAnswer:
-                SheetFrame(title: "Switch worker") {
-                    paragraph(SwitchFlow.noAnswerText, palette(.ink))
-                } buttons: {
-                    SecondaryButton(title: "Close", action: close)
+                paragraph(SwitchFlow.noAnswerText, palette(.ink))
+            }
+        } buttons: {
+            ForEach(Array(flow.buttons.enumerated()), id: \.offset) { _, button in
+                if button.isPrimary {
+                    PrimaryButton(label: button.title, isEnabled: button.isEnabled, isDefault: button.key == .returnKey) {
+                        press(button.role)
+                    }
+                    .fixedSize()
+                } else {
+                    SecondaryButton(title: button.title, isCancel: button.key == .escapeKey) {
+                        press(button.role)
+                    }
                 }
             }
         }
@@ -66,24 +69,15 @@ public struct SwitchSheet: View {
         }
     }
 
-    private func choosing(_ palette: Palette) -> some View {
-        SheetFrame(title: "Switch worker") {
-            paragraph(flow.explanation, palette(.muted))
-            VStack(spacing: 8) {
-                ForEach(flow.options) { option in
-                    optionRow(option, palette)
-                }
-            }
-            .padding(.top, 14)
-            if flow.phase == .sending {
-                paragraph(SwitchFlow.sendingNote, palette(.muted)).padding(.top, 12)
-            }
-        } buttons: {
-            SecondaryButton(title: "Cancel") { flow.cancel() }
-            PrimaryButton(label: flow.switchLabel, isEnabled: flow.selectedTarget != nil && flow.phase == .choosing) {
-                Task { await flow.send() }
-            }
-            .fixedSize()
+    private func press(_ role: SwitchFlow.Button.Role) {
+        switch role {
+        case .send: Task { await flow.send() }
+        case .sendConfirmed: Task { await flow.confirm() }
+        case .cancel: flow.cancel()
+        case .close:
+            flow.dismiss()
+            close()
+        case .copyCommand(let command): copy(command)
         }
     }
 

@@ -44,7 +44,7 @@ struct HostFinderTests {
         workspace.apps = [400: "Terminal"]
         let table = FakeProcessTable([5120: 5000, 5000: 4990, 4990: 400, 400: 1])
         let host = HostFinder(table: table, workspace: workspace).host(of: 5120)
-        #expect(host == AgentHost(pid: 400, name: "Terminal"))
+        #expect(host == AgentHost(pid: 400, name: "Terminal", agentPID: 5120))
 
         var input = try Sample.handoff(host: nil)
         input.host = host
@@ -74,15 +74,28 @@ struct HostFinderTests {
         #expect(table.lookups <= HostFinder.maxSteps)
     }
 
-    @Test func actionsSendNoRequest() throws {
-        let fake = try FakeDaemon()
-        defer { fake.stop() }
+    /// A chain of 40 parents: the app is found 31 steps up, and not 33 steps up.
+    @Test(arguments: [(31, true), (33, false)])
+    func hostFoundWithin32Steps(steps: Int32, found: Bool) {
+        let chain = Dictionary(uniqueKeysWithValues: (0..<40).map { (Int32(1000) + $0, Int32(1001) + $0) })
         let workspace = FakeWorkspace()
-        PrimaryAction.openHost(provider: "Codex", app: "Terminal", pid: 400).perform(in: workspace)
-        PrimaryAction.showInFinder(path: "/Users/dev/projects/auth").perform(in: workspace)
+        workspace.apps = [1000 + steps: "Terminal"]
+        let host = HostFinder(table: FakeProcessTable(chain), workspace: workspace).host(of: 1000)
+        #expect((host != nil) == found)
+    }
+
+    @Test func actionsSendNoRequest() async throws {
+        let harness = try StoreHarness()
+        defer { harness.finish() }
+        _ = try await harness.connect()
+        let before = harness.fake.requests.count
+        let workspace = FakeWorkspace()
+        harness.store.perform(.openHost(provider: "Codex", app: "Terminal", pid: 400), in: workspace)
+        harness.store.perform(.showInFinder(path: "/Users/dev/projects/auth"), in: workspace)
+        try await Task.sleep(nanoseconds: 200_000_000)
         #expect(workspace.activated == [400])
         #expect(workspace.shown == ["/Users/dev/projects/auth"])
-        #expect(fake.requests.isEmpty)
+        #expect(harness.fake.requests.count == before)
     }
 }
 

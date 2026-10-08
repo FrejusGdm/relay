@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let workspace = SystemWorkspace()
         let store = store
         var actions = CardActions()
-        actions.primary = { $0.perform(in: workspace) }
+        actions.primary = { store.perform($0, in: workspace) }
         actions.copy = { workspace.copy($0) }
         actions.quit = { NSApp.terminate(nil) }
         actions.findHost = { HostFinder(workspace: workspace).host(of: $0) }

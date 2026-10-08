@@ -135,7 +135,7 @@ public enum Sample {
             workersByJob: Dictionary(grouping: decodedWorkers, by: \.jobId),
             accounts: try accounts.map { try decode(Account.self, $0) },
             capabilities: capabilities,
-            host: host.map { AgentHost(pid: hostPID, name: $0) }
+            host: host.map { AgentHost(pid: hostPID, name: $0, agentPID: 5120) }
         )
     }
 

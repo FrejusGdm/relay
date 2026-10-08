@@ -7,6 +7,9 @@ import SwiftUI
 @MainActor
 public final class LinkWindows {
     public private(set) var windows: [String: NSWindow] = [:]
+    /// How many times each job's window was shown; each showing looks the agent's app up again.
+    public private(set) var presentations: [String: Int] = [:]
+    private var controllers: [String: NSHostingController<StoreCard>] = [:]
 
     private let store: RelayStore
     private let actions: CardActions
@@ -28,11 +31,15 @@ public final class LinkWindows {
     /// Opens the window of the job a valid link names, and ignores every other link.
     public func open(_ url: URL) {
         guard let jobID = RelayLink.parse(url) else { return }
+        let count = (presentations[jobID] ?? 0) + 1
+        presentations[jobID] = count
         if let window = windows[jobID] {
+            controllers[jobID]?.rootView = StoreCard(store: store, jobID: jobID, actions: actions, lookup: count)
             present(window)
             return
         }
-        let controller = NSHostingController(rootView: StoreCard(store: store, jobID: jobID, actions: actions))
+        let controller = NSHostingController(rootView: StoreCard(store: store, jobID: jobID, actions: actions, lookup: count))
+        controllers[jobID] = controller
         controller.sizingOptions = .preferredContentSize
         let window = NSWindow(contentViewController: controller)
         window.title = "relay"
@@ -48,6 +55,8 @@ public final class LinkWindows {
 
     private func closed(_ jobID: String) {
         guard windows.removeValue(forKey: jobID) != nil else { return }
+        controllers.removeValue(forKey: jobID)
+        presentations.removeValue(forKey: jobID)
         store.closeLink(jobID)
     }
 }
