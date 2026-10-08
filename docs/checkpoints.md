@@ -3,8 +3,8 @@
 This page describes how relay sets up a job in a git checkout, how it saves, lists and rolls back
 checkpoints, and how it checks for secrets before it saves anything. The behaviour comes from the
 OpenSpec change `add-checkpoint-engine` (`openspec/changes/add-checkpoint-engine/`). Today
-`relay init`, `relay checkpoint`, `relay checkpoints`, `relay rollback` and the secret scan are
-built. `relay accept-git-changes` comes with a later task of that change.
+`relay init`, `relay checkpoint`, `relay checkpoints`, `relay rollback`,
+`relay accept-git-changes` and the secret scan are built.
 
 ## Setting up a job
 
@@ -715,6 +715,108 @@ To undo: relay rollback 3
 A rollback while an agent is still writing files in the same checkout would race with it. Agents
 are not managed yet; the change that starts agents (`add-provider-adapters`) must stop the agent
 before a rollback.
+
+## When relay refuses to run git
+
+`relay init` records the git settings and hooks of the repository in a trust record outside the
+project. Before `relay checkpoint`, `relay checkpoints` and `relay rollback` run any git command
+other than `git config` and `git rev-parse`, they compare the settings and hooks with that record.
+`docs/git-safety.md` describes what the record holds. When an agent, or anyone, adds a hook or
+changes a setting during the job, relay stops with exit code 5 before git can run the new
+program, and prints what changed. For example, after `core.fsmonitor` is set to a program in
+`.git/config`:
+
+```
+$ relay checkpoint
+Stopped: .git/config changed since this job started.
+  added  core.fsmonitor (can run commands)
+relay will not run git here until you check this change.
+If you made it yourself, run relay accept-git-changes in your terminal.
+(exit code 5)
+```
+
+A new hook, a new `.git/info/attributes` file and a changed `~/.gitconfig` are reported the same
+way, each under its own "Stopped:" line:
+
+```
+$ relay checkpoint
+Stopped: the git hooks changed since this job started.
+  added  pre-commit
+relay will not run git here until you check this change.
+If you made it yourself, run relay accept-git-changes in your terminal.
+(exit code 5)
+```
+
+`relay rollback` prints the same lines and changes no file. `relay checkpoint` and
+`relay rollback` also append a `checkpoint_refused` event with the reason `git_changed` and the
+paths of the changed files. Undoing the change, so that the file has its recorded bytes again,
+makes relay work again.
+
+If you made the change yourself, run `relay accept-git-changes` in your terminal. It shows the
+same report and asks before it trusts anything; only the answer `yes` rewrites the record and
+appends a `git_changes_accepted` event:
+
+```
+$ relay accept-git-changes
+Stopped: the git hooks changed since this job started.
+  added  pre-commit
+Trust these changes? Type yes to continue: yes
+Trusted the current git configuration and hooks.
+(exit code 0)
+```
+
+Any other answer changes nothing:
+
+```
+$ relay accept-git-changes
+Stopped: .git/config changed since this job started.
+  added  core.fsmonitor (can run commands)
+Trust these changes? Type yes to continue: no
+Cancelled. Nothing changed.
+(exit code 7)
+```
+
+An agent cannot accept a change for you, because agents run commands without a terminal:
+
+```
+$ relay accept-git-changes
+relay accept-git-changes must be run by you in a terminal.
+(exit code 7)
+```
+
+When the trust record itself is missing or damaged, `relay checkpoint` stops with exit code 5 and
+"The git trust record <path> is missing." (or "is damaged."). `relay accept-git-changes` then
+says that it cannot tell what changed, and asks "Trust the current git configuration and hooks?
+Type yes to continue:". Check `.git/config`, `~/.gitconfig` and `.git/hooks/` yourself before you
+answer `yes`. When nothing changed, the command prints
+`Nothing changed in the git configuration or hooks.` and exits with code 0.
+
+Even after you accept a change, relay runs every git command with hooks and the file-system
+monitor turned off, so a hook or a `core.fsmonitor` program you accepted still never runs when
+relay saves a checkpoint or rolls back. `test/checkpoint/tampering.test.ts` checks both halves:
+each kind of change stops `relay checkpoint` and `relay rollback`, and after the person accepts
+planted `pre-commit`, `post-checkout`, `post-index-change` and `reference-transaction` hooks and a
+`core.fsmonitor` program, a checkpoint and a rollback succeed and none of those programs runs.
+
+| Exit code | When | Message |
+|---|---|---|
+| 0 | The person typed `yes`, or nothing changed | `Trusted the current git configuration and hooks.` |
+| 3 | No job here, or a damaged `state.json` | `relay is not set up here. Run relay init first.` |
+| 5 | A checkpoint, a list or a rollback found a change since `relay init` | `Stopped: .git/config changed since this job started.` |
+| 6 | Another relay command holds the job lock | `Another relay command is working on this job (...). Try again when it finishes.` |
+| 7 | `relay accept-git-changes` without a terminal, or an answer other than `yes` | `relay accept-git-changes must be run by you in a terminal.`, `Cancelled. Nothing changed.` |
+
+## What relay cannot protect against
+
+relay protects the person's repository from programs that an agent plants in git's settings and
+hooks, and from git commands that would change the branch, the index or files relay has not saved.
+It cannot protect against a program that runs as the same user without a sandbox. Such a program
+can do anything relay can do: it can change the trust record in `RELAY_HOME`, the files in
+`.relay/`, and the git settings and hooks, and it can change them back before relay looks. It can
+also answer relay's questions if it controls a terminal. The trust record and the terminal check
+stop an agent that can write only inside the project and runs commands without a terminal; they
+do not stop a program that has the person's full rights. Run agents in a sandbox, or in a separate
+account, when you do not trust them with your files.
 
 ## The secret scan
 

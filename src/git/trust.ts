@@ -117,13 +117,17 @@ const decoder = new TextDecoder();
 // Writes $RELAY_HOME/jobs/<job>/git-trust.json. `jobDir` is that job folder; its name is the job ID.
 export async function recordTrust(repo: Repository, jobDir: string): Promise<void> {
   const salt = randomBytes(32).toString("hex");
+  writeRecord(repo, jobDir, salt, await readCurrent(repo, salt));
+}
+
+function writeRecord(repo: Repository, jobDir: string, salt: string, current: CurrentState): void {
   const record: TrustRecord = {
     schema_version: 1,
     job_id: basename(jobDir),
     recorded_at: new Date().toISOString(),
     worktree_root: repo.worktreeRoot,
     values_salt: salt,
-    ...(await readCurrent(repo, salt)),
+    ...current,
   };
   mkdirSync(jobDir, { recursive: true, mode: 0o700 });
   chmodSync(jobDir, 0o700);
@@ -152,7 +156,34 @@ export async function recordTrust(repo: Repository, jobDir: string): Promise<voi
 // `git rev-parse`, which start no hooks and no file-system monitor.
 export async function compareTrust(repo: Repository, jobDir: string): Promise<TrustChange[]> {
   const stored = readRecord(join(jobDir, TRUST_FILE));
-  const current = await readCurrent(repo, stored.values_salt);
+  return changesSince(stored, await readCurrent(repo, stored.values_salt));
+}
+
+// For relay accept-git-changes: what changed since the record, or the reason the record cannot be
+// read (`problem`), and `accept`, which writes a new record of exactly the state compared here.
+// A change made after the person saw the report is therefore not trusted with it.
+export async function reviewTrust(
+  repo: Repository,
+  jobDir: string,
+): Promise<{ problem: TrustRecordError | null; changes: TrustChange[]; accept: () => void }> {
+  let stored: TrustRecord | null = null;
+  let problem: TrustRecordError | null = null;
+  try {
+    stored = readRecord(join(jobDir, TRUST_FILE));
+  } catch (error) {
+    if (!(error instanceof TrustRecordError)) throw error;
+    problem = error;
+  }
+  const salt = stored?.values_salt ?? randomBytes(32).toString("hex");
+  const current = await readCurrent(repo, salt);
+  return {
+    problem,
+    changes: stored === null ? [] : changesSince(stored, current),
+    accept: () => writeRecord(repo, jobDir, salt, current),
+  };
+}
+
+function changesSince(stored: TrustRecord, current: CurrentState): TrustChange[] {
   const changes: TrustChange[] = configChanges(stored.config_files, current.config_files);
   const named = new Set(changes.flatMap((change) => (change.kind === "config" ? [...change.addedKeys, ...change.removedKeys, ...change.changedKeys] : [])));
   const order = keyChanges(stored.keys, current.keys).filter((name) => !named.has(name));
@@ -162,6 +193,11 @@ export async function compareTrust(repo: Repository, jobDir: string): Promise<Tr
   }
   changes.push(...hookChanges([stored.hooks, stored.hooks_path], [current.hooks, current.hooks_path]));
   return changes;
+}
+
+// The files whose hashes or keys changed, for the checkpoint_refused and git_changes_accepted events.
+export function changedFiles(changes: TrustChange[]): string[] {
+  return [...new Set(changes.flatMap((change) => (change.kind === "order" ? [] : [change.path])))];
 }
 
 // The lines relay prints when it refuses to run git (the git-safety spec). Every name and path is

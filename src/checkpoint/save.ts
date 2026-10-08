@@ -10,7 +10,7 @@ import { ExitCode } from "../cli/exit-codes";
 import { printable, shellWord } from "../core/quote";
 import type { Repository } from "../git/repo";
 import { git } from "../git/run";
-import { compareTrust, TrustRecordError, trustReport } from "../git/trust";
+import { changedFiles, compareTrust, TrustRecordError, trustReport } from "../git/trust";
 import { appendEvent, type JobRef } from "../job/events";
 import { takeJobLock } from "../job/lock";
 import { readState, StateFileError, writeState, type JobState } from "../job/state";
@@ -183,10 +183,16 @@ export async function openJob(
   relayHome: string,
   command: SaveOptions["command"] | null,
 ): Promise<{ state: JobState; job: JobRef }> {
+  const found = findJob(repo, relayHome);
+  await checkTrust(repo, found.job, command);
+  return found;
+}
+
+// Reads state.json and checks that its job was set up in this checkout, without the trust check.
+// relay accept-git-changes uses it, because it shows what the trust check would refuse.
+export function findJob(repo: Repository, relayHome: string): { state: JobState; job: JobRef } {
   const state = readJobState(join(repo.worktreeRoot, ".relay"));
-  const job: JobRef = { id: checkJobBelongsHere(repo, state, relayHome), worktreeRoot: repo.worktreeRoot, relayHome };
-  await checkTrust(repo, job, command);
-  return { state, job };
+  return { state, job: { id: checkJobBelongsHere(repo, state, relayHome), worktreeRoot: repo.worktreeRoot, relayHome } };
 }
 
 // The job named in state.json must be the one relay init set up in this checkout: the job ID is
@@ -229,8 +235,7 @@ async function checkTrust(repo: Repository, job: JobRef, command: SaveOptions["c
     throw error;
   }
   if (changes.length === 0) return;
-  const changed = [...new Set(changes.flatMap((change) => (change.kind === "order" ? [] : [change.path])))];
-  if (command !== null) await appendEvent(job, "checkpoint_refused", { command, reason: "git_changed", changed });
+  if (command !== null) await appendEvent(job, "checkpoint_refused", { command, reason: "git_changed", changed: changedFiles(changes) });
   throw new CommandError(ExitCode.GitChanged, trustReport(changes, repo));
 }
 

@@ -92,6 +92,14 @@ text inside strings never count. It looks for the name `fetch`, imports of the m
 future `src/client/` folder, which reaches relay's own Unix socket, may only call `fetch` and
 `Bun.connect` with an object argument that has a `unix` property.
 
+`test/checkpoint/e2e.test.ts` builds the program with the `build:<system>-<processor>` script
+of `package.json` for the machine it runs on, writes it to a temporary folder, and runs it as a
+separate process on a scratch repository: `relay init`, a checkpoint, the list, a refused change
+to `core.fsmonitor`, a rollback and its undo. With `RELAY_TEST_GIT_LOG=1`, the program writes
+every git command it runs to `$RELAY_HOME/logs/git-calls.jsonl`; the test checks that each one
+starts with relay's settings, is a command the runner allows, and never contacts a remote. It
+needs git and gitleaks on `PATH`, like the other checkpoint tests.
+
 ## Continuous integration
 
 GitHub runs `.github/workflows/ci.yml` on every pull request and every push to `main`. A new
