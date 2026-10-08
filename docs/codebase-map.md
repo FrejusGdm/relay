@@ -98,6 +98,7 @@ flowchart TD
   state -->|"reads checkpoints with"| checkpoint
   state -->|"reads state.json with"| job
   commands -->|"init.ts adds the project to projects.list with"| state
+  checkpoint -->|"save.ts adds the project of every job it finds to projects.list with"| state
 ```
 
 The diagram shows how the pieces connect. `bun run relay` starts `src/cli/main.ts`, which passes

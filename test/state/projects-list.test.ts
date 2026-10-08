@@ -1,7 +1,9 @@
-// Task 4.2: projects.list is appended only when a root is new, and read without duplicates.
+// Task 4.2: projects.list is appended only when a root is new, and read without duplicates; every
+// command that resolves a job lists its project.
 import { afterAll, expect, test } from "bun:test";
-import { appendFileSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { projectsListPath, readProjects, registerProject } from "../../src/state/projects-list";
+import { relay, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, tempRelayHome } from "../helpers/relay-home";
 
 afterAll(removeTempRelayHomes);
@@ -25,4 +27,16 @@ test("a relative root or one with a newline is never written", () => {
   registerProject(relayHome, "projects/app");
   registerProject(relayHome, "/projects/a\n/etc");
   expect(readProjects(relayHome)).toEqual([]);
+});
+
+test("a command that resolves a job lists its project once", async () => {
+  const scratch = await setUpJob();
+  try {
+    rmSync(projectsListPath(scratch.relayHome));
+    expect((await relay(scratch, ["checkpoints"], { quiet: true })).code).toBe(0);
+    expect((await relay(scratch, ["checkpoints"], { quiet: true })).code).toBe(0);
+    expect(readFileSync(projectsListPath(scratch.relayHome), "utf8")).toBe(`${scratch.repo}\n`);
+  } finally {
+    scratch.cleanup();
+  }
 });

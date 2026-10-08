@@ -107,10 +107,10 @@ const ACCOUNT_SELECT = `SELECT t.id, t.provider, t.account, t.configured, a.stat
   a.source, a.usage_json FROM targets t LEFT JOIN availability a ON a.target_id = t.id`;
 const JOB_SELECT = `SELECT j.*, p.missing FROM jobs j JOIN projects p ON p.root_path = j.project_root`;
 
-// The highest stream_events seq, so an answer can say which point of the event stream it shows
-// (the Relay-Stream-Seq header).
+// The newest stream_events seq given out (in a new database, the number the stream starts after),
+// so an answer can say which point of the event stream it shows (the Relay-Stream-Seq header).
 export function streamSeq(db: Database): number {
-  return db.query<{ seq: number | null }, []>("SELECT MAX(seq) AS seq FROM stream_events").get()?.seq ?? 0;
+  return db.query<{ seq: number }, []>("SELECT seq FROM sqlite_sequence WHERE name = 'stream_events'").get()?.seq ?? 0;
 }
 
 export function listAccounts(db: Database, now = new Date()): AccountView[] {

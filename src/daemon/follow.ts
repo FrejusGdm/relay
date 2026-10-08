@@ -1,10 +1,11 @@
 // Following the job files (design.md decision 12). For each indexed job the daemon watches
 // events.jsonl and also checks it every 2 seconds, because watching alone misses changes on some
 // file systems. New complete lines are applied from the saved byte cursor; a file that shrank or
-// was replaced makes the daemon rebuild that job. The same check picks up new roots in
-// projects.list and finds workers whose process is gone without a recorded end.
+// was replaced makes the daemon rebuild that job, and a file that is gone marks the project
+// missing. The same check picks up new roots in projects.list and finds workers whose process is
+// gone without a recorded end.
 import type { Database } from "bun:sqlite";
-import { statSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, statSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import type { EventStream } from "../api/sse";
 import type { Logger } from "../core/log";
@@ -73,12 +74,17 @@ export class Follower {
 
   private async checkOnce(): Promise<void> {
     const { db, relayHome } = this.opts;
-    // A root marked missing is read again, so a job set up there later is found.
-    const known = new Set(
-      db.query<{ root_path: string }, []>("SELECT root_path FROM projects WHERE missing = 0").all().map((row) => row.root_path),
+    // A root marked missing is read again once its state.json exists, so a job set up there later,
+    // or a project folder put back, is found. Until then the job keeps its rows, shown as missing.
+    const known = new Map(
+      db
+        .query<{ root_path: string; missing: number }, []>("SELECT root_path, missing FROM projects")
+        .all()
+        .map((row) => [row.root_path, row.missing === 1]),
     );
     for (const root of readProjects(relayHome)) {
-      if (known.has(root)) continue;
+      const missing = known.get(root);
+      if (missing === false || (missing === true && !existsSync(join(root, ".relay", "state.json")))) continue;
       await this.reindex(root, "project_indexed");
     }
 
@@ -90,7 +96,9 @@ export class Follower {
       let stats;
       try {
         stats = statSync(cursor.path);
-      } catch {
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "ENOENT" || code === "ENOTDIR") this.markMissing(cursor);
         continue;
       }
       if (stats.ino !== cursor.inode || stats.dev !== cursor.device || stats.size < cursor.offset) {
@@ -130,6 +138,20 @@ export class Follower {
       })();
       stream.publish();
     }
+  }
+
+  // The project folder or its events file is gone: the job stays in the index, shown with
+  // project_missing true, until the files are back.
+  private markMissing(cursor: Cursor): void {
+    const { db, stream, log } = this.opts;
+    let marked = false;
+    db.transaction(() => {
+      marked = db.prepare("UPDATE projects SET missing = 1 WHERE root_path = ? AND missing = 0").run(cursor.project_root).changes > 0;
+      if (marked) stream.record({ jobId: cursor.job_id, type: "job", data: getJob(db, cursor.job_id) });
+    })();
+    if (!marked) return;
+    log.warn("project_missing", { root: cursor.project_root });
+    stream.publish();
   }
 
   // Rebuilds one project's rows from its files and tells clients about the job and its current

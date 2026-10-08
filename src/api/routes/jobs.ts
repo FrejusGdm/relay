@@ -2,7 +2,7 @@
 // decision 14). Checkpoints are read from the git refs, which are their source of truth.
 import type { Database } from "bun:sqlite";
 import { listCheckpoints } from "../../checkpoint/list";
-import { openRepository } from "../../git/repo";
+import { openRepository, RepositoryError } from "../../git/repo";
 import { getJob, listJobs, listWorkers, streamSeq, type JobView } from "../../state/queries";
 import { errorResponse, jsonResponse } from "../errors";
 import type { Route } from "../router";
@@ -46,10 +46,17 @@ export function jobRoutes(db: Database): Route[] {
         const seq = streamSeq(db);
         const job = find(params.job!);
         if (job instanceof Response) return job;
-        if (job.project_missing) {
-          return errorResponse(409, "project_missing", `The project for job ${job.id} is not at ${job.project_root} any more.`);
+        const missing = () =>
+          errorResponse(409, "project_missing", `The project for job ${job.id} is not at ${job.project_root} any more.`);
+        if (job.project_missing) return missing();
+        let checkpoints;
+        try {
+          checkpoints = await listCheckpoints(await openRepository(job.project_root), job.id);
+        } catch (error) {
+          // The folder was deleted or is no longer a repository since the daemon last looked.
+          if (error instanceof RepositoryError || (error as { code?: string }).code === "ENOENT") return missing();
+          throw error;
         }
-        const checkpoints = await listCheckpoints(await openRepository(job.project_root), job.id);
         return jsonResponse(
           200,
           {

@@ -13,6 +13,9 @@ import { readState, StateFileError } from "../job/state";
 import { applyAvailability, applyEvent } from "./apply-event";
 
 const MAX_SMALL_FILE = 1024 * 1024;
+// An event type is written into the event stream's "event:" line, so a type that could hold a
+// line break or another field is refused, and the line is treated as not an event.
+const EVENT_TYPE = /^[a-z_]{1,64}$/;
 
 export interface EventRead {
   events: RelayEvent[];
@@ -192,7 +195,8 @@ export function readEventsFrom(path: string, offset: number): EventRead {
 function parseEvent(line: string): RelayEvent | null {
   try {
     const value = JSON.parse(line) as Partial<RelayEvent> | null;
-    if (value === null || typeof value !== "object" || !Number.isSafeInteger(value.id) || typeof value.type !== "string") return null;
+    if (value === null || typeof value !== "object" || !Number.isSafeInteger(value.id)) return null;
+    if (typeof value.type !== "string" || !EVENT_TYPE.test(value.type)) return null;
     return {
       ...value,
       ts: typeof value.ts === "string" ? value.ts : new Date(0).toISOString(),

@@ -184,7 +184,7 @@ flowchart LR
     avail["accounts/&lt;provider&gt;-&lt;name&gt;/availability.json"]
   end
   writers["relay init, checkpoint, rollback<br/>and later commands"] -->|"appendEvent, one line at a time<br/>under the events lock"| relayfiles
-  writers -->|"relay init adds the root"| list
+  writers -->|"relay init and every command<br/>that finds a job add the root"| list
   files -->|"rebuild when relay.db is missing,<br/>damaged or of an old version"| db[("relay.db")]
   relayfiles -->|"new lines, on a file change<br/>and every 2 seconds"| db
   db --> api["GET answers with Relay-Stream-Seq"]
@@ -201,11 +201,16 @@ While it runs, the daemon watches each job's `events.jsonl` and also checks it e
 It reads only the complete lines added since its last read, so a line still being written waits
 for the next check, and a line that is not valid JSON is skipped and logged as
 `invalid_event_line`. When the file shrank or was replaced by another file, the daemon rebuilds
-that job from scratch (`job_rebuilt` in the log). The same check picks up roots added to
+that job from scratch (`job_rebuilt` in the log). When the file is gone, because the project
+folder was deleted or moved, the daemon marks the project missing (`project_missing` in the log):
+the job stays in the index with `project_missing` set to `true` until its files are back. The
+same check picks up roots added to
 `projects.list`, and finds workers whose process ended without a recorded end, which the event
 stream then reports once as `stopped`. Every change to the index is written, in the same
 transaction, as a row of the event stream, so the `Relay-Stream-Seq` header of a `GET` answer and
-the event `id`s describe the same history.
+the event `id`s describe the same history. A line of `events.jsonl` whose `type` is not 1 to 64
+lowercase letters and underscores is treated as a line that is not an event, because the type is
+written into the event stream's `event:` line.
 
 Several relay processes may append to a job's `events.jsonl` at the same moment: the command in
 the terminal and, later, the daemon. Each append holds an `flock` lock on

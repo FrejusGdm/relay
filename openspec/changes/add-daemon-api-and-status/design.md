@@ -328,7 +328,10 @@ Event types this change reads. The names and fields are the ones phases 2 to 4 w
 | `availability` | phase 3, daemon | `target`, `status`, `reason`, `retry_at`, `measured_at`, `source`, `windows` |
 | `hook` | daemon (new) | `provider`, `event`, the allow-listed fields |
 
-Unknown types are kept in the replay buffer as they are and otherwise ignored.
+Unknown types are kept in the replay buffer as they are and otherwise ignored. A type must be 1 to
+64 characters from `a` to `z` and `_`, because it is written into the event stream's `event:`
+line; a line with any other type is treated as a line that is not an event (skipped and logged).
+The data of an unknown type is passed on only when its JSON is at most 16 KiB.
 
 ### 10. SQLite schema
 
@@ -554,9 +557,12 @@ Every `GET` answer except `/v1/events` carries the header `Relay-Stream-Seq`: th
 `stream_events.seq` whose change the answer already shows, read in the same SQLite read transaction
 as the data. The Mac app needs it to order a snapshot against the events it receives
 (`add-mac-menu-bar-app` design decision 17, requirement A). `stream_epoch` in `GET /v1/version` is
-a random ID stored in `meta` when the database is created, so it changes whenever the index (and
-with it the numbering of `stream_events`) is rebuilt; the Mac app needs it to tell a rebuilt
-stream from a restart that kept its history (requirement C).
+a random ID stored in `meta` when the database is created, so it changes whenever the index is
+rebuilt; the Mac app needs it to tell a rebuilt stream from a restart that kept its history
+(requirement C). A new database numbers `stream_events` from the time it was created, in
+microseconds since 1970 (its `sqlite_sequence` row is set when the database is created), so its
+numbers are above every number an older database used and a client's saved position from before
+a rebuild always gets a `reset`.
 
 ### 15. Server-sent events
 
@@ -584,9 +590,10 @@ Event types: `job` (a job was added or its fields changed; data is the Job), `wo
 position is not in the retained rows; data `{"stream_epoch": …}`; the client reloads with the GET
 endpoints), `shutdown` (data `{}`). Each change is written to `stream_events` in the same
 transaction as the index change, and its `seq` is the SSE `id`. On connect, the server replays rows
-with `seq > since`, then sends new rows as they are committed. It sends `reset` first, and then
-every retained row, when `since < oldest seq - 1` or when `since` is greater than the newest
-`seq`; the second case is a cursor from a rebuilt database, which the Mac app needs to detect
+with `seq > since`, then sends new rows as they are committed, reading the rows only when the
+client has read what it was sent (a client that stops reading holds at most one batch). It sends
+`reset` first, and then only the rows that come after it, when `since < oldest seq - 1` or when
+`since` is greater than the newest `seq`; the second case is a cursor from a rebuilt database, which the Mac app needs to detect
 (`add-mac-menu-bar-app` design decision 17, requirement B). A comment line `: ping` every 15
 seconds keeps the connection alive. At most 32 clients; the 33rd gets `503 too_many_streams`.
 
