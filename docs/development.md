@@ -103,8 +103,8 @@ flowchart LR
   event["pull request,<br/>or push to main"]
 
   subgraph check["check"]
-    checkLinux["Linux (ubuntu-24.04):<br/>install, typecheck, test"]
-    checkMac["macOS (macos-26):<br/>install, typecheck, test"]
+    checkLinux["Linux (ubuntu-24.04):<br/>install, typecheck,<br/>install gitleaks, test"]
+    checkMac["macOS (macos-26):<br/>install, typecheck,<br/>install gitleaks, test"]
   end
 
   subgraph build["build (starts when both check jobs pass)"]
@@ -120,7 +120,10 @@ flowchart LR
 ```
 
 The diagram shows the five jobs. The two `check` jobs install the dependencies from `bun.lock`,
-check the types and run the tests, one on Linux and one on macOS. When both pass, the two `build`
+check the types and run the tests, one on Linux and one on macOS. Before the tests, each `check`
+job downloads gitleaks 8.30.1 for its own system, checks the archive against the SHA-256 checksum
+published in the release's checksums file, and puts the program on `PATH`, because the secret scan
+tests need the real gitleaks. When both pass, the two `build`
 jobs build the program for their own system, run the smoke test on it, and keep it as a download
 for 7 days. The macOS build job also prints `codesign -dv` as a record of the signature that the
 build gave the program. The `security` job runs at the same time as the others. It checks that

@@ -13,7 +13,7 @@ header() { tr -d '\r' < "$work/headers" | grep -i "^$1:" | head -n 1 | sed 's/^[
 code=$(curl -sS -o "$work/index.html" -D "$work/headers" -w '%{http_code}' "$url/") || fail "the request to $url/ failed"
 [ "$code" = 200 ] || fail "GET / returned $code, expected 200"
 grep -qF '<title>relay: never run out of limits again</title>' "$work/index.html" || fail "the page title is missing"
-for text in 'gh release download' '--repo FrejusGdm/relay' '--pattern relay-darwin-arm64' '--pattern relay-linux-x64'; do
+for text in 'curl -fsSL -o "$HOME/.local/bin/relay"' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-linux-x64'; do
   grep -qF -- "$text" "$work/index.html" || fail "the page does not contain: $text"
 done
 [ "$(header content-security-policy)" = "$csp" ] || fail "the Content-Security-Policy header is missing or different"

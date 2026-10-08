@@ -87,9 +87,8 @@ the sections "Switching agents by hand", "Everything the next agent needs", "One
 hundred", the pricing section and the closing panel, then the footer. Josué asked on 2026-10-08
 for the hero's track lines and the "Switch from the terminal" section to be removed, for the
 navigation's "Get relay" to use the olive of the hero's main button, and for no tool logos.
-Every link goes to a part of the page, to the home page or to the Apache 2.0 license text. There
-is no link to the GitHub repository, because it is private for now and a visitor without access
-would get a GitHub 404 page.
+Every link goes to a part of the page, to the home page, to the Apache 2.0 license text or to the
+public repository, https://github.com/FrejusGdm/relay.
 
 The pricing section says that the core is free and that paid features will come later as a
 one-time payment for a lifetime license. It names no price and has no checkout; payments are a
@@ -99,9 +98,12 @@ separate change.
 
 The "Get relay" and "CLI setup" buttons open one panel, the element with the id `install`. It is
 a `popover` element, so the browser opens it, closes it with Escape or a click outside, and returns
-focus to the button, all without JavaScript. The panel shows two blocks of commands that download
-the release assets `relay-darwin-arm64` and `relay-linux-x64` with `gh release download` from the
-private repository `FrejusGdm/relay`, and says that `gh` must be signed in with access to it.
+focus to the button, all without JavaScript. The panel says that relay is free and open source, and shows two
+blocks of commands that download the release assets `relay-darwin-arm64` and `relay-linux-x64`
+from the latest release with `curl`, with no GitHub account. Josué made relay open source on
+2026-10-08, so the install commands download the release directly. The download address is
+longer than a phone is wide, so a long line in a block wraps instead of scrolling sideways;
+copying still gives the original lines.
 
 The Mac menu-bar app is not in any release yet, so the panel's "Mac app" block has no command and
 no Copy button. It says only "The Mac menu-bar app is not released yet. The command line tool
