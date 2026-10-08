@@ -38,7 +38,7 @@ struct Palette {
 
 extension StyledText {
     /// The runs as one `Text`: `.strong` in the accent color and semibold, `.mono` in IBM Plex
-    /// Mono, `.muted` in the muted color.
+    /// Mono, `.muted` and `.mutedMono` in the muted color.
     func rendered(size: CGFloat, weight: RelayFont.Weight = .regular, color: Color, palette: Palette) -> Text {
         runs.reduce(Text(verbatim: "")) { result, run in
             let piece = Text(verbatim: run.text)
@@ -48,7 +48,9 @@ extension StyledText {
             case .strong:
                 return result + piece.font(RelayFont.text(size, .semibold)).foregroundStyle(palette(.accent))
             case .mono:
-                return result + piece.font(RelayFont.mono(size)).foregroundStyle(color)
+                return result + piece.font(RelayFont.mono(size, medium: weight != .regular)).foregroundStyle(color)
+            case .mutedMono:
+                return result + piece.font(RelayFont.mono(size)).foregroundStyle(palette(.muted))
             case .muted:
                 return result + piece.font(RelayFont.text(size, weight)).foregroundStyle(palette(.muted))
             }

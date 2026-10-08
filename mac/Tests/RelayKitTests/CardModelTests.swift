@@ -76,7 +76,7 @@ struct CardModelTests {
         let card = try jobCard(input)
         #expect(card.status.plain == "No agent is working on this job")
         #expect(card.rows.map(\.role) == ["Last worker"])
-        #expect(card.rows.first?.state == "Handed off")
+        #expect(card.rows.first?.state.plain == "Handed off")
     }
 
     // MARK: The availability table
@@ -96,7 +96,7 @@ struct CardModelTests {
         let account = try Sample.decode(Account.self, Sample.accountJSON(target: "claude:work", status: status, retryAt: retryAt))
         let words = CardWords(now: FixedClock().now, calendar: Sample.calendar, locale: Sample.locale).availability(account.availability)
         #expect(words.word == word)
-        #expect(words.detail == detail)
+        #expect(words.detail.plain == detail)
     }
 
     @Test func timesWithinADayAWeekAndLater() {
@@ -155,9 +155,11 @@ struct CardModelTests {
         #expect(card.rows.map(\.role) == ["Previous worker", "Current worker"])
         #expect(card.rows.map(\.providerName) == ["Claude Code", "Codex"])
         #expect(card.rows.map(\.account) == ["Work account", "Personal account"])
-        #expect(card.rows.map(\.state) == ["Limit · resets 19:00", "Working"])
+        #expect(card.rows.map(\.state.plain) == ["Limit · resets 19:00", "Working"])
+        #expect(card.rows[0].state.runs.last == StyledText.Run(text: "19:00", style: .mono))
         #expect(card.rows.map(\.stateTone) == [.warning, .accent])
-        #expect(card.connector == Connector(title: "Handed off · 14:36", detail: "Same repository & plan"))
+        #expect(card.connector?.title.plain == "Handed off · 14:36")
+        #expect(card.connector?.detail == "Same repository & plan")
         #expect(card.facts.map(\.label) == ["Checkpoint", "Carried over"])
         #expect(card.facts[0].value.plain == "912ec1 · saved 14:35")
         #expect(card.facts[1].value.plain == "Repository, checkpoint & plan")
@@ -207,12 +209,12 @@ struct CardModelTests {
             ]
         )
         let card = try jobCard(input)
-        #expect(card.rows[0].state == "Unknown · reset time passed")
+        #expect(card.rows[0].state.plain == "Unknown · reset time passed")
         #expect(card.status.plain == "Moved to Codex · from Claude Code")
         #expect(card.rows.allSatisfy { $0.usage == nil })
 
         let usage = try jobCard(Sample.handoff())
-        #expect(usage.rows[1].usage?.text == "9% used · 5-hour window · checked 14:30")
+        #expect(usage.rows[1].usage?.text.plain == "9% used · 5-hour window · checked 14:30")
         #expect(usage.rows[1].usage?.fraction == 0.09)
         #expect(usage.rows[0].usage == nil)
     }
@@ -227,11 +229,11 @@ struct CardModelTests {
             ]
         )
         let card = try jobCard(input)
-        #expect(card.rows.map { $0.usage?.text } == ["41% used · 5-hour window · checked 14:30", "9% used · 5-hour window · checked 14:30"])
+        #expect(card.rows.map { $0.usage?.text.plain } == ["41% used · 5-hour window · checked 14:30", "9% used · 5-hour window · checked 14:30"])
         var texts = [card.title, card.repository.plain, card.status.plain, card.tinyNote]
-        texts += card.rows.flatMap { [$0.providerName, $0.role, $0.account, $0.state] }
+        texts += card.rows.flatMap { [$0.providerName, $0.role, $0.account, $0.state.plain] }
         texts += card.facts.flatMap { [$0.label, $0.value.plain] }
-        texts += [card.connector?.title, card.connector?.detail, card.primaryAction?.label].compactMap { $0 }
+        texts += [card.connector?.title.plain, card.connector?.detail, card.primaryAction?.label].compactMap { $0 }
         #expect(texts.allSatisfy { !$0.contains("%") })
     }
 }

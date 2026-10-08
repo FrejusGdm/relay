@@ -31,7 +31,7 @@ public struct CardInput: Sendable {
 public struct UsageLine: Equatable, Sendable {
     /// The used share of the window, from 0 to 1.
     public let fraction: Double
-    public let text: String
+    public let text: StyledText
 }
 
 public struct WorkerRow: Equatable, Sendable {
@@ -39,7 +39,7 @@ public struct WorkerRow: Equatable, Sendable {
     /// "Previous worker", "Current worker" or "Last worker".
     public let role: String
     public let account: String
-    public let state: String
+    public let state: StyledText
     public let stateTone: Tone
     public let isCurrent: Bool
     public let usage: UsageLine?
@@ -47,7 +47,7 @@ public struct WorkerRow: Equatable, Sendable {
 
 /// The caption between the previous and the current worker.
 public struct Connector: Equatable, Sendable {
-    public let title: String
+    public let title: StyledText
     public let detail: String?
 }
 
@@ -162,7 +162,7 @@ public enum CardModel: Equatable, Sendable {
         let last = current == nil ? (workers.first ?? job.currentWorker) : nil
 
         func row(_ worker: Worker, role: String, isCurrent: Bool) -> WorkerRow {
-            var state = CardWords.workerWords(worker)
+            var state = StyledText.text(CardWords.workerWords(worker))
             var tone: Tone = worker.state == .running ? .accent : .plain
             if !isCurrent, let account = availability(worker), account.isWarning || account.isStale {
                 state = account.detail
@@ -184,10 +184,9 @@ public enum CardModel: Equatable, Sendable {
         if let current {
             if let previous {
                 rows.append(row(previous, role: "Previous worker", isCurrent: false))
-                let at = current.startedAt.map { " · " + words.time($0) } ?? ""
-                connector = current.fromHandoff
-                    ? Connector(title: "Handed off" + at, detail: "Same repository & plan")
-                    : Connector(title: "Started" + at, detail: nil)
+                let lead = current.fromHandoff ? "Handed off" : "Started"
+                let title = current.startedAt.map { StyledText([.plain(lead + " · "), .mono(words.time($0))]) } ?? .text(lead)
+                connector = Connector(title: title, detail: current.fromHandoff ? "Same repository & plan" : nil)
             }
             rows.append(row(current, role: "Current worker", isCurrent: true))
         } else if let last {
@@ -201,9 +200,9 @@ public enum CardModel: Equatable, Sendable {
             case .running where current.fromHandoff:
                 if let previous, let account = availability(previous), account.isWarning, !account.isStale,
                    accounts[previous.target]?.availability.status != .unavailable {
-                    status = .strong("Moved to \(currentName)", "\(name(previous)) reached its limit")
+                    status = .strong("Moved to \(currentName)", [.plain("\(name(previous)) reached its limit")])
                 } else if let previous {
-                    status = .strong("Moved to \(currentName)", "from \(name(previous))")
+                    status = .strong("Moved to \(currentName)", [.plain("from \(name(previous))")])
                 } else {
                     status = .strong("Moved to \(currentName)")
                 }
@@ -212,13 +211,14 @@ public enum CardModel: Equatable, Sendable {
             case .starting:
                 status = .strong("Starting \(currentName)")
             default:
-                status = .strong("\(currentName) stopped", "relay did not record why")
+                status = .strong("\(currentName) stopped", [.plain("relay did not record why")])
             }
         } else if let last, let account = accounts[last.target],
                   account.availability.status == .rateLimited || account.availability.status == .quotaExhausted,
                   !words.availability(account.availability).isStale {
-            let reset = account.availability.retryAt.map { "resets " + words.time($0) } ?? "reset unknown"
-            status = .strong("Limit reached", "\(name(last)) \(reset)")
+            let reset: [StyledText.Run] = account.availability.retryAt.map { date -> [StyledText.Run] in [.plain("\(name(last)) resets "), .mono(words.time(date))] }
+                ?? [.plain("\(name(last)) reset unknown")]
+            status = .strong("Limit reached", reset)
         } else {
             status = .strong("No agent is working on this job")
         }
@@ -227,7 +227,9 @@ public enum CardModel: Equatable, Sendable {
         let shortCommit = checkpoint.map { String($0.commit.prefix(6)) }
         var facts = [Fact(
             label: "Checkpoint",
-            value: checkpoint.map { StyledText([run(String($0.commit.prefix(6)), .mono), run(" · saved " + words.time($0.createdAt), .muted)]) }
+            value: checkpoint.map {
+                StyledText([run(String($0.commit.prefix(6)), .mono), run(" · saved ", .muted), run(words.time($0.createdAt), .mutedMono)])
+            }
                 ?? .text("None yet")
         )]
         let handedOff = current?.fromHandoff == true

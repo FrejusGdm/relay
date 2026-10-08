@@ -7,14 +7,19 @@ public struct StyledText: Equatable, Sendable {
         case plain
         /// The first part of the status line: accent color, semibold.
         case strong
-        /// IBM Plex Mono: hashes, job IDs, paths and commands.
+        /// IBM Plex Mono: hashes, job IDs, times, paths and commands.
         case mono
         case muted
+        /// IBM Plex Mono in the muted color.
+        case mutedMono
     }
 
     public struct Run: Equatable, Sendable {
         public let text: String
         public let style: Style
+
+        static func plain(_ text: String) -> Run { Run(text: text, style: .plain) }
+        static func mono(_ text: String) -> Run { Run(text: text, style: .mono) }
     }
 
     public let runs: [Run]
@@ -28,8 +33,8 @@ public struct StyledText: Equatable, Sendable {
     }
 
     static func text(_ text: String) -> StyledText { StyledText([Run(text: text, style: .plain)]) }
-    static func strong(_ lead: String, _ rest: String? = nil) -> StyledText {
-        StyledText([Run(text: lead, style: .strong)] + (rest.map { [Run(text: " · " + $0, style: .plain)] } ?? []))
+    static func strong(_ lead: String, _ rest: [Run] = []) -> StyledText {
+        StyledText([Run(text: lead, style: .strong)] + (rest.isEmpty ? [] : [Run(text: " · ", style: .plain)] + rest))
     }
 }
 
@@ -44,8 +49,8 @@ public enum Tone: Equatable, Sendable {
 public struct AvailabilityWords: Equatable, Sendable {
     /// "Available", "Limit reached", "Out of quota", "Unavailable" or "Unknown".
     public let word: String
-    /// The word with the reset time, for example "Limit · resets 18:00".
-    public let detail: String
+    /// The word with the reset time, for example "Limit · resets 18:00", the time in monospace.
+    public let detail: StyledText
     /// Whether the account cannot take work now; the views use the warning color.
     public let isWarning: Bool
     /// A limit whose reset time has passed without a new report.
@@ -58,8 +63,8 @@ struct CardWords {
     let calendar: Calendar
     let locale: Locale
 
-    /// "18:00" today, "Thu 09:00" within six days, otherwise "12 Oct, 09:00" (in the locale's
-    /// order and with its 12- or 24-hour clock).
+    /// "18:00" today, "Thu 09:00" within six days, otherwise "12 Oct, 09:00" (the day and month in
+    /// the locale's order, and the locale's 12- or 24-hour clock).
     func time(_ date: Date) -> String {
         let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         if calendar.isDate(date, inSameDayAs: now) {
@@ -69,26 +74,29 @@ struct CardWords {
         if abs(days) <= 6 {
             return date.formatted(style.weekday(.abbreviated).hour().minute())
         }
-        return date.formatted(style.month(.abbreviated).day().hour().minute())
+        return date.formatted(style.month(.abbreviated).day()) + ", " + date.formatted(style.hour().minute())
     }
 
     func availability(_ availability: Availability) -> AvailabilityWords {
         let limited = availability.status == .rateLimited || availability.status == .quotaExhausted
         if limited, let retryAt = availability.retryAt, retryAt < now {
-            return AvailabilityWords(word: "Unknown", detail: "Unknown · reset time passed", isWarning: false, isStale: true)
+            return AvailabilityWords(word: "Unknown", detail: .text("Unknown · reset time passed"), isWarning: false, isStale: true)
         }
-        let reset = availability.retryAt.map { "resets " + time($0) } ?? "reset unknown"
+        func withReset(_ lead: String) -> StyledText {
+            guard let retryAt = availability.retryAt else { return .text(lead + " · reset unknown") }
+            return StyledText([.plain(lead + " · resets "), .mono(time(retryAt))])
+        }
         switch availability.status {
         case .available:
-            return AvailabilityWords(word: "Available", detail: "Available", isWarning: false, isStale: false)
+            return AvailabilityWords(word: "Available", detail: .text("Available"), isWarning: false, isStale: false)
         case .rateLimited:
-            return AvailabilityWords(word: "Limit reached", detail: "Limit · " + reset, isWarning: true, isStale: false)
+            return AvailabilityWords(word: "Limit reached", detail: withReset("Limit"), isWarning: true, isStale: false)
         case .quotaExhausted:
-            return AvailabilityWords(word: "Out of quota", detail: "Out of quota · " + reset, isWarning: true, isStale: false)
+            return AvailabilityWords(word: "Out of quota", detail: withReset("Out of quota"), isWarning: true, isStale: false)
         case .unavailable:
-            return AvailabilityWords(word: "Unavailable", detail: "Unavailable", isWarning: true, isStale: false)
+            return AvailabilityWords(word: "Unavailable", detail: .text("Unavailable"), isWarning: true, isStale: false)
         case .unknown, .other:
-            return AvailabilityWords(word: "Unknown", detail: "Unknown", isWarning: false, isStale: false)
+            return AvailabilityWords(word: "Unknown", detail: .text("Unknown"), isWarning: false, isStale: false)
         }
     }
 
@@ -96,9 +104,9 @@ struct CardWords {
     func usage(_ items: [UsageItem]) -> UsageLine? {
         let narrowest = items.filter { $0.usedPercent != nil }.min { ($0.windowMinutes ?? Int.max) < ($1.windowMinutes ?? Int.max) }
         guard let item = narrowest, let percent = item.usedPercent else { return nil }
-        var text = "\(Int(percent.rounded()))% used · " + Self.window(item)
-        if let measuredAt = item.measuredAt { text += " · checked " + time(measuredAt) }
-        return UsageLine(fraction: min(max(percent / 100, 0), 1), text: text)
+        var runs = [StyledText.Run.plain("\(Int(percent.rounded()))% used · " + Self.window(item))]
+        if let measuredAt = item.measuredAt { runs += [.plain(" · checked "), .mono(time(measuredAt))] }
+        return UsageLine(fraction: min(max(percent / 100, 0), 1), text: StyledText(runs))
     }
 
     private static func window(_ item: UsageItem) -> String {

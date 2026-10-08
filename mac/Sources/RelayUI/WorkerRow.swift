@@ -24,9 +24,7 @@ struct WorkerRowView: View {
                     .font(RelayFont.text(11))
                     .foregroundStyle(palette(.muted))
                 Spacer(minLength: 0)
-                Text(row.state)
-                    .font(RelayFont.text(11, .medium))
-                    .foregroundStyle(stateColor(palette))
+                row.state.rendered(size: 11, weight: .medium, color: stateColor(palette), palette: palette)
             }
             .padding(.top, 7)
             if let usage = row.usage {
@@ -39,9 +37,7 @@ struct WorkerRowView: View {
                 }
                 .frame(height: 3)
                 .padding(.top, 10)
-                Text(usage.text)
-                    .font(RelayFont.text(11))
-                    .foregroundStyle(palette(.muted))
+                usage.text.rendered(size: 11, color: palette(.muted), palette: palette)
                     .padding(.top, 6)
             }
         }
@@ -73,9 +69,7 @@ struct ConnectorView: View {
             DownArrow().line(palette(.accent), width: 1.5)
                 .frame(width: 14, height: 65)
             VStack(alignment: .leading, spacing: 2) {
-                Text(connector.title)
-                    .font(RelayFont.text(12, .medium))
-                    .foregroundStyle(palette(.ink))
+                connector.title.rendered(size: 12, weight: .medium, color: palette(.ink), palette: palette)
                 if let detail = connector.detail {
                     Text(detail)
                         .font(RelayFont.text(11))
