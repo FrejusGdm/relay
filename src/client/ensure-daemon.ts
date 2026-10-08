@@ -5,14 +5,16 @@ import { spawn } from "node:child_process";
 import { closeSync, constants, openSync } from "node:fs";
 import { join } from "node:path";
 import { VERSION } from "../core/version";
-import { runtimeDir, socketPath } from "../daemon/paths";
+import { runtimeDir } from "../daemon/paths";
 import { getVersion } from "./api-client";
 
 const FIRST_ANSWER_MS = 300;
 const START_WAIT_MS = 3000;
 const POLL_MS = 50;
 
-export type StartResult = { state: "running" | "started"; pid: number } | { state: "failed" };
+// "not_responding": the new daemon exited 0 because another process holds the daemon lock, and
+// that process does not answer.
+export type StartResult = { state: "running" | "started"; pid: number } | { state: "not_responding" | "failed" };
 
 interface StartOptions {
   relayHome: string;
@@ -20,15 +22,13 @@ interface StartOptions {
   err: (text: string) => void;
 }
 
-export function daemonSocket(env: Record<string, string | undefined>, relayHome: string): string {
-  return socketPath(runtimeDir(env, relayHome));
-}
-
 // Asks the running daemon for its version; when nothing answers, starts one and waits up to
-// 3 seconds for it to answer. A daemon of another version gets a notice, once.
+// 3 seconds for it to answer. A daemon of another version gets a notice, once. Throws
+// UntrustedRuntime, before any connection, when the runtime directory or the socket could have
+// been placed by another user.
 export async function startDaemon(opts: StartOptions): Promise<StartResult> {
-  const socket = daemonSocket(opts.env, opts.relayHome);
-  const running = await getVersion(socket, FIRST_ANSWER_MS);
+  const runDir = runtimeDir(opts.env, opts.relayHome);
+  const running = await getVersion(runDir, FIRST_ANSWER_MS);
   if (running !== null) {
     if (running.daemon_version !== VERSION) {
       opts.err(
@@ -39,7 +39,8 @@ export async function startDaemon(opts: StartOptions): Promise<StartResult> {
     return { state: "running", pid: running.pid };
   }
 
-  let failed = false;
+  // Set by the exit handler below; the cast stops TypeScript from narrowing it to null.
+  let exitCode = null as number | null;
   const errFd = openStderrLog(opts.relayHome);
   try {
     const [command, ...args] = daemonCommand();
@@ -49,21 +50,22 @@ export async function startDaemon(opts: StartOptions): Promise<StartResult> {
       cwd: opts.relayHome,
       env: opts.env,
     });
-    // A daemon that refuses to start exits with 1; one that finds another daemon exits with 0.
-    child.on("exit", (code) => (failed = code !== 0));
-    child.on("error", () => (failed = true));
+    // A daemon that refuses to start exits with 1; one that finds another daemon exits with 0, and
+    // that daemon may still be starting, so polling goes on.
+    child.on("exit", (code) => (exitCode = code ?? 1));
+    child.on("error", () => (exitCode = 1));
     child.unref();
   } finally {
     if (errFd !== null) closeSync(errFd);
   }
 
   const deadline = Date.now() + START_WAIT_MS;
-  while (!failed && Date.now() < deadline) {
-    const answer = await getVersion(socket, FIRST_ANSWER_MS);
-    if (answer !== null) return { state: "started", pid: answer.pid };
+  while ((exitCode === null || exitCode === 0) && Date.now() < deadline) {
+    const answer = await getVersion(runDir, FIRST_ANSWER_MS);
+    if (answer !== null) return { state: exitCode === 0 ? "running" : "started", pid: answer.pid };
     await Bun.sleep(POLL_MS);
   }
-  return { state: "failed" };
+  return { state: exitCode === 0 ? "not_responding" : "failed" };
 }
 
 // The daemon's crash traces go to logs/daemon.stderr.log. When it cannot be opened, they are lost,

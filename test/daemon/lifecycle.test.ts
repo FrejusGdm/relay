@@ -1,7 +1,8 @@
 // Task 2.3: one daemon per relay folder, starting, stopping, status, and the refusals of stop.
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { daemonLockHolder } from "../../src/daemon/singleton";
 import { runRelay } from "../helpers/cli";
 import { removeTempRelayHomes, spawnDaemon, stopDaemon, tempRelayHome, testSocket, waitForDaemon } from "../helpers/relay-home";
 
@@ -30,6 +31,22 @@ const alive = (pid: number) => {
     return false;
   }
 };
+
+// A process that holds daemon.lock, as a daemon would, without answering on the socket.
+async function holdLock(relayHome: string) {
+  const holder = Bun.spawn([process.execPath, LOCK_CHILD, join(relayHome, "run", "daemon.lock")], { stdout: "pipe" });
+  const line = new TextDecoder().decode((await holder.stdout.getReader().read()).value);
+  if (line !== "locked\n") throw new Error(`the lock child printed ${line}`);
+  return holder;
+}
+
+// A server on socketPath that answers GET /v1/version as a daemon with this pid would.
+function fakeDaemon(socketPath: string, pid: number) {
+  return Bun.serve({
+    unix: socketPath,
+    fetch: () => Response.json({ api: "v1", daemon_version: "0.0.0", pid, started_at: new Date().toISOString() }),
+  });
+}
 
 // Lists the TCP and UDP sockets a process has open: none is the rule for the daemon.
 function networkSockets(pid: number): string[] {
@@ -191,16 +208,72 @@ describe("relay daemon start, stop and status", () => {
     expect(await relay(relayHome, "stop")).toEqual(expected);
   }, 20_000);
 
-  test("start reports a daemon that refuses to start, with exit code 10", async () => {
+  test("start trusts no socket in a runtime directory that is not private, and starts nothing", async () => {
+    const relayHome = tempRelayHome();
+    const dir = join(relayHome, "run");
+    mkdirSync(dir, { mode: 0o700 });
+    chmodSync(dir, 0o777);
+    const server = fakeDaemon(testSocket(relayHome), 1);
+    try {
+      expect(await relay(relayHome, "start")).toEqual({
+        code: 1,
+        stdout: "",
+        stderr: `relay will not use ${dir}: it must be private (mode 0700, owned by you). Fix it with: chmod 700 ${dir}\n`,
+      });
+    } finally {
+      server.stop(true);
+    }
+    expect(existsSync(join(relayHome, "logs", "daemon.stderr.log"))).toBe(false);
+  }, 20_000);
+
+  test("start, status and stop refuse a socket that is a symbolic link", async () => {
     const relayHome = tempRelayHome();
     mkdirSync(join(relayHome, "run"), { mode: 0o700 });
-    chmodSync(join(relayHome, "run"), 0o755);
+    const elsewhere = join(relayHome, "other.sock");
+    const server = fakeDaemon(elsewhere, 1);
+    symlinkSync(elsewhere, testSocket(relayHome));
+    const holder = await holdLock(relayHome);
+    try {
+      const expected = { code: 1, stdout: "", stderr: `relay will not use ${testSocket(relayHome)}: it is not a socket owned by you.\n` };
+      expect(await relay(relayHome, "start")).toEqual(expected);
+      expect(await relay(relayHome, "status")).toEqual(expected);
+      expect(await relay(relayHome, "stop")).toEqual(expected);
+    } finally {
+      holder.kill("SIGKILL");
+      server.stop(true);
+    }
+  }, 20_000);
+
+  test("start reports a process that holds the lock but does not answer, as stop does", async () => {
+    const relayHome = tempRelayHome();
+    mkdirSync(join(relayHome, "run"), { mode: 0o700 });
+    const holder = await holdLock(relayHome);
+    try {
+      writeFileSync(
+        pidFile(relayHome),
+        JSON.stringify({ pid: holder.pid, started_at: new Date().toISOString(), version: "0.0.0", socket: testSocket(relayHome) }),
+      );
+      expect(await relay(relayHome, "start")).toEqual({
+        code: 1,
+        stdout: "",
+        stderr: `relay daemon (pid ${holder.pid}) is not responding. Stop it with: kill ${holder.pid}\n`,
+      });
+      expect(alive(holder.pid)).toBe(true);
+    } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
+
+  test("start reports a daemon that refuses to start, with exit code 10", async () => {
+    // The socket path in this folder is too long, which only the daemon checks.
+    const relayHome = join(tempRelayHome(), "x".repeat(110));
+    mkdirSync(relayHome, { mode: 0o700 });
     expect(await relay(relayHome, "start")).toEqual({
       code: 10,
       stdout: "",
       stderr: `relay could not start its background service. Details are in ${join(relayHome, "logs", "daemon.log")}.\n`,
     });
-    expect(readFileSync(join(relayHome, "logs", "daemon.stderr.log"), "utf8")).toContain("must be private");
+    expect(readFileSync(join(relayHome, "logs", "daemon.stderr.log"), "utf8")).toContain("is too long");
   }, 20_000);
 
   test("stop refuses, and signals nothing, when the pid file names another process", async () => {
@@ -239,6 +312,51 @@ describe("relay daemon start, stop and status", () => {
       expect(await relay(relayHome, "status")).toEqual({ code: 1, stdout: "", stderr: expected });
       expect(alive(holder.pid)).toBe(true);
     } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
+});
+
+describe.if(process.platform === "linux")("the daemon lock on Linux", () => {
+  test("status and stop name the lock holder from /proc/locks and never open the lock file", async () => {
+    const relayHome = tempRelayHome();
+    mkdirSync(join(relayHome, "run"), { mode: 0o700 });
+    const holder = await holdLock(relayHome);
+    try {
+      // Opening the lock file to take the lock would now fail, and no pid file names the holder.
+      chmodSync(join(relayHome, "run", "daemon.lock"), 0o400);
+      expect(daemonLockHolder(join(relayHome, "run"))).toEqual({ pid: holder.pid });
+      const expected = `relay daemon is not responding, and relay cannot read ${pidFile(relayHome)}.\n`;
+      expect(await relay(relayHome, "status")).toEqual({ code: 1, stdout: "", stderr: expected });
+      expect(await relay(relayHome, "stop")).toEqual({ code: 1, stdout: "", stderr: expected });
+    } finally {
+      holder.kill("SIGKILL");
+      await holder.exited;
+    }
+    expect(daemonLockHolder(join(relayHome, "run"))).toBeNull();
+  }, 20_000);
+
+  test("stop signals nothing when the process that answers does not hold the lock", async () => {
+    const relayHome = tempRelayHome();
+    mkdirSync(join(relayHome, "run"), { mode: 0o700 });
+    const holder = await holdLock(relayHome);
+    const sleeper = Bun.spawn(["sleep", "60"], { stdio: ["ignore", "ignore", "ignore"] });
+    const server = fakeDaemon(testSocket(relayHome), sleeper.pid);
+    try {
+      writeFileSync(
+        pidFile(relayHome),
+        JSON.stringify({ pid: sleeper.pid, started_at: new Date().toISOString(), version: "0.0.0", socket: testSocket(relayHome) }),
+      );
+      expect(await relay(relayHome, "stop")).toEqual({
+        code: 1,
+        stdout: "",
+        stderr: `relay found that pid ${holder.pid} holds the daemon lock, not the daemon that answered (pid ${sleeper.pid}). relay sent no signal.\n`,
+      });
+      expect(alive(sleeper.pid)).toBe(true);
+      expect(alive(holder.pid)).toBe(true);
+    } finally {
+      server.stop(true);
+      sleeper.kill("SIGKILL");
       holder.kill("SIGKILL");
     }
   }, 20_000);

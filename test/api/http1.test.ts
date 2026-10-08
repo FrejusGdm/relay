@@ -128,6 +128,8 @@ describe("requests that are refused", () => {
     ["a head over 16 KiB with its end", `GET / HTTP/1.1\r\nX-Fill: ${"a".repeat(16 * 1024)}\r\n\r\n`, 431, "headers_too_large"],
     ["a head over 16 KiB without its end", `GET / HTTP/1.1\r\nX-Fill: ${"a".repeat(16 * 1024 + 10)}`, 431, "headers_too_large"],
     ["a body over 64 KiB", "POST /v1/hooks/claude/Stop HTTP/1.1\r\nContent-Length: 70000\r\n\r\n", 413, "payload_too_large"],
+    ["a length of 11 digits", "POST /v1/x HTTP/1.1\r\nContent-Length: 99999999999\r\n\r\n", 413, "payload_too_large"],
+    ["a length too large for a number", `POST /v1/x HTTP/1.1\r\nContent-Length: ${"9".repeat(400)}\r\n\r\n`, 413, "payload_too_large"],
     ["Transfer-Encoding", "POST /v1/x HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n", 411, "length_required"],
     ["a POST without Content-Length", "POST /v1/x HTTP/1.1\r\nHost: relay\r\n\r\n", 411, "length_required"],
     ["a header line without a colon", "GET / HTTP/1.1\r\nHost relay\r\n\r\n", 400, "bad_request"],

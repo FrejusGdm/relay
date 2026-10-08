@@ -43,8 +43,11 @@ relay daemon is already running (pid 4121)
 The daemon runs in its own session with standard input from `/dev/null`, so closing the terminal
 does not stop it. If it does not answer within 3 seconds, the command prints `relay could not
 start its background service. Details are in ~/.relay/logs/daemon.log.` (with the real path) and
-exits with code 10. When the running daemon is another version than the command, the command says
-so once and suggests `relay daemon restart`.
+exits with code 10. When the new daemon exits because another process holds the daemon lock, and
+that process does not answer either, the command prints the same `relay daemon (pid 4121) is not
+responding. Stop it with: kill 4121` as `relay daemon stop` and exits 1. When the running daemon
+is another version than the command, the command says so once and suggests `relay daemon
+restart`.
 
 `relay daemon status` shows the running daemon and exits 0, or prints `relay daemon is not
 running` and exits 10:
@@ -66,8 +69,13 @@ relay daemon stopped
 
 It prints `relay daemon is not running` and exits 0 when there is nothing to stop. It sends the
 signal only to a process that both `daemon.pid` and the daemon's own answer name, so it never
-stops an unrelated process that reuses an old process ID. When the pid file names another
-process, it prints `relay found a pid file that does not match the running daemon. Run relay
+stops an unrelated process that reuses an old process ID. On Linux it also checks, just before the
+signal, that this process holds the daemon lock; otherwise it prints `relay found that pid <pid>
+holds the daemon lock, not the daemon that answered (pid <pid>). relay sent no signal.` and
+exits 1. On macOS relay cannot name the process that holds a lock, so it only checks that the lock
+is still held. A small race remains there: if the daemon exits and a new process gets its process ID
+in the few microseconds between that check and the signal, the new process receives `SIGTERM`.
+When the pid file names another process, it prints `relay found a pid file that does not match the running daemon. Run relay
 daemon status.` and exits 1. When a process holds the daemon lock but does not answer within one
 second, it sends nothing and prints `relay daemon (pid 4121) is not responding. Stop it with:
 kill 4121`, so you can decide.
@@ -101,13 +109,19 @@ process ends, even after a crash or `kill -9`. Two daemons started at the same m
 end with exactly one running, and the other exits with code 0. Because only the lock holder
 touches the socket and the pid file, a new daemon can safely remove the ones a crashed daemon
 left behind. `relay daemon status` and `relay daemon stop` use the same lock to tell whether a
-daemon is alive, so they never trust a pid file alone.
+daemon is alive, so they never trust a pid file alone. They never take the lock on Linux: they
+read `/proc/locks`, which lists each lock with the process that holds it, and check that this
+process has `daemon.lock` open. macOS has no such list, so there they take the lock for an instant
+and release it. A daemon that starts at that instant waits up to 200 ms for the lock before it
+decides that another daemon runs.
 
 ## How a request reaches the daemon
 
 ```mermaid
 flowchart LR
-  client["relay command<br/>(src/client/)"] -->|"connect to relay.sock"| dir["Runtime directory, mode 0700:<br/>other users cannot even reach the socket"]
+  client["relay command<br/>(src/client/)"] --> check{"Before connecting: is the runtime<br/>directory private, and relay.sock a socket<br/>owned by you, not a symbolic link?"}
+  check -- no --> untrusted["relay will not use ...<br/>exit 1, no connection"]
+  check -- yes -->|"connect to relay.sock"| dir["Runtime directory, mode 0700:<br/>other users cannot even reach the socket"]
   dir --> peer{"Kernel peer check:<br/>is the connecting user the daemon's user?"}
   peer -- "no, or unknown" --> drop["Close the connection without<br/>reading or answering, log peer_rejected"]
   peer -- yes --> http{"HTTP/1.1 limits:<br/>GET or POST, head up to 16 KiB,<br/>body up to 64 KiB with Content-Length,<br/>everything within 10 seconds"}
@@ -118,25 +132,31 @@ flowchart LR
   router -- yes --> answer["The endpoint's JSON answer,<br/>then the connection closes"]
 ```
 
-The diagram shows the checks between a client and an answer. The first two come from the
-operating system. The runtime directory has mode 0700, so another user cannot open the socket at
+The diagram shows the checks between a client and an answer. The first is made by the client:
+every request from relay goes through one function in `src/client/api-client.ts`, which refuses
+to connect when another user could have placed the socket. The next two come from the operating
+system. The runtime directory has mode 0700, so another user cannot open the socket at
 all. For every connection that does get through, the daemon asks the kernel which user is on the
 other end (`getpeereid` on macOS, `SO_PEERCRED` on Linux) and closes the connection at once when
 that is not its own user, or when the kernel gives no answer. The next checks keep the HTTP layer
 small: one request per connection, fixed size and time limits, and only the two methods relay
 uses. A request that carries an `Origin` header comes from a web page and is refused, although
 browsers cannot open Unix sockets today. Every answer carries `Connection: close`, and error
-answers have the body `{"error": {"code": "...", "message": "..."}}`.
+answers have the body `{"error": {"code": "...", "message": "..."}}`. Extra fields go inside the
+error object, next to `code` and `message`: a request for `/v2/` gets `{"error": {"code":
+"unsupported_version", "message": "This relay daemon speaks v1.", "supported": ["v1"]}}`.
 
 The daemon has no TCP or UDP listener of any kind. A test (`test/build/no-network.test.ts`)
 fails when any file under `src/` could open a network connection, except `src/client/`, which
 may only connect to relay's socket, `src/api/server.ts`, which may only listen on it, and the two
 T3 Code files that talk to T3 Code on this computer (`docs/codebase-map.md` names them).
 
-`relay daemon status` and `relay daemon stop` check the runtime directory too before they trust
-the lock, the pid file or the socket in it. When the directory is not private, they print `relay
-will not use <dir>: it must be private (mode 0700, owned by you). Fix it with: chmod 700 <dir>`
-and exit 1, because another user could have placed those files there.
+`relay daemon start`, `status` and `stop` check the runtime directory too before they trust the
+lock, the pid file or the socket in it. When the directory is not private, they print `relay will
+not use <dir>: it must be private (mode 0700, owned by you). Fix it with: chmod 700 <dir>` and
+exit 1, because another user could have placed those files there. When `relay.sock` is not a
+socket owned by you, for example a symbolic link, they print `relay will not use <socket>: it is
+not a socket owned by you.` and exit 1.
 
 You can talk to the daemon yourself with `curl`:
 

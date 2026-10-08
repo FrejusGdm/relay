@@ -50,7 +50,7 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     throw error;
   }
 
-  const lock = takeDaemonLock(runDir);
+  const lock = await takeDaemonLock(runDir);
   if (lock === null) {
     const pid = await runningPid(runDir);
     opts.err(pid === null ? "relay daemon is already running\n" : `relay daemon is already running (pid ${pid})\n`);

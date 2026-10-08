@@ -121,7 +121,8 @@ connecting user, hands the bytes to the small HTTP/1.1 layer in `src/api/http1.t
 passes each request to `src/api/router.ts`, which answers `GET /v1/version` from
 `src/api/routes/version.ts` and builds error answers with `src/api/errors.ts`. The other
 `relay daemon` actions run in the command's own process: `src/client/ensure-daemon.ts` starts a
-detached daemon, and `src/client/api-client.ts` asks a running one for its version.
+detached daemon, and `src/client/api-client.ts` asks a running one for its version, after it has
+checked that the runtime directory is private and the socket is the user's own.
 `docs/daemon.md` describes the daemon, its files and the checks on the way to an answer in
 diagrams. The tests in `test/platform/`, `test/daemon/` and `test/api/` use the short relay
 folders and test daemons from `test/helpers/relay-home.ts`, because a socket path may have at most

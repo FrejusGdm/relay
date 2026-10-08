@@ -1,13 +1,13 @@
 // relay daemon <start|stop|restart|status|run> (design.md decision 7, the daemon-lifecycle spec).
 // Whether a daemon runs is decided by its lock: a held daemon.lock means a daemon process is alive.
-// stop signals only the process that both daemon.pid and the daemon's own answer name.
-import { lstatSync } from "node:fs";
+// stop signals only the process that daemon.pid and the daemon's own answer name and, on Linux,
+// that holds the lock.
 import { join } from "node:path";
-import { getVersion } from "../../client/api-client";
+import { checkRuntimeDir, getVersion, UntrustedRuntime } from "../../client/api-client";
 import { startDaemon } from "../../client/ensure-daemon";
 import { printable, quote } from "../../core/quote";
-import { runtimeDir, runtimeDirIsPrivate, socketPath } from "../../daemon/paths";
-import { pidPath, readPidFile, takeDaemonLock } from "../../daemon/singleton";
+import { runtimeDir, socketPath } from "../../daemon/paths";
+import { daemonLockHolder, pidPath, readPidFile } from "../../daemon/singleton";
 import { ExitCode } from "../exit-codes";
 import type { CommandContext } from "./registry";
 
@@ -17,6 +17,16 @@ const STOP_POLL_MS = 100;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export async function daemon(ctx: CommandContext): Promise<number> {
+  try {
+    return await runAction(ctx);
+  } catch (error) {
+    if (!(error instanceof UntrustedRuntime)) throw error;
+    ctx.io.err(`${error.message}\n`);
+    return ExitCode.Failed;
+  }
+}
+
+async function runAction(ctx: CommandContext): Promise<number> {
   const action = ctx.positionals[0]!;
   switch (action) {
     case "run": {
@@ -52,6 +62,8 @@ async function start(ctx: CommandContext): Promise<number> {
     case "started":
       ctx.io.out(`relay daemon started (pid ${result.pid})\n`);
       return ExitCode.Ok;
+    case "not_responding":
+      return notResponding(ctx, runtimeDir(ctx.env, ctx.relayHome));
     case "failed":
       ctx.io.err(`relay could not start its background service. Details are in ${printable(logPath(ctx))}.\n`);
       return ExitCode.DaemonNotRunning;
@@ -60,23 +72,32 @@ async function start(ctx: CommandContext): Promise<number> {
 
 async function stop(ctx: CommandContext): Promise<number> {
   const runDir = runtimeDir(ctx.env, ctx.relayHome);
-  if (!runtimeDirIsPrivate(runDir)) return notPrivate(ctx, runDir);
-  if (!daemonAlive(runDir)) {
+  checkRuntimeDir(runDir);
+  if (daemonLockHolder(runDir) === null) {
     ctx.io.out("relay daemon is not running\n");
     return ExitCode.Ok;
   }
-  const answer = await getVersion(socketPath(runDir), ANSWER_MS);
+  const answer = await getVersion(runDir, ANSWER_MS);
   const file = readPidFile(runDir);
   if (answer === null) return notResponding(ctx, runDir);
   if (file === null || file.pid !== answer.pid) {
     ctx.io.err("relay found a pid file that does not match the running daemon. Run relay daemon status.\n");
     return ExitCode.Failed;
   }
-  // The lock is checked again just before the signal, so a daemon that exited after it answered
-  // leaves no time for its process ID to be reused.
-  if (!daemonAlive(runDir)) {
+  // The lock is checked again just before the signal. On Linux relay also checks that the process
+  // holding it is the one that answered. On macOS relay cannot name the holder, so a race remains:
+  // if the daemon exits and its process ID is reused between this check and the signal, a few
+  // microseconds, the signal reaches the new process.
+  const holder = daemonLockHolder(runDir);
+  if (holder === null) {
     ctx.io.out("relay daemon stopped\n");
     return ExitCode.Ok;
+  }
+  if (holder.pid !== null && holder.pid !== answer.pid) {
+    ctx.io.err(
+      `relay found that pid ${holder.pid} holds the daemon lock, not the daemon that answered (pid ${answer.pid}). relay sent no signal.\n`,
+    );
+    return ExitCode.Failed;
   }
   try {
     process.kill(answer.pid, "SIGTERM");
@@ -87,7 +108,7 @@ async function stop(ctx: CommandContext): Promise<number> {
   // another command may hold the lock again.
   const deadline = Date.now() + STOP_WAIT_MS;
   while (Date.now() < deadline) {
-    if (!processExists(answer.pid) || !daemonAlive(runDir)) {
+    if (!processExists(answer.pid) || daemonLockHolder(runDir) === null) {
       ctx.io.out("relay daemon stopped\n");
       return ExitCode.Ok;
     }
@@ -101,12 +122,12 @@ async function stop(ctx: CommandContext): Promise<number> {
 
 async function status(ctx: CommandContext): Promise<number> {
   const runDir = runtimeDir(ctx.env, ctx.relayHome);
-  if (!runtimeDirIsPrivate(runDir)) return notPrivate(ctx, runDir);
-  if (!daemonAlive(runDir)) {
+  checkRuntimeDir(runDir);
+  if (daemonLockHolder(runDir) === null) {
     ctx.io.out("relay daemon is not running\n");
     return ExitCode.DaemonNotRunning;
   }
-  const answer = await getVersion(socketPath(runDir), ANSWER_MS);
+  const answer = await getVersion(runDir, ANSWER_MS);
   if (answer === null) return notResponding(ctx, runDir);
   const home = (path: string) => printable(shortPath(path, ctx.homedir));
   ctx.io.out(
@@ -117,16 +138,6 @@ async function status(ctx: CommandContext): Promise<number> {
   return ExitCode.Ok;
 }
 
-// The lock is held exactly while a daemon process lives; the kernel releases it when the process
-// dies. No runtime directory means no daemon has run.
-function daemonAlive(runDir: string): boolean {
-  if (lstatSync(runDir, { throwIfNoEntry: false }) === undefined) return false;
-  const lock = takeDaemonLock(runDir);
-  if (lock === null) return true;
-  lock.release();
-  return false;
-}
-
 // A daemon holds the lock but does not answer: relay sends no signal and says how to stop it.
 function notResponding(ctx: CommandContext, runDir: string): number {
   const pid = readPidFile(runDir)?.pid;
@@ -135,13 +146,6 @@ function notResponding(ctx: CommandContext, runDir: string): number {
       ? `relay daemon is not responding, and relay cannot read ${printable(pidPath(runDir))}.\n`
       : `relay daemon (pid ${pid}) is not responding. Stop it with: kill ${pid}\n`,
   );
-  return ExitCode.Failed;
-}
-
-// Another user could have placed the lock, the pid file or the socket, so relay trusts none of them.
-function notPrivate(ctx: CommandContext, runDir: string): number {
-  const shown = printable(runDir);
-  ctx.io.err(`relay will not use ${shown}: it must be private (mode 0700, owned by you). Fix it with: chmod 700 ${shown}\n`);
   return ExitCode.Failed;
 }
 

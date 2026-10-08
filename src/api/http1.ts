@@ -35,7 +35,7 @@ const REQUEST_LINE = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+) (\S+) HTTP\/1\.1$/;
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const TARGET = /^\/[\x21-\x7e]*$/;
 const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/;
-const LENGTH = /^\d{1,10}$/;
+const LENGTH = /^\d+$/;
 const OWN_HEADERS = new Set(["connection", "content-length", "transfer-encoding", "keep-alive"]);
 const REASONS: Record<number, string> = {
   200: "OK",
@@ -184,6 +184,7 @@ export class Http1Connection {
       if (!values.every((value) => LENGTH.test(value) && value === values[0])) {
         return badRequest("The Content-Length header is not valid.");
       }
+      // A length of many digits becomes a huge number or Infinity, which is still over the limit.
       length = Number(values[0]);
       if (length > BODY_LIMIT) return errorResponse(413, "payload_too_large", "Request bodies are limited to 64 KiB.");
     } else if (method === "POST") {
