@@ -19,7 +19,7 @@ function fail(message: string, code = 1): never {
 }
 let scenario: Scenario;
 try {
-  scenario = loadScenario();
+  scenario = loadScenario(process.env.RELAY_FAKE_SCENARIO, "claude");
 } catch (error) {
   if (error instanceof ScenarioError) fail(`fake-claude: ${error.message}`, 2);
   throw error;

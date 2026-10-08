@@ -57,7 +57,7 @@ Before stopping the current agent, relay SHALL check whether `AGENTS.md`, `AGENT
 - **THEN** after the work checkpoint relay asks again, listing `AGENTS.md` and `.mcp.json`, and a "no" exits with code 7 with the work checkpoint kept
 
 ### Requirement: Invisible characters
-relay SHALL remove U+00AD, U+180E, U+200B to U+200F, U+202A to U+202E, U+2060 to U+2064, U+2066 to U+2069, U+FEFF, U+E0000 to U+E007F and U+E0100 to U+E01EF from everything a handoff writes or sends, SHALL report how many it removed from agent text, and SHALL warn about them in instruction files without changing those files.
+relay SHALL remove U+00AD, U+180E, U+200B to U+200F, U+202A to U+202E, U+2060 to U+2064, U+2066 to U+2069, U+FE00 to U+FE0F (variation selectors), U+FEFF, U+E0000 to U+E007F and U+E0100 to U+E01EF from everything a handoff writes or sends, SHALL report how many it removed from agent text, and SHALL warn about them in instruction files without changing those files.
 
 #### Scenario: Hidden text in the notes
 - **WHEN** Claude Code's notes contain three tag characters (U+E0041 to U+E0043) and one U+202E

@@ -84,6 +84,14 @@ Every field except `version` and `turns` is optional.
 A turn ends at a `finish`, `limit` or `error` step, or after its last step. A turn that ends
 without a limit or an error ends successfully.
 
+A file can also hold one scenario per program, under the keys `claude` and `codex`, for example
+`{ "claude": { "version": 1, "turns": [] }, "codex": { "version": 1, "turns": [] } }`. A handoff
+test needs this, because the outgoing fake and the next fake read the same `RELAY_FAKE_SCENARIO`.
+`fake-claude` follows the `claude` section and `fake-codex` the `codex` section, and a program
+without a section follows the default scenario. The scenarios that the handoff tests use are in
+`test/fixtures/scenarios/`, one file per program and situation, and `test/fakes/scenarios.test.ts`
+runs each of them once against its fake.
+
 ## Steps
 
 Each step is a JSON object with one of the keys below. The examples are checked by

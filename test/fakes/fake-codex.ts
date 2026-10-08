@@ -18,7 +18,7 @@ function fatal(message: string, code = 2): never {
   process.exit(code);
 }
 let scenario: Scenario;
-try { scenario = loadScenario(); }
+try { scenario = loadScenario(process.env.RELAY_FAKE_SCENARIO, "codex"); }
 catch (error) {
   if (error instanceof ScenarioError) fatal(`fake-codex: ${error.message}`);
   throw error;

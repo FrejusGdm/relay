@@ -239,7 +239,8 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 20 | `ProviderMissing` | The provider's program is not installed, or older than the oldest version relay was tested with. |
 | 21 | `NoSuchAccount` | The account is not in `config.toml`. |
 | 22 | `NotSignedIn` | The account is not signed in, or its sign-in did not finish. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 23 to 25 by `add-provider-adapters`, 31 to 33 by `add-relay-switch`. The other numbers are free. |
+| 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 23 to 25 by `add-provider-adapters`, 31 and 33 by `add-relay-switch`. The other numbers are free. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |

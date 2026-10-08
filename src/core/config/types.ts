@@ -35,6 +35,15 @@ export interface Project {
   allow: AccountId[];          // in file order
 }
 
+// The [handoff] table (add-relay-switch, design decision 22).
+export interface HandoffConfig {
+  askForSummary: boolean;
+  summaryTimeoutSeconds: number;
+  stopTimeoutSeconds: number;
+  checkTimeoutSeconds: number;
+  startCheckSeconds: number;
+}
+
 export interface RelayConfig {
   file: string;                // <relay folder>/config.toml
   exists: boolean;
@@ -46,6 +55,7 @@ export interface RelayConfig {
   projects: Project[];         // in file order
   t3: T3Settings;
   limits: LimitSetting[];      // in file order
+  handoff: HandoffConfig;
 }
 
 export interface ConfigProblem { key: string; message: string }   // printed as "  <key>: <message>"
