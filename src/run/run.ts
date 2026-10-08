@@ -15,18 +15,20 @@ import { tomlString } from "../adapters/text";
 import type {
   Availability, FailureReason, Mode, PermissionLevel, ProviderAdapter, StopResult, WorkerEvent, WorkerHandle,
 } from "../adapters/types";
-import { textForAgent } from "../adapters/worker";
+import { isSessionId, textForAgent } from "../adapters/worker";
 import { ACCOUNT_WORD } from "../cli/commands/policy";
 import type { CommandContext } from "../cli/commands/registry";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import { appendTable, editConfig } from "../core/config/edit";
+import { validateConfig } from "../core/config/validate";
 import type { Account } from "../core/config/types";
 import { onInterrupt } from "../core/cleanup";
 import { printable, quote } from "../core/quote";
-import { appendEvent, type JobRef } from "../job/events";
+import { appendEvent, readEvents, type JobRef } from "../job/events";
 import { takeWorkerLock } from "../job/lock";
 import { now } from "../platform/clock";
+import { parseToml } from "../platform/toml";
 import { redact } from "../secrets/redact";
 import { relayInstructions } from "./instructions";
 import { findJobContext } from "./job-context";
@@ -62,6 +64,12 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
     throw usage("relay: --permission must be read-only, edit-in-workspace or full-access.");
   }
   if (options.json && !options.headless) throw usage("relay: --json works only with --headless.");
+  // The interactive command lines of the adapter specs take no model and no permission option;
+  // the program's own settings and questions apply in the terminal.
+  if (!options.headless && options.model !== undefined) throw usage("relay: --model works only with --headless.");
+  if (!options.headless && options.permission !== undefined && options.permission !== "full-access") {
+    throw usage("relay: --permission works only with --headless. An agent in your terminal asks you itself.");
+  }
   if (options.headless && prompt === undefined) throw usage("A headless run needs --prompt or --prompt-file.");
 
   const { job, state } = await findJobContext(ctx.cwd, ctx.relayHome);
@@ -94,7 +102,7 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
   const release = takeWorkerLock(ctx.relayHome, job.id, account.id);
   const forget = onInterrupt(release);
   try {
-    const resume = resolveResume(ctx.relayHome, job.id, adapter, account, options.resume);
+    const resume = resolveResume(ctx.relayHome, job, adapter, account, options.resume);
     return await supervise(ctx, {
       job, adapter, account, prompt, resume, model: options.model, json: options.json,
       permission: options.permission === "read-only" ? "read-only" : "edit-in-workspace",
@@ -174,16 +182,26 @@ async function checkSignIn(ctx: CommandContext, adapter: ProviderAdapter, accoun
 
 // The project's allow list (the agent-runs spec, "The project allow list"): the first run adds an
 // entry that allows only its account; a later run on another account is refused.
-function allowOnProject(ctx: CommandContext, account: Account, root: string, say: (line: string) => void): void {
-  const project = ctx.config.projects.find((entry) => entry.path === root);
+// The entry is looked for again in the file as it is while relay holds the config lock, so that two
+// first runs at the same time add one entry, not two.
+export function allowOnProject(ctx: CommandContext, account: Account, root: string, say: (line: string) => void): void {
+  let project = ctx.config.projects.find((entry) => entry.path === root);
   if (project === undefined) {
-    editConfig(
-      { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!() },
-      (text) => appendTable(text, `[[projects]]\npath = ${tomlString(root)}\nallow = ["${account.id}"]`),
-      (result) => result.projects.some((entry) => entry.path === root && entry.allow.includes(account.id)),
+    const where = { relayHome: ctx.relayHome, homedir: ctx.homedir };
+    let added = false;
+    const config = editConfig(
+      { ...where, uid: process.getuid!() },
+      (text) => {
+        added = !validateConfig(parseToml(text), where).config.projects.some((entry) => entry.path === root);
+        return added ? appendTable(text, `[[projects]]\npath = ${tomlString(root)}\nallow = ["${account.id}"]`) : text;
+      },
+      (result) => result.projects.some((entry) => entry.path === root),
     );
-    say(`Allowed ${account.id} on this project.`);
-    return;
+    if (added) {
+      say(`Allowed ${account.id} on this project.`);
+      return;
+    }
+    project = config.projects.find((entry) => entry.path === root)!;
   }
   if (project.allow.includes(account.id)) return;
   throw new CommandError(ExitCode.Refused, [
@@ -193,16 +211,27 @@ function allowOnProject(ctx: CommandContext, account: Account, root: string, say
 }
 
 // The provider session to resume, or undefined for a new session.
+// `last` takes only a session that the program confirmed: one reported by its output or by a hook,
+// or one in which a turn completed. A session ID relay chose for a run that never started is not
+// one.
 function resolveResume(
-  relayHome: string, jobId: string, adapter: ProviderAdapter, account: Account, resume: string | undefined,
+  relayHome: string, job: JobRef, adapter: ProviderAdapter, account: Account, resume: string | undefined,
 ): string | undefined {
   if (resume === undefined) return undefined;
   if (resume === "last") {
-    const last = readWorkerRecords(relayHome, jobId)
-      .find((entry) => entry.account === account.id && typeof entry.provider_session_id === "string");
+    const confirmed = new Set<string>();
+    for (const event of readEvents(job)) {
+      const { worker_id: worker, provider_session_id: session, source } = event.data;
+      if (event.type === "worker_session_identified" && (source === "stream" || source === "hook")) confirmed.add(`${worker} ${session}`);
+      if (event.type === "turn_completed") confirmed.add(`${worker}`);
+    }
+    const last = readWorkerRecords(relayHome, job.id).find((entry) => entry.account === account.id
+      && typeof entry.provider_session_id === "string"
+      && (confirmed.has(`${entry.worker_id} ${entry.provider_session_id}`) || confirmed.has(entry.worker_id)));
     if (last === undefined) throw usage(`This job has no earlier ${adapter.displayName} session on ${account.id} to resume.`);
     return last.provider_session_id!;
   }
+  if (!isSessionId(resume)) throw usage("relay: --resume needs a session ID, which is a UUID, or last.");
   // A session is checked against the workers of every job, so that it cannot move to another
   // account through another job.
   const owner = readAllWorkerRecords(relayHome).find((entry) => entry.provider_session_id === resume);
@@ -265,7 +294,10 @@ async function supervise(ctx: CommandContext, run: Supervision): Promise<number>
     } else stop();
   };
   const restoreSignals = takeSignals(onSignal);
+  let record: WorkerRecord | undefined;
   try {
+    // Read before the start, so that a reading the agent records while it starts is reported.
+    const baseline = availabilityKey(readAvailability(ctx.relayHome, account));
     const workerId = newUnusedWorkerId(ctx.relayHome, job.id);
     deleteOldWorkerLogs(ctx.relayHome);
     const logPath = join(ctx.relayHome, "logs", "workers", `${job.id}-${workerId}.log`);
@@ -279,8 +311,9 @@ async function supervise(ctx: CommandContext, run: Supervision): Promise<number>
       ...(run.model === undefined ? {} : { model: run.model }),
       env: buildAgentEnv(account, ctx.env, { jobId: job.id, workerId }), logPath,
     });
-    if (interrupted || terminated) stop();
-    const record: WorkerRecord = {
+    if (signals > 1) stop(0);
+    else if (interrupted || terminated) stop();
+    record = {
       worker_id: workerId, job_id: job.id, account: account.id, provider: account.provider, mode: run.mode,
       transport: handle.transport, provider_version: run.providerVersion, provider_session_id: handle.presetSessionId ?? run.resume ?? null,
       pid: handle.pid, cwd: job.worktreeRoot, permission: headless ? run.permission : null, argv: handle.argv,
@@ -295,7 +328,7 @@ async function supervise(ctx: CommandContext, run: Supervision): Promise<number>
       from_handoff: null, start_checkpoint: run.startCheckpoint,
     });
 
-    const facts = new Facts(ctx, run, record);
+    const facts = new Facts(ctx, run, record, baseline);
     const print = (line: string) => {
       if (headless && !run.json) ctx.io.out(`${line}\n`);
     };
@@ -303,7 +336,7 @@ async function supervise(ctx: CommandContext, run: Supervision): Promise<number>
     let lastTurn: LastTurn | null = null;
     let status: ExitStatus | undefined;
     // In a terminal run, a status-line reading changes availability.json without a worker event.
-    const watch = headless ? undefined : setInterval(() => void facts.queue(() => facts.availability()), 1000);
+    const watch = headless ? undefined : setInterval(() => void facts.queue(() => facts.availability()).catch(() => {}), 1000);
     try {
       for await (const event of handle.events()) {
         if (run.json) ctx.io.out(`${jsonLine(workerId, event)}\n`);
@@ -345,6 +378,17 @@ async function supervise(ctx: CommandContext, run: Supervision): Promise<number>
   } catch (error) {
     // The worker lock is released after this, so an agent that is still running is stopped first.
     if (handle !== undefined) await handle.stop({ timeoutMs: INTERRUPT_WAIT_MS }).catch(() => {});
+    // The record says the worker ended, as far as the disk allows.
+    if (record !== undefined && record.ended_at === null) {
+      try {
+        const status = handle === undefined ? null : await handle.wait();
+        writeWorkerRecord(ctx.relayHome, {
+          ...record, ended_at: now().toISOString(), end_reason: "relay_stopped", exit_code: status?.code ?? null, signal: status?.signal ?? null,
+        });
+      } catch {
+        // The error being reported matters more than the record.
+      }
+    }
     throw error;
   } finally {
     clearTimeout(interruptTimer);
@@ -444,11 +488,11 @@ function signalExitCode(signal: string | null): number {
 // events. Writes happen one after another, so the events keep their order.
 class Facts {
   private chain: Promise<unknown> = Promise.resolve();
-  private lastAvailability: string;
 
-  constructor(private readonly ctx: CommandContext, private readonly run: Supervision, private readonly record: WorkerRecord) {
-    this.lastAvailability = availabilityKey(readAvailability(ctx.relayHome, run.account));
-  }
+  constructor(
+    private readonly ctx: CommandContext, private readonly run: Supervision, private readonly record: WorkerRecord,
+    private lastAvailability: string,
+  ) {}
 
   queue(write: () => Promise<void>): Promise<void> {
     const next = this.chain.then(write);

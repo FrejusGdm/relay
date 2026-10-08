@@ -118,6 +118,45 @@ export function unsupportedOperation(displayName: string, transport: Transport, 
   return new UnsupportedOperation(`${displayName} in ${mode} mode cannot ${operation}.`);
 }
 
+// The time limit of a worker's stop: SIGKILL when it passes. A later stop with a shorter limit
+// brings the SIGKILL forward, so that a second Ctrl+C or SIGTERM stops the agent at once.
+export class StopLimit {
+  killed = false;
+  private deadline: number;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(timeoutMs: number, private readonly kill: () => boolean) {
+    this.deadline = performance.now() + Math.max(0, timeoutMs);
+    this.arm();
+  }
+
+  shorten(timeoutMs: number): void {
+    const deadline = performance.now() + Math.max(0, timeoutMs);
+    if (deadline >= this.deadline) return;
+    this.deadline = deadline;
+    this.arm();
+  }
+
+  remaining(): number {
+    return Math.max(0, this.deadline - performance.now());
+  }
+
+  // Sends SIGKILL now, as the end of the limit would.
+  expire(): void {
+    this.clear();
+    if (this.kill()) this.killed = true;
+  }
+
+  clear(): void {
+    clearTimeout(this.timer);
+  }
+
+  private arm(): void {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.expire(), this.remaining());
+  }
+}
+
 export async function settlesWithin(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

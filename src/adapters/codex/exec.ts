@@ -11,7 +11,7 @@ import { findProgram } from "../program";
 import { resetTimeFromText } from "../reset-time";
 import { tomlString } from "../text";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, StopLimit, textForAgent, unsupportedOperation } from "../worker";
 import { createExecMapper } from "./exec-stream";
 
 // Reset text uses the child's local clock, which can differ from relay's clock.
@@ -67,6 +67,7 @@ export async function startExecWorker(
   let turnEnded = false;
   let errorText: string | undefined;
   let stopping: Promise<StopResult> | undefined;
+  let limit: StopLimit | undefined;
   const publish = (event: WorkerEvent, fromStream = false, failureText?: string) => {
     if (event.kind === "turn_failed" && event.reason === "usage_limit" && failureText !== undefined && request.env.TZ) {
       const retryAt = resetTimeForWorker(failureText, request.env.TZ);
@@ -119,22 +120,24 @@ export async function startExecWorker(
       const status = await wait;
       return { how: "already_exited", exitCode: status.code, signal: status.signal, turnEnded };
     }
-    if (stopping !== undefined) return stopping;
+    if (stopping !== undefined) {
+      limit?.shorten(timeoutMs);
+      return stopping;
+    }
+    const stopLimit = new StopLimit(timeoutMs, () => child.signal("SIGKILL"));
+    limit = stopLimit;
     stopping = (async (): Promise<StopResult> => {
-      const deadline = performance.now() + Math.max(0, timeoutMs);
-      let killed = false;
       let terminated = false;
-      const timer = setTimeout(() => { killed = child.signal("SIGKILL") || killed; }, Math.max(0, timeoutMs));
       try {
         if (!turnEnded) {
           await interrupt();
-          await settlesWithin(wait, Math.min(options.interruptMs ?? 10_000, Math.max(0, deadline - performance.now())));
+          await settlesWithin(wait, Math.min(options.interruptMs ?? 10_000, stopLimit.remaining()));
         }
         if (child.running()) terminated = child.signal("SIGTERM");
-        if (!(await settlesWithin(wait, Math.max(0, deadline - performance.now())))) killed = child.signal("SIGKILL") || killed;
+        if (!(await settlesWithin(wait, stopLimit.remaining()))) stopLimit.expire();
         const status = await wait;
-        return { how: killed ? "killed" : terminated ? "terminated" : "clean", exitCode: status.code, signal: status.signal, turnEnded };
-      } finally { clearTimeout(timer); }
+        return { how: stopLimit.killed ? "killed" : terminated ? "terminated" : "clean", exitCode: status.code, signal: status.signal, turnEnded };
+      } finally { stopLimit.clear(); }
     })();
     return stopping;
   };

@@ -1,6 +1,7 @@
 // The worker events relay run writes to .relay/events.jsonl (task 9.4; design decision 16).
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { jobEvents, relayRun, resetTime, runFixture, steps, workers } from "./helpers";
 
@@ -104,8 +105,46 @@ test("a task that starts with -- or is the single word update reaches a headless
         expect(seen.argv[at]!.trim()).toBe(prompt);
       }
       expect(seen.argv).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+      if (account === "codex:personal") expect(workers(fixture)[0]!.argv.slice(-2)).toEqual(["--", "<prompt>"]);
     } finally {
       fixture.cleanup();
     }
+  }
+}, 30_000);
+
+// Holds the job's events lock as another relay process would, until the returned function runs.
+function holdEventsLock(fixture: { relayHome: string; jobId: string }): () => void {
+  const path = join(fixture.relayHome, "locks", `${fixture.jobId}.events.lock`);
+  writeFileSync(path, JSON.stringify({ pid: process.pid, command: "append-event", started_at: new Date().toISOString(), host: hostname() }), { mode: 0o600 });
+  return () => rmSync(path, { force: true });
+}
+
+test("a limit the agent reports while relay is still starting it still gives an availability event", async () => {
+  const fixture = await runFixture();
+  try {
+    const release = holdEventsLock(fixture);
+    // worker_started waits for the lock while the agent reaches its limit and the adapter records it.
+    setTimeout(release, 1000);
+    const resets = resetTime();
+    const result = await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go."],
+      steps({ limit: { window: "five_hour", resets_at: resets.toISOString() } }));
+    expect(result.code).toBe(23);
+    expect(jobEvents(fixture).find((event) => event.type === "availability")?.data).toMatchObject({ status: "quota_exhausted" });
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("when relay cannot write worker_started, it stops the agent and records the end of the worker", async () => {
+  const fixture = await runFixture();
+  const release = holdEventsLock(fixture);
+  try {
+    const result = await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Wait."], steps({ say: "Waiting." }, { hang: true }));
+    expect(result.code).toBe(6);
+    const [record] = workers(fixture);
+    expect(record).toMatchObject({ end_reason: "relay_stopped", ended_at: expect.any(String) });
+  } finally {
+    release();
+    fixture.cleanup();
   }
 }, 30_000);

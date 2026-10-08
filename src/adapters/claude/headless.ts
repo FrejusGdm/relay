@@ -2,14 +2,13 @@
 // spec). relay chooses the session ID, writes each message as one JSON line, closes the input when
 // the last turn has finished, and interrupts with SIGINT, then SIGTERM and SIGKILL.
 import type { Account } from "../../core/config/types";
-import { now } from "../../platform/clock";
 import { JsonLineParser } from "../lines";
 import { object, stopped } from "../mapper";
 import { startHeadless } from "../process";
 import type { HeadlessProcess } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent } from "../worker";
+import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, settlesWithin, StopLimit, textForAgent } from "../worker";
 import { createClaudeStreamMapper } from "./stream";
 
 export async function startClaudeHeadless(
@@ -42,6 +41,7 @@ export async function startClaudeHeadless(
   let terminated = false;
   let killed = false;
   let stopping: Promise<StopResult> | undefined;
+  let limit: StopLimit | undefined;
   let interruptTimer: ReturnType<typeof setTimeout> | undefined;
   let killTimer: ReturnType<typeof setTimeout> | undefined;
   const resultWaiters = new Set<() => void>();
@@ -117,30 +117,27 @@ export async function startClaudeHeadless(
       const status = await wait;
       return { how: "already_exited", exitCode: status.code, signal: status.signal, turnEnded: written <= results };
     }
-    if (stopping !== undefined) return stopping;
-    const deadline = now().getTime() + Math.max(0, timeoutMs);
+    if (stopping !== undefined) {
+      limit?.shorten(timeoutMs);
+      return stopping;
+    }
+    const stopLimit = new StopLimit(timeoutMs, () => { clearEscalation(); return agent.signal("SIGKILL"); });
+    limit = stopLimit;
     stopping = (async (): Promise<StopResult> => {
-      const deadlineTimer = setTimeout(() => {
-        clearEscalation();
-        if (agent.signal("SIGKILL")) killed = true;
-      }, Math.max(0, timeoutMs));
       try {
         if (written > results) {
           let done!: () => void;
           const result = new Promise<void>((resolve) => { done = resolve; resultWaiters.add(done); });
           await interrupt();
-          await settlesWithin(Promise.race([result, wait]), Math.min(delays.interruptMs, Math.max(0, deadline - now().getTime())));
+          await settlesWithin(Promise.race([result, wait]), Math.min(delays.interruptMs, stopLimit.remaining()));
           resultWaiters.delete(done);
         }
         endInput();
-        if (!(await settlesWithin(wait, Math.max(0, deadline - now().getTime())))) {
-          clearEscalation();
-          if (agent.signal("SIGKILL")) killed = true;
-        }
+        if (!(await settlesWithin(wait, stopLimit.remaining()))) stopLimit.expire();
         const status = await wait;
-        return { how: killed ? "killed" : terminated ? "terminated" : "clean", exitCode: status.code,
+        return { how: killed || stopLimit.killed ? "killed" : terminated ? "terminated" : "clean", exitCode: status.code,
           signal: status.signal, turnEnded: written <= results };
-      } finally { clearTimeout(deadlineTimer); clearEscalation(); }
+      } finally { stopLimit.clear(); clearEscalation(); }
     })();
     return stopping;
   };

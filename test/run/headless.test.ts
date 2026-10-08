@@ -103,7 +103,8 @@ test("Ctrl+C interrupts the turn, prints the resume hint and exits 130", async (
   }
 });
 
-// A Claude Code stand-in that ignores SIGINT, so only a second Ctrl+C can end it.
+// A Claude Code stand-in that ignores SIGINT, SIGTERM and the end of its input, so only SIGKILL
+// ends it. The adapter's own escalation sends SIGKILL 15 seconds after an interrupt.
 function stubbornClaude(root: string): string {
   const path = join(root, "stubborn-claude");
   writeFileSync(path, `#!${process.execPath}
@@ -112,6 +113,7 @@ if (argv.includes("--version")) { console.log("2.1.282 (Claude Code)"); process.
 if (argv[0] === "auth") { console.log("{}"); process.exit(0); }
 const session = argv[argv.indexOf("--session-id") + 1];
 process.on("SIGINT", () => {});
+process.on("SIGTERM", () => {});
 process.stdin.once("data", () => console.log(JSON.stringify({ type: "system", subtype: "init", session_id: session, model: "m" })));
 setInterval(() => {}, 60000);
 `, { mode: 0o755 });
@@ -134,6 +136,42 @@ test("a second Ctrl+C stops the agent at once", async () => {
     fixture.cleanup();
   }
 });
+
+test("a second Ctrl+C while relay is already stopping the agent stops it at once", async () => {
+  const fixture = await runFixture();
+  try {
+    const run = spawnRelayRun(fixture, ["claude:work", "--headless", "--prompt", "Wait."], {}, { RELAY_CLAUDE_BIN: stubbornClaude(fixture.scratch.root) });
+    await until(() => run.stdout().includes("Started Claude Code"));
+    process.kill(-run.child.pid!, "SIGINT");
+    // After 10 seconds without the end of the turn, relay is stopping the agent with its 30-second limit.
+    await Bun.sleep(11_000);
+    expect(run.child.exitCode).toBeNull();
+    const before = Date.now();
+    process.kill(-run.child.pid!, "SIGINT");
+    expect(await run.exited).toBe(130);
+    expect(Date.now() - before).toBeLessThan(2000);
+    expect(jobEvents(fixture).at(-1)).toMatchObject({ data: { end_reason: "interrupted", stop_how: "killed", signal: "SIGKILL" } });
+  } finally {
+    fixture.cleanup();
+  }
+}, 30_000);
+
+test("a second SIGTERM while relay is stopping the agent stops it at once", async () => {
+  const fixture = await runFixture();
+  try {
+    const run = spawnRelayRun(fixture, ["claude:work", "--headless", "--prompt", "Wait."], {}, { RELAY_CLAUDE_BIN: stubbornClaude(fixture.scratch.root) });
+    await until(() => run.stdout().includes("Started Claude Code"));
+    run.child.kill("SIGTERM");
+    await Bun.sleep(500);
+    const before = Date.now();
+    run.child.kill("SIGTERM");
+    expect(await run.exited).toBe(143);
+    expect(Date.now() - before).toBeLessThan(2000);
+    expect(jobEvents(fixture).at(-1)).toMatchObject({ data: { end_reason: "relay_stopped", stop_how: "killed", signal: "SIGKILL" } });
+  } finally {
+    fixture.cleanup();
+  }
+}, 30_000);
 
 for (const signal of ["SIGTERM", "SIGHUP"] as const) {
   test(`${signal} to relay stops the agent, records the worker and exits 143`, async () => {

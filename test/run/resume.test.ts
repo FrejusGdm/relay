@@ -65,3 +65,21 @@ test("a session started on another account is refused with exit 25; an unknown o
     fixture.cleanup();
   }
 });
+
+test("--resume last skips a session that the program never confirmed", async () => {
+  const fixture = await runFixture();
+  try {
+    expect((await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Start."], done)).code).toBe(0);
+    const confirmed = workers(fixture)[0]!;
+    // A newer worker whose session relay chose, but whose program never started a session.
+    writeWorkerRecord(fixture.relayHome, {
+      ...confirmed, worker_id: "0f0f0f0f", provider_session_id: "5b0f2a4e-1c2d-4e3f-8a9b-0c1d2e3f4a5b",
+      started_at: new Date(Date.parse(confirmed.started_at) + 1).toISOString(),
+    });
+    const result = await relayRun(fixture, ["claude:work", "--resume", "last", "--headless", "--prompt", "Go."], done);
+    expect(result.code).toBe(0);
+    expect(workers(fixture).find((entry) => entry.resumed_from !== null)).toMatchObject({ resumed_from: confirmed.provider_session_id });
+  } finally {
+    fixture.cleanup();
+  }
+});

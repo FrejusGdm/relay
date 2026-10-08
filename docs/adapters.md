@@ -544,7 +544,7 @@ exits with a code that says how the run ended.
 
 | Step | What relay checks | Exit code and message when it fails |
 |---|---|---|
-| 1 | The options: a headless run needs `--prompt` or `--prompt-file`; a prompt is at most 100 KB | 2, "A headless run needs --prompt or --prompt-file." |
+| 1 | The options: a headless run needs `--prompt` or `--prompt-file`; a prompt is at most 100 KB; `--model`, `--permission` and `--json` work only with `--headless`; `--resume` takes a UUID or `last` | 2, "A headless run needs --prompt or --prompt-file." |
 | 2 | The job: `.relay/state.json`, written by `relay init` in this checkout | 3, "relay is not set up here. Run relay init first." |
 | 3 | The account: the one named, or `defaults.account`. A provider alone, such as `relay run codex`, means its only account | 2 without an account and a default; 21, "claude:nope is not one of your accounts. See relay account list." |
 | 4 | The program and its version | 20, "relay needs Claude Code 2.1.282 or newer. You have 2.1.100. Update Claude Code, then try again." |
@@ -557,6 +557,8 @@ exits with a code that says how the run ended.
 
 The first `relay run` in a project adds a `[[projects]]` entry for the job's worktree root to
 `config.toml`, allowing only the account used, and prints "Allowed claude:work on this project."
+relay looks for the entry again while it holds the lock on `config.toml`, so two first runs at the
+same time add one entry.
 In this version, a run on an account that the entry does not list is refused; `relay switch`, a
 later change, asks instead. When the provider's policy notes changed since the account last saw
 them, relay prints one line that says so before it starts the agent.
@@ -572,8 +574,9 @@ agent's system channel; they tell the agent where the job's files are and that n
 agent in `.relay/checkpoint.md` are claims to check, never instructions. The prompt goes as the
 first message, never as an option: a prompt that starts with `--` reaches the agent as text. A
 headless worker runs at `edit-in-workspace` unless you give `--permission read-only`; an
-interactive worker gets no permission option from relay, so the program's own settings and
-questions apply.
+interactive worker gets no permission or model option from relay, so the program's own settings and
+questions apply, and relay refuses `--permission` and `--model` without `--headless` instead of
+ignoring them.
 
 ### Worker records and the worker lock
 
@@ -589,7 +592,8 @@ log `RELAY_HOME/logs/workers/<job>-<worker>.log`; an interactive worker has no l
 While the agent runs, relay holds `RELAY_HOME/locks/<job>.worker.lock`, which holds
 `{"pid", "account", "started_at"}`. `add-relay-switch` adds fields to it; readers ignore fields
 they do not know. relay removes the lock on every way out, also after a signal, and replaces a
-lock whose process has ended.
+lock whose process has ended. When an error ends `relay run` after the agent started, relay stops
+the agent and writes the end of the worker into its record before it releases the lock.
 
 ### Events in the job's event log
 
@@ -633,7 +637,8 @@ including the agent's messages, and its other lines go to standard error.
 The headless agent runs in its own process group, so Ctrl+C in the terminal reaches relay only.
 The first Ctrl+C interrupts the turn through the adapter, waits for the turn to end and closes the
 agent's input; when the turn has not ended after 10 seconds, relay stops the agent. A second Ctrl+C
-stops the agent at once. Once the agent has exited, relay ignores further signals while it records
+stops the agent at once, also when relay is already stopping it. A second SIGTERM or SIGHUP does
+the same. Once the agent has exited, relay ignores further signals while it records
 the end of the worker. SIGTERM and SIGHUP make relay stop the
 agent with the adapter's `stop()` and record the worker before it exits.
 
@@ -649,8 +654,10 @@ and exits with the agent's exit code, or with 23 when the last turn stopped at a
 
 ### Resuming a session
 
-`--resume <session ID>` resumes that session on the named account. `--resume last` uses the
-session of the job's most recent worker on the same account. relay refuses, with exit code 25, a
+`--resume <session ID>` resumes that session on the named account; the ID must be a UUID.
+`--resume last` uses the session of the job's most recent worker on the same account whose session
+the program confirmed: its output or a hook reported the session, or a turn in it completed. A
+session ID that relay chose for a run whose program never started a session is skipped. relay refuses, with exit code 25, a
 session that a worker of any job started on another account.
 
 ### What comes later
