@@ -57,8 +57,10 @@ unsigned). This change describes it so that an agent can build it against the lo
   as a smoke test, and uploads the screenshots and `Relay-macOS.zip` as workflow artifacts. It runs
   only when `mac/**` or the workflow changes, because macOS minutes cost ten times Linux minutes.
   Nothing is built on Josué's Mac (the private task board, "Pins").
-- **Attached to the GitHub Release.** The release workflow from queue item 10 of the private task board calls
-  `mac-app.yml` and attaches `Relay-macOS.zip` to the release next to the command-line binaries.
+- **Attached to the GitHub Release.** Releases are published by hand with `gh release create`.
+  A release tag starts `mac-app.yml`, which builds the app with the tag's version, and
+  `mac/scripts/attach-to-release.sh` attaches `Relay-macOS.zip` to the release next to the
+  command-line binaries (design decision 15, changed on 2026-10-08).
 - **Unsigned.** No Developer ID and no notarization, as decided on 2026-10-07. The bundle carries an
   ad-hoc signature, because macOS on Apple silicon does not run unsigned code at all.
   `docs/mac-app.md` says how to open it the first time: on macOS 14, right-click the app and choose
@@ -136,8 +138,8 @@ None. The app uses the `local-api` capability of `add-daemon-api-and-status` wit
   entry, menu-bar scene, link handling), `Tests/`, `Resources/Fonts/` (Public Sans and IBM
   Plex Mono with their licenses), `Support/Info.plist`, `scripts/make-app.sh` and
   `scripts/smoke-test.sh`.
-- New workflow `.github/workflows/mac-app.yml`; the release workflow of queue item 10 gains one job
-  that calls it.
+- New workflow `.github/workflows/mac-app.yml` and the script `mac/scripts/attach-to-release.sh`;
+  releases are published by hand, with no release workflow.
 - New test `test/mac/fixtures-match-daemon.test.ts` (Bun, Linux): it checks the app's JSON fixtures
   against a real phase 5 daemon, so the fixtures cannot drift from the API.
 - New documentation `docs/mac-app.md`; one line in `README.md`; `docs/codebase-map.md` gains the

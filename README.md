@@ -95,6 +95,7 @@ an agent" of [docs/adapters.md](docs/adapters.md) explains `relay run`.
 | [docs/accounts.md](docs/accounts.md) | Adding, checking and removing accounts, profile folders, and what relay never stores |
 | [docs/testing-adapters.md](docs/testing-adapters.md) | The fake agents and scenario files that tests use instead of real providers |
 | [docs/api.md](docs/api.md) | The daemon's local API: every endpoint, the event stream and the errors |
+| [docs/mac-app.md](docs/mac-app.md) | The Mac menu-bar app: install, first launch, how it talks to the daemon, and how it is built |
 | `DESIGN.md`, `docs/design/` | The design direction and its working preview |
 | `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |
 | `openspec/` | Project rules (`config.yaml`) and detailed change proposals for the first version |
