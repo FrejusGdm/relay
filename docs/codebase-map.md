@@ -2,7 +2,8 @@
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 and 2 of `add-provider-adapters`, task groups 1 to 7 of
-`add-handoff-evaluation`, and task groups 1 to 7 of `add-website`.
+`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, and task groups 1 to 3 of
+`add-daemon-api-and-status`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
 `docs/first-version-index.md` lists every file that the six first-version changes will add, and
@@ -14,14 +15,16 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts,<br/>hook.ts, not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts,<br/>hook.ts, daemon.ts, not-built.ts: their handlers"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml"]
-    platform["src/platform/<br/>toml.ts: the only Bun-specific call<br/>clock.ts: now() and, for tests, setClock()"]
+    platform["src/platform/<br/>toml.ts: the TOML parser<br/>clock.ts: now() and, for tests, setClock()<br/>libc.ts: the only bun:ffi import<br/>peer-credentials.ts: who is on a socket<br/>file-lock.ts: flock locks"]
     adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times"]
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: the provider's own folders"]
-    daemon["src/daemon/<br/>empty until add-daemon-api-and-status"]
+    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log"]
+    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, routes/version.ts"]
+    client["src/client/<br/>api-client.ts: the only fetch, over the socket<br/>ensure-daemon.ts: starts the daemon"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
     job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock and the events lock<br/>exclude.ts: the /.relay/ exclude line"]
     secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names<br/>redact.ts: secret-looking values in facts"]
@@ -37,6 +40,7 @@ flowchart TD
     coretests["core/: paths, relay folder, settings and log tests<br/>fixtures/config/: settings files"]
     fake["fixtures/fake-provider/<br/>guard programs, fake agent, scenarios"]
     buildtests["build/: no-network.test.ts"]
+    daemontests["platform/, daemon/, api/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
     adaptertests["adapters/, accounts/, docs/:<br/>adapter core, environment and document tests<br/>helpers/child.ts: a child for the process tests"]
   end
@@ -73,6 +77,14 @@ flowchart TD
   jobtests -->|"check"| job
   jobtests -->|"check"| secrets
   jobtests -->|"check"| checkpoint
+  commands -->|"daemon.ts starts, stops and asks through"| client
+  client -->|"starts relay daemon run"| daemon
+  client -->|"GET /v1/version over relay.sock"| api
+  daemon -->|"serves the API with"| api
+  daemon -->|"locks daemon.lock with"| platform
+  api -->|"checks each connection's user with"| platform
+  daemontests -->|"check"| daemon
+  daemontests -->|"check"| api
   adapters -->|"reads the time from"| platform
   accounts -->|"finds the home and relay folders with"| core
   fakes -->|"fake-adapter.ts implements the interface of"| adapters
@@ -88,8 +100,9 @@ handler. `src/cli/commands/registry.ts` lists the sixteen commands with their he
 argument counts. In this version every handler is `not-built.ts`, except `hook.ts` for
 `relay hook`, `init.ts` for `relay init`, `checkpoint.ts` for `relay checkpoint`,
 `checkpoints.ts` for `relay checkpoints`, `rollback.ts` for `relay rollback`, which restores an
-earlier checkpoint's files after saving an undo checkpoint, and `accept-git-changes.ts` for
-`relay accept-git-changes`. `--version` prints the version from `src/core/version.ts`, which reads the
+earlier checkpoint's files after saving an undo checkpoint, `accept-git-changes.ts` for
+`relay accept-git-changes`, and `daemon.ts` for `relay daemon`. `--version` prints the version
+from `src/core/version.ts`, which reads the
 `version` field of `package.json`. `docs/cli.md` describes the command line and its exit codes.
 
 Before a command's handler runs, `runCli` finds the relay folder with `src/core/paths.ts`,
@@ -109,8 +122,25 @@ files" section of `docs/cli.md` describes the events, the fields and what is nev
 
 `src/platform/` holds calls that only work on Bun, so that a later move to another runtime
 changes one folder, and `clock.ts`, the one clock that every comparison with a reset time or a
-file's age reads. `src/adapters/providers.ts` names the two supported providers, `claude` and
-`codex`. `src/daemon/` only holds a README until the change named in the diagram fills it.
+file's age reads. `src/platform/libc.ts` is the only file that calls into the C library through
+`bun:ffi`: `peer-credentials.ts` uses it to ask the kernel which user is on the other end of a
+socket, and `file-lock.ts` uses it for `flock` locks, which the kernel releases when their holder
+dies. `src/adapters/providers.ts` names the two supported providers, `claude` and `codex`.
+
+`src/cli/commands/daemon.ts` is `relay daemon`. `relay daemon run` loads `src/daemon/main.ts`,
+which checks the runtime directory with `src/daemon/paths.ts`, takes the daemon lock and writes
+the pid file with `src/daemon/singleton.ts`, logs to `logs/daemon.log` through
+`src/daemon/log.ts`, and starts the listener in `src/api/server.ts`. The listener checks each
+connecting user, hands the bytes to the small HTTP/1.1 layer in `src/api/http1.ts`, and that layer
+passes each request to `src/api/router.ts`, which answers `GET /v1/version` from
+`src/api/routes/version.ts` and builds error answers with `src/api/errors.ts`. The other
+`relay daemon` actions run in the command's own process: `src/client/ensure-daemon.ts` starts a
+detached daemon, and `src/client/api-client.ts` asks a running one for its version, after it has
+checked that the runtime directory is private and the socket is the user's own.
+`docs/daemon.md` describes the daemon, its files and the checks on the way to an answer in
+diagrams. The tests in `test/platform/`, `test/daemon/` and `test/api/` use the short relay
+folders and test daemons from `test/helpers/relay-home.ts`, because a socket path may have at most
+103 bytes on macOS.
 
 `src/adapters/` holds the adapter interface of `add-provider-adapters` in `types.ts` and the
 registry that gives each provider's adapter in `registry.ts`; the Claude Code and Codex adapters
@@ -162,8 +192,8 @@ each settings file in a new relay folder from `makeRelayHome`, or read one from
 `test/fixtures/config/`. A credential value in a test is built at run time, so none is committed.
 
 `test/build/no-network.test.ts` searches every file under `src/` and fails when relay's code could
-open a network connection, other than to relay's own socket (`src/client/`) or to T3 Code on this
-computer (`src/t3/client.ts` and `src/t3/oauth.ts`). `scripts/smoke-test.sh` runs a built `relay` program and checks its
+open a network connection, other than to relay's own socket (`src/client/`, and the listener in
+`src/api/server.ts`) or to T3 Code on this computer (`src/t3/client.ts` and `src/t3/oauth.ts`). `scripts/smoke-test.sh` runs a built `relay` program and checks its
 version, its help, its exit code and its log file. The workflow in `.github/workflows/ci.yml`
 runs the type check and the tests, builds the program for Linux and macOS, runs the smoke test on
 each, and scans the dependencies and the git history. `.github/dependabot.yml` asks GitHub to
