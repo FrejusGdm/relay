@@ -8,6 +8,8 @@ public struct VersionInfo: Decodable, Equatable, Sendable {
     public let daemonVersion: String
     public let pid: Int32
     public let startedAt: Date
+    /// Changes whenever the daemon rebuilds its index; `nil` from a daemon that does not send it.
+    public let streamEpoch: String?
     public let capabilities: [String]
 }
 

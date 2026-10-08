@@ -631,7 +631,9 @@ so the views in `RelayUI` hold no rules. `HostFinder` finds the app that runs th
 walking up its parent processes, `SwitchFlow` sends the one action the app has, a switch, and
 `RelayLink` accepts only `relay://job/<id>` links, which open a window and nothing else. `Relay` is
 the app itself. The tests run against `FakeDaemon`, a small
-Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
+Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The Bun test
+`test/mac/fixtures-match-daemon.test.ts` runs the real daemon on Linux, makes a handoff with the
+fake agents, and checks that those files have the same keys as the daemon's answers and events. The workflow
 downloads the fonts, runs the tests (which also render the cards to PNG files), builds and signs
 `Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots. A
 release tag runs the same workflow with the tag's version, and `attach-to-release.sh` uploads that
