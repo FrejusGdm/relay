@@ -145,7 +145,16 @@ export async function applyHook(ctx: HookContext, line: SpoolLine): Promise<void
   const ref: JobRef | null = job === null ? null : { id: job.id, worktreeRoot: job.project_root, relayHome: ctx.relayHome };
 
   if (ref !== null) {
-    await appendEvent(ref, "hook", { provider: line.provider, event: line.event, ...line.fields });
+    // received_at and relay_worker let interactive workers read the event as the spool line it was
+    // (src/hooks/feed.ts); worker_id is the worker the daemon attributed it to.
+    await appendEvent(ref, "hook", {
+      provider: line.provider,
+      event: line.event,
+      received_at: line.received_at,
+      relay_worker: line.relay_worker,
+      worker_id: worker?.id ?? null,
+      ...line.fields,
+    });
   } else {
     db.transaction(() => stream.record({ jobId: null, type: "hook", data: { job_id: null, provider: line.provider, event: line.event } }))();
     stream.publish();
@@ -194,9 +203,14 @@ export async function applyHook(ctx: HookContext, line: SpoolLine): Promise<void
 }
 
 // Hook events waiting for applyHook, processed one at a time in the order they arrived. The
-// daemon answers 202 once an event is in the queue, so a hook never waits for a file lock.
+// daemon answers 202 once an event is in the queue, so a hook never waits for a file lock. A hook
+// whose answer came too late also spools its line, so a line the queue already took is not taken
+// again.
+const REMEMBERED = 2000;
+
 export class HookQueue {
   private readonly waiting: SpoolLine[] = [];
+  private readonly taken = new Set<string>();
   private running: Promise<void> | null = null;
 
   constructor(
@@ -206,7 +220,11 @@ export class HookQueue {
 
   // Adds an event. False when the queue is full; relay hook then writes the event to the spool.
   offer(line: SpoolLine): boolean {
+    const key = JSON.stringify(line);
+    if (this.taken.has(key)) return true;
     if (this.waiting.length >= this.limit) return false;
+    this.taken.add(key);
+    if (this.taken.size > REMEMBERED) this.taken.delete(this.taken.values().next().value!);
     this.waiting.push(line);
     this.run();
     return true;

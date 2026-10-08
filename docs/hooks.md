@@ -80,7 +80,7 @@ flowchart TD
   hook -->|"allowed fields only, as one spool line"| post{"POST /v1/hooks/claude/StopFailure<br/>answered with 202 within 150 ms?"}
   post -- yes --> queue["the daemon's hook queue"]
   post -- "no: no daemon, no answer, or another error" --> spool["spool/hooks.jsonl"]
-  spool -->|"when the daemon starts"| drain["rename to hooks.&lt;pid&gt;.draining,<br/>wait 1 second, queue each line, delete"]
+  spool -->|"when the daemon starts, after each<br/>accepted event and every 2 seconds"| drain["rename to hooks.&lt;pid&gt;.draining,<br/>wait 1 second, queue each line, delete"]
   drain --> queue
   queue --> find["find the worker, the job and the account"]
   find -->|"with a job"| events[".relay/events.jsonl of the job:<br/>hook, worker_session_identified, availability"]
@@ -117,7 +117,9 @@ The daemon then finds where the event belongs:
   `config.toml` count.
 
 With a job, the daemon appends a `hook` event to the job's `.relay/events.jsonl` with the provider,
-the event name and the allowed fields, and the index picks it up from there. Without a job, the
+the event name, the allowed fields, the time the hook received the event (`received_at`), the
+hook's `RELAY_WORKER` (`relay_worker`) and the worker it found (`worker_id`), and the index picks
+it up from there. Without a job, the
 event goes only to the event stream. On `SessionStart`, when the worker has no provider session ID
 yet and `session_id` is a UUID, the daemon also appends a `worker_session_identified` event, so
 the worker's session can be resumed later.
@@ -131,8 +133,37 @@ has processed every line. A `.draining` file left by a daemon that stopped while
 processed first. When the daemon stops before it has queued every line of a file, it keeps the
 file, and the next start processes it again from the beginning: the job's event log may then hold
 a `hook` event twice, but the availability does not change, because a reading never replaces a
-newer one. A hook that runs while the daemon is busy or starting is not lost: it either reaches
-the daemon or writes to a new `spool/hooks.jsonl`, which the next start of the daemon drains.
+newer one.
+
+A hook also spools its event when the daemon runs but does not answer within 150 ms. So while it
+runs, the daemon drains the spool again in the same way after every hook event it accepts and
+every 2 seconds, whenever `spool/hooks.jsonl` is not empty. A hook whose answer came too late has
+written its line to the spool as well; the daemon remembers the last 2,000 lines it took and
+records such a line only once.
+
+### What interactive workers read
+
+relay's interactive workers, which run Claude Code or Codex in your terminal, learn that a turn
+ended or failed from these hook events. Each event is stored in one place only, so a worker reads
+both places an event can be: the spool, and the `hook` events of its job's `.relay/events.jsonl`.
+The daemon keeps `received_at` and `relay_worker` in the `hook` event so that a worker can read it
+as the spool line it was. A line that the daemon drains from the spool into `events.jsonl` keeps
+the same time, event and fields, so the worker handles it once. The worker then keeps only the
+events of its own worker ID or session that arrived after it started.
+
+```mermaid
+flowchart LR
+  hook["relay hook"] -->|"daemon accepts"| log[".relay/events.jsonl<br/>hook event"]
+  hook -->|"no daemon answers"| spool["spool/hooks.jsonl"]
+  spool -->|"drained by the daemon"| log
+  log --> feed["src/hooks/feed.ts<br/>each line once"]
+  spool --> feed
+  feed -->|"own worker or session,<br/>after it started"| worker["interactive worker:<br/>turn_failed, turn_completed"]
+```
+
+The diagram shows the two places an event can be and how the worker reads both. Whether or not
+the daemon runs, the worker sees its `StopFailure` and `Stop` events about one second after the
+hook ran.
 
 ### What each event changes in availability
 

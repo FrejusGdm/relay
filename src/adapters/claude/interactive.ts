@@ -1,7 +1,9 @@
 // Interactive Claude Code workers in the person's terminal (the claude-code-adapter spec). relay
-// learns what happens from its hooks, by reading the spool every second.
+// learns what happens from its hooks every second, through src/hooks/feed.ts: the spool, and the
+// job's events.jsonl for the events the daemon received.
+import { join } from "node:path";
 import type { Account } from "../../core/config/types";
-import { readSpool } from "../../hooks/spool";
+import { HookFeed } from "../../hooks/feed";
 import { now } from "../../platform/clock";
 import { startInteractive } from "../process";
 import { findProgram } from "../program";
@@ -31,21 +33,12 @@ export async function startClaudeInteractive(
   if (prompt !== undefined) args.push("--", promptArgument(prompt));
   const queue = new EventQueue();
   const relayHome = request.env.RELAY_HOME!;
-  const seen = new Map<string, number>();
-  for (const line of readSpool(relayHome)) {
-    const key = JSON.stringify(line);
-    seen.set(key, (seen.get(key) ?? 0) + 1);
-  }
+  const feed = new HookFeed(relayHome, join(request.cwd, ".relay", "events.jsonl"));
   const startedAt = now().getTime();
   const child = startInteractive({ path, args, cwd: request.cwd, env: request.env });
   queue.push({ kind: "session_started", providerSessionId: sessionId, source: "preset" });
   const poll = () => {
-    const counts = new Map<string, number>();
-    for (const line of readSpool(relayHome)) {
-      const key = JSON.stringify(line);
-      const count = (counts.get(key) ?? 0) + 1;
-      counts.set(key, count);
-      if (count <= (seen.get(key) ?? 0)) continue;
+    for (const line of feed.fresh()) {
       if (!(Date.parse(line.received_at) >= startedAt) || line.provider !== "claude") continue;
       if (line.relay_worker !== request.workerId && line.fields.session_id !== sessionId) continue;
       for (const event of claudeHookEvents(line)) {
@@ -53,7 +46,6 @@ export async function startClaudeInteractive(
         queue.push(event);
       }
     }
-    for (const [key, count] of counts) seen.set(key, Math.max(count, seen.get(key) ?? 0));
   };
   const timer = setInterval(poll, 1000);
   const wait = child.exited.then((status) => {

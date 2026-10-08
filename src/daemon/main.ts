@@ -117,7 +117,7 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
       ...accountRoutes(db),
       ...jobRoutes(db),
       ...eventRoutes(stream),
-      ...hookRoutes(hooks),
+      ...hookRoutes(hooks, () => spool.poke()),
     ]);
     const server = startApiServer({ socketPath: socket, router, log });
     chmodSync(socket, 0o600);

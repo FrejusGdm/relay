@@ -97,3 +97,26 @@ test("files left by an earlier daemon are processed and removed, and lines that 
   expect(log).toContain('"skipped":2');
   expect(log).not.toContain("secrets.txt");
 }, 30_000);
+
+test("a line spooled while the daemon runs is drained without waiting for the next start", async () => {
+  const relayHome = relayFolder();
+  const daemon = spawnDaemon(relayHome);
+  await waitForDaemon(relayHome);
+  await Bun.sleep(1500);
+  // A hook that wrote to the spool because the daemon was slow to answer.
+  for (const [error, status] of [["billing_error", "unavailable"], ["rate_limit", "rate_limited"]] as const) {
+    mkdirSync(join(relayHome, "spool"), { recursive: true, mode: 0o700 });
+    writeFileSync(spoolPath(relayHome), `${JSON.stringify({
+      v: 1, received_at: new Date().toISOString(), provider: "claude", event: "StopFailure", relay_job: null,
+      relay_target: "claude:work", relay_worker: null, profile: "default", fields: { error },
+    })}\n`, { flag: "a", mode: 0o600 });
+    if (error === "rate_limit") {
+      // The next hook that reaches the daemon also starts a drain.
+      const hook = await runRelay(["hook", "codex", "Stop"], { env: { RELAY_HOME: relayHome, RELAY_TARGET: "codex:personal" }, stdin: fixture("codex-stop.json") });
+      expect(hook.code).toBe(0);
+    }
+    await waitForStatus(relayHome, "claude:work", status);
+  }
+  expect(await availability(relayHome, "codex:personal")).toMatchObject({ status: "available" });
+  expect(await stopDaemon(daemon)).toBe(0);
+}, 30_000);

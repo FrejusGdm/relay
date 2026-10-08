@@ -6,7 +6,9 @@ import type { HookQueue } from "../../hooks/mapping";
 import { errorResponse, jsonResponse } from "../errors";
 import type { Route } from "../router";
 
-export function hookRoutes(queue: HookQueue): Route[] {
+// afterAccept runs after each accepted event: the daemon then drains the spool, so lines written
+// while it was slow to answer are taken as soon as it answers again.
+export function hookRoutes(queue: HookQueue, afterAccept: () => void = () => {}): Route[] {
   return [
     {
       method: "POST",
@@ -27,6 +29,7 @@ export function hookRoutes(queue: HookQueue): Route[] {
           return errorResponse(400, "bad_request", "The request body is not a hook event in the format of relay's spool.");
         }
         if (!queue.offer(line)) return errorResponse(503, "hook_queue_full", "The relay daemon is behind on hook events.");
+        afterAccept();
         return jsonResponse(202, { accepted: true });
       },
     },

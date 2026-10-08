@@ -414,7 +414,9 @@ events (decision 8), and the worker records limit readings and finished turns in
 
 **Interactive** (`claude-interactive`): relay runs `claude --session-id <uuid> --append-system-prompt
 <instructions> [-- <prompt>]` in your terminal, with no permission flag, and learns what happens from
-relay's hooks: every second it reads the spool lines of this worker or this session.
+relay's hooks: every second it reads the hook events of this worker or this session, from the spool
+and, when the daemon received them, from the job's `events.jsonl` (`src/hooks/feed.ts`, described
+in `docs/hooks.md`).
 `StopFailure` gives `turn_failed` with the hook's `error`, `Stop` gives `turn_completed`, and
 `Notification` with `quota_auto_resume_fired` marks the account available again. relay never
 changes Claude Code's `autoContinueAtUsageLimit`.

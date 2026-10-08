@@ -276,3 +276,14 @@ test("a hook from another user is refused at the socket before it is read", asyn
   expect(logLines.some((text) => text.includes("peer_rejected"))).toBe(true);
   expect(d.availability("claude:work")).toMatchObject({ status: "unknown" });
 }, 30_000);
+
+test("a line the queue already took, sent again from the spool, is recorded once", async () => {
+  const d = await daemon();
+  const line = spoolLine("claude", "StopFailure", fixture("claude-stop-failure-rate-limit.json"), relayEnv(d, "claude:work"), new Date());
+  expect(d.queue.offer(line)).toBe(true);
+  expect(d.queue.offer(JSON.parse(JSON.stringify(line)))).toBe(true);
+  await d.queue.idle();
+  expect(events(d.scratch).filter((event) => event.type === "hook")).toMatchObject([
+    { data: { event: "StopFailure", received_at: line.received_at, relay_worker: null, worker_id: null } },
+  ]);
+}, 30_000);

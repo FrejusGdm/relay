@@ -5,6 +5,7 @@
 import { Database } from "bun:sqlite";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { usesProviderDefaultFolder } from "../accounts/profile";
 import type { Account } from "../core/config/types";
 import { availabilityFromHook } from "../hooks/mapping";
 import { readSpoolFile } from "../hooks/spool";
@@ -22,13 +23,14 @@ export async function fromFiles(
   root: string,
   jobId: string,
   accounts: Account[],
+  homedir: string,
 ): Promise<Omit<StatusData, "daemon" | "savedState"> | null> {
   const db = openMemoryDatabase();
   try {
     syncTargets(db, relayHome, accounts);
     await indexProject(db, relayHome, root);
     addSavedAvailability(db, relayHome);
-    addSpooledHooks(db, relayHome, accounts);
+    addSpooledHooks(db, relayHome, accounts, homedir);
     const job = getJob(db, jobId);
     if (job === null) return null;
     return { job, workers: listWorkers(db, jobId), accounts: listAccounts(db) };
@@ -69,7 +71,7 @@ function addSavedAvailability(db: Database, relayHome: string): void {
 // spool/hooks.jsonl and leftover spool/hooks.<pid>.draining files (the spool line of
 // add-provider-adapters design decision 14). The account is relay_target, else the configured
 // account whose profile folder the hook names.
-function addSpooledHooks(db: Database, relayHome: string, accounts: Account[]): void {
+function addSpooledHooks(db: Database, relayHome: string, accounts: Account[], homedir: string): void {
   const dir = join(relayHome, "spool");
   let names: string[];
   try {
@@ -84,7 +86,7 @@ function addSpooledHooks(db: Database, relayHome: string, accounts: Account[]): 
     for (const line of text.split("\n")) {
       const entry = parse(line);
       if (entry === null) continue;
-      const target = accountOf(entry, accounts);
+      const target = accountOf(entry, accounts, homedir);
       const change = availabilityFromHook(entry.provider, entry.event, entry.fields);
       if (target === null || change === null) continue;
       applyAvailability(db, target, { ...change, retry_at: null, measured_at: entry.received_at, source: "hook", windows: [] });
@@ -119,12 +121,14 @@ function parse(line: string): SpoolEntry | null {
   }
 }
 
-function accountOf(entry: SpoolEntry, accounts: Account[]): string | null {
+// The profile "default" is the provider's own folder, ~/.claude or ~/.codex, as in the daemon
+// (src/hooks/mapping.ts), not relay's default profile folder.
+function accountOf(entry: SpoolEntry, accounts: Account[], homedir: string): string | null {
   if (entry.relay_target !== null) return TARGET.test(entry.relay_target) ? entry.relay_target : null;
   const match = accounts.find(
     (account) =>
       account.provider === entry.provider &&
-      (entry.profile === "default" ? account.profileDirIsDefault : account.profileDir === entry.profile),
+      (entry.profile === "default" ? usesProviderDefaultFolder(account, homedir) : account.profileDir === entry.profile),
   );
   return match?.id ?? null;
 }

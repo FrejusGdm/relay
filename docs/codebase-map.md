@@ -17,7 +17,7 @@ flowchart TD
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
     commands["src/cli/commands/<br/>registry.ts: the sixteen commands,<br/>each module loaded when its command runs<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
-    hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability<br/>mapping.ts: the daemon's hook queue, the worker,<br/>job and account of an event, the availability table"]
+    hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability<br/>mapping.ts: the daemon's hook queue, the worker,<br/>job and account of an event, the availability table<br/>feed.ts: the hook events interactive workers read"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml<br/>edit.ts: the one writer of config.toml"]
@@ -121,7 +121,7 @@ flowchart TD
   daemon -->|"spool.ts drains the spool into the queue of"| hooks
   hooks -->|"mapping.ts appends hook and availability events with"| job
   hooks -->|"writes availability.json through"| accounts
-  adapters -->|"interactive workers read the spool of"| hooks
+  adapters -->|"interactive workers read hook events through"| hooks
   handoff -->|"saves, scans and reads through"| checkpoint
   handoff -->|"asks the outgoing agent through"| adapters
   handoff -->|"adds to the allow list through"| config
@@ -235,7 +235,9 @@ accept it within 150 ms. `src/cli/main.ts` ends a `relay hook` process 500 ms af
 each line again with `parseSpoolLine` from `fields.ts` and puts it on the queue in `mapping.ts`,
 which finds the event's worker, job and account, and records the event and any availability
 change in the job's `events.jsonl`, in `availability.json`, or in the index and the event stream.
-`src/daemon/spool.ts` drains the spool into the same queue when the daemon starts.
+`src/daemon/spool.ts` drains the spool into the same queue when the daemon starts, after each
+accepted event and every 2 seconds. `feed.ts` gives the interactive workers in `src/adapters/` the
+hook events of their session from the spool and from the job's `events.jsonl`.
 `install.ts` adds and removes relay's entries in an account's `settings.json` or `hooks.json`,
 with a backup, and `src/cli/commands/hooks.ts` is `relay hooks install | remove | status`.
 `statusline.ts` is `relay statusline claude`, which records the usage windows of Claude Code's
