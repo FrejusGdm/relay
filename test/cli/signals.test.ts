@@ -11,6 +11,7 @@ import { makeRelayHome } from "../helpers/home";
 test.each([
   ["SIGINT", 130],
   ["SIGTERM", 143],
+  ["SIGHUP", 143],
 ] as const)("%s stops relay with exit %d and is logged", async (signal, code) => {
   const relayHome = makeRelayHome();
   const child = spawn(process.execPath, ["--no-env-file", MAIN, "hook", "claude", "Stop"], {

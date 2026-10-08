@@ -111,8 +111,8 @@ flowchart LR
   end
 
   subgraph build["build (starts when both check jobs pass)"]
-    buildLinux["Linux: build relay-linux-x64,<br/>smoke test, upload"]
-    buildMac["macOS: build relay-darwin-arm64,<br/>print codesign -dv, smoke test, upload"]
+    buildLinux["Linux: build relay-linux-x64,<br/>release check, smoke test, upload"]
+    buildMac["macOS: build relay-darwin-arm64,<br/>release check, print codesign -dv,<br/>smoke test, upload"]
   end
 
   security["security (ubuntu-24.04):<br/>pin check, bun audit,<br/>gitleaks secret scan"]
@@ -126,8 +126,9 @@ The diagram shows the five jobs. The two `check` jobs install the dependencies f
 check the types and run the tests, one on Linux and one on macOS. Before the tests, each `check`
 job downloads gitleaks 8.30.1 for its own system, checks the archive against the SHA-256 checksum
 published in the release's checksums file, and puts the program on `PATH`, because the secret scan
-tests need the real gitleaks. When both pass, the two `build`
-jobs build the program for their own system, run the smoke test on it, and keep it as a download
+tests need the real gitleaks. When both pass, the two `build` jobs build the program for their own
+system, run the release check (`scripts/check-release-binary.sh`, which fails if the test fakes of
+`docs/testing-adapters.md` reached the program), run the smoke test on it, and keep it as a download
 for 7 days. The macOS build job also prints `codesign -dv` as a record of the signature that the
 build gave the program. The `security` job runs at the same time as the others. It checks that
 every action in the workflows is pinned to a full commit SHA, runs `bun audit` on the
@@ -140,8 +141,8 @@ file, rule and line), and only for a finding you have checked by hand. A real se
 revoked instead, because the history cannot be changed.
 
 In a private repository, GitHub counts each minute on a macOS runner as ten minutes on a Linux
-runner, so the macOS jobs only install, test, build and run the smoke test. Slower checks belong
-in the Linux jobs.
+runner, so the macOS jobs only install, test, build and run the release check and the smoke test.
+Slower checks belong in the Linux jobs.
 
 Every `uses:` line in a workflow names a full 40-character commit SHA followed by a `# vX.Y.Z`
 comment. Run the same check as CI before you push; it prints nothing when every action is pinned:
