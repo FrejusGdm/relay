@@ -4,6 +4,7 @@
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import type { Mode, PermissionLevel } from "../adapters/types";
+import { PersonNeeded } from "./ask";
 import type { HandoffSettings } from "./settings";
 
 const RANK: Record<PermissionLevel, number> = { "read-only": 0, "edit-in-workspace": 1 };
@@ -23,7 +24,7 @@ export function nextStart(
 ): NextStart {
   if (settings.mode === "interactive") {
     if (request.startMode === "headless") {
-      throw new CommandError(ExitCode.WouldRaisePermission, [
+      throw new PersonNeeded(ExitCode.WouldRaisePermission, [
         "This job runs agents in your terminal. relay switch never starts the next agent with less supervision than that.",
       ]);
     }

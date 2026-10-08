@@ -4,6 +4,7 @@
 // otherwise it runs the switch itself and stays to supervise the next agent, as relay run would.
 import { createAdapterRegistry } from "../../adapters/registry";
 import type { PermissionLevel } from "../../adapters/types";
+import { ensureDaemon } from "../../client/ensure-daemon";
 import { CommandError } from "../../cli/errors";
 import { ExitCode } from "../../cli/exit-codes";
 import type { Asker } from "../../handoff/ask";
@@ -11,7 +12,7 @@ import { recoverSwitch } from "../../handoff/journal";
 import { preflight } from "../../handoff/preflight";
 import { findJob } from "../../checkpoint/save";
 import { openRepository, RepositoryError } from "../../git/repo";
-import { sendSwitchRequest } from "../../run/control";
+import { handSwitchOver } from "../../run/control";
 import { checksLine, handoffEnv, JobSupervisor, parseChecks, stderrText, switchJson } from "../../run/run";
 import type { CommandContext } from "./registry";
 
@@ -57,22 +58,11 @@ export async function switchCommand(ctx: CommandContext): Promise<number> {
       noSummary: ctx.values["no-summary"] === true, newChecks, asker, held: null,
     });
     if (newChecks !== null) say(checksLine(newChecks));
+    // The next agent's hooks need a receiver (add-daemon-api-and-status, design decision 6).
+    if (pre.next.mode !== "none") await ensureDaemon({ relayHome: ctx.relayHome, env: ctx.env, err: ctx.io.err });
 
     if (pre.supervisor !== null) {
-      if (!pre.supervisor.checked) {
-        throw new CommandError(ExitCode.CannotStop, [`The relay run for this job (process ${pre.supervisor.pid}) did not answer within 5 seconds. Nothing changed.`]);
-      }
-      const personal = pre.confirmations.find((confirmation) => confirmation.question.startsWith("This job ran on a work account"));
-      const reply = await sendSwitchRequest(ctx.relayHome, pre.job.id, pre.supervisor, {
-        to: pre.to.id,
-        answers: {
-          ...(pre.allowed === null ? {} : { newAccount: pre.allowed.how }),
-          ...(personal === undefined ? {} : { personalAccount: personal.how }),
-          ...(pre.instructionFiles === null ? {} : { instructionFiles: { how: pre.instructionFiles.how, paths: pre.instructionFiles.paths } }),
-        },
-        ask_for_notes: pre.askForNotes, new_checks: newChecks, no_start: ctx.values["no-start"] === true,
-        client_pid: process.pid, created_at: new Date().toISOString(),
-      }, progress);
+      const reply = await handSwitchOver(ctx.relayHome, pre, { newChecks, noStart: ctx.values["no-start"] === true }, progress);
       if (reply.exit_code !== ExitCode.Ok) {
         ctx.io.err(stderrText(reply.errors));
         return reply.exit_code;

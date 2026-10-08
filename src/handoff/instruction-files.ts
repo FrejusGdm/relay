@@ -13,7 +13,7 @@ import { git } from "../git/run";
 import { replaceInvisible } from "../text/invisible";
 import type { Provider } from "../adapters/providers";
 import { displayName } from "./account";
-import { isYes, type AnswerHow, type Asker } from "./ask";
+import { isYes, PersonNeeded, type AnswerHow, type Asker } from "./ask";
 
 // The names of files that instruct agents. They match in any case, because a Mac's file system
 // ignores case, so an agent could otherwise add claude.md or .MCP.json without relay asking.
@@ -124,7 +124,7 @@ export async function confirmInstructionFiles(question: InstructionQuestion): Pr
   if (preset !== undefined && preset.paths.join("\0") === question.paths.join("\0")) return preset.how;
   if (asker.yes) return "flag";
   if (!asker.terminal) {
-    throw new CommandError(ExitCode.NeedsPerson, [
+    throw new PersonNeeded(ExitCode.NeedsPerson, [
       `${fromName} changed files that tell agents what to do. Review them, then run relay switch ${question.to.id} in a terminal, or add --yes.`,
     ]);
   }

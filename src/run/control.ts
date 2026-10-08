@@ -10,6 +10,8 @@ import { join } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import { VERSION } from "../core/version";
+import type { AnswerHow } from "../handoff/ask";
+import type { Preflight } from "../handoff/preflight";
 import { makePrivateFolder, jobFolder, writePrivateFile } from "../handoff/files";
 import { workerLockPath } from "../job/lock";
 import type { Mode } from "../adapters/types";
@@ -30,7 +32,7 @@ export interface Supervisor {
 // the switch with exit code 7.
 export interface SwitchRequest {
   to: string;
-  answers: { newAccount?: "terminal" | "flag"; personalAccount?: "terminal" | "flag"; instructionFiles?: { how: "terminal" | "flag"; paths: string[] } };
+  answers: { newAccount?: AnswerHow; personalAccount?: AnswerHow; instructionFiles?: { how: AnswerHow; paths: string[] } };
   ask_for_notes: true | "flag" | "config";
   new_checks: string[] | null;
   no_start: boolean;
@@ -38,7 +40,7 @@ export interface SwitchRequest {
   created_at: string;
 }
 
-interface SwitchReply {
+export interface SwitchReply {
   exit_code: number;
   // The lines for standard error, and the result for --json.
   errors: string[];
@@ -155,6 +157,29 @@ export async function sendSwitchRequest(
     }
     await Bun.sleep(POLL_MS);
   }
+}
+
+// Hands a switch to the relay process that holds the job's agent (pre.supervisor), with the answers
+// the preflight collected, and returns its reply. relay switch and the daemon's switch endpoint use
+// it.
+export async function handSwitchOver(
+  relayHome: string, pre: Preflight, options: { newChecks: string[] | null; noStart: boolean }, print: (line: string) => void,
+): Promise<SwitchReply> {
+  const supervisor = pre.supervisor!;
+  if (!supervisor.checked) {
+    throw new CommandError(ExitCode.CannotStop, [`The relay run for this job (process ${supervisor.pid}) did not answer within 5 seconds. Nothing changed.`]);
+  }
+  const personal = pre.confirmations.find((confirmation) => confirmation.question.startsWith("This job ran on a work account"));
+  return sendSwitchRequest(relayHome, pre.job.id, supervisor, {
+    to: pre.to.id,
+    answers: {
+      ...(pre.allowed === null ? {} : { newAccount: pre.allowed.how }),
+      ...(personal === undefined ? {} : { personalAccount: personal.how }),
+      ...(pre.instructionFiles === null ? {} : { instructionFiles: { how: pre.instructionFiles.how, paths: pre.instructionFiles.paths } }),
+    },
+    ask_for_notes: pre.askForNotes, new_checks: options.newChecks, no_start: options.noStart,
+    client_pid: process.pid, created_at: new Date().toISOString(),
+  }, print);
 }
 
 // relay run's side: takes the oldest request, renaming it so that it is taken once. Returns null

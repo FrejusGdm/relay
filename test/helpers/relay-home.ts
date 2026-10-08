@@ -4,7 +4,7 @@
 // decision 22). Each test file calls removeTempRelayHomes in an afterAll hook, which also kills
 // any test daemon still running.
 import type { Subprocess } from "bun";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAIN } from "./cli";
@@ -60,4 +60,23 @@ export async function waitForDaemon(relayHome: string, timeoutMs = 5000): Promis
 export async function stopDaemon(child: Subprocess): Promise<number | null> {
   child.kill("SIGTERM");
   return child.exited;
+}
+
+// Stops the daemon that a relay command started in relayHome (relay run and relay switch start one
+// when RELAY_TEST_START_DAEMON=1), found through its pid file, and waits until it is gone. Only a
+// process whose command line is relay's daemon is signalled.
+export async function stopStartedDaemon(relayHome: string): Promise<void> {
+  let pid: number;
+  try {
+    pid = (JSON.parse(readFileSync(join(relayHome, "run", "daemon.pid"), "utf8")) as { pid: number }).pid;
+  } catch {
+    return;
+  }
+  const isDaemon = () =>
+    Bun.spawnSync(["ps", "-o", "args=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().includes("daemon run");
+  if (!isDaemon()) return;
+  process.kill(pid, "SIGTERM");
+  const deadline = Date.now() + 45_000;
+  while (isDaemon() && Date.now() < deadline) await Bun.sleep(50);
+  if (isDaemon()) process.kill(pid, "SIGKILL");
 }

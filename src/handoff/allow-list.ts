@@ -14,7 +14,7 @@ import type { Repository } from "../git/repo";
 import { parseToml } from "../platform/toml";
 import { policyOf } from "../policies/load";
 import { accountLabel } from "./account";
-import { isYes, type AnswerHow, type Asker } from "./ask";
+import { isYes, PersonNeeded, type AnswerHow, type Asker } from "./ask";
 
 interface AllowRequest {
   asker: Asker;
@@ -57,16 +57,17 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
     : "Nothing changed.";
   const hint = `Run "relay ${request.command} ${to.id}" in a terminal, or add --yes.`;
 
-  // When a relay run performs a switch for relay switch in another terminal, relay switch has asked
-  // the person and written the answer to config.toml, and its answers arrive as `asker.preset`.
-  // The relay run then only reads them: it neither asks again nor writes, and its own copy of
-  // config.toml, read when it started, does not decide whether the account is new.
-  const answeredElsewhere = asker.preset !== undefined;
+  // When a relay run performs a switch that relay switch or the daemon handed to it, the process that
+  // asked has already written the answer to config.toml, and its answers arrive as `asker.preset`
+  // with `recorded`. The relay run then only reads them: it neither asks again nor writes, and its
+  // own copy of config.toml, read when it started, does not decide whether the account is new. An
+  // answer given through the local API (a preset without `recorded`) is still written here.
+  const answeredElsewhere = asker.preset?.recorded === true;
   const isNew = answeredElsewhere ? asker.preset!.newAccount !== undefined : !entry?.allow.includes(to.id);
   if (isNew) {
     const question = `This sends the repository and the job notes to ${company} through the account ${to.id}. Continue? [y/N]`;
     const how = asker.preset?.newAccount ?? await answer(asker, question, [`${to.id} has not worked on this project before. Sending the repository to ${company} needs your yes.`, hint], nothingChanged,
-      request.from?.provider === to.provider ? [policyOf(to.provider).ownAccountsNote] : []);
+      request.from?.provider === to.provider ? [policyOf(to.provider).ownAccountsNote] : [], true);
     result.allowed = { account: to.id, company, how };
     result.confirmations.push({ question, how });
   }
@@ -83,8 +84,9 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
 }
 
 // The lines in `before` (a policy note or a warning) are printed also when --yes answers.
-async function answer(asker: Asker, question: string, needsYes: string[], refusal: string, before: string[]): Promise<AnswerHow> {
-  if (!asker.yes && !asker.terminal) throw new CommandError(ExitCode.NeedsPerson, needsYes);
+// `newAccount` marks the question that the local API's confirm_new_provider answers.
+async function answer(asker: Asker, question: string, needsYes: string[], refusal: string, before: string[], newAccount = false): Promise<AnswerHow> {
+  if (!asker.yes && !asker.terminal) throw new PersonNeeded(ExitCode.NeedsPerson, needsYes, newAccount ? question : null);
   for (const line of before) asker.say(line);
   if (asker.yes) return "flag";
   if (isYes(await asker.ask(question))) return "terminal";

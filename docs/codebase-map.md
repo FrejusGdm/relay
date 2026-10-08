@@ -25,8 +25,8 @@ flowchart TD
     adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>mapper.ts, worker.ts: shared parts of the workers<br/>claude/: adapter, stream mapper, headless and<br/>interactive workers, hook mapper<br/>codex/: adapter, rpc, protocol, app-server and<br/>exec mappers and workers, interactive worker<br/>each: policy.toml, tested-versions.json;<br/>codex/protocol-used.json"]
     policies["src/policies/<br/>schema.ts, load.ts: the policy files<br/>switching.ts: mayAutoSwitch"]
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
-    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list<br/>spool.ts: drains the hook spool at start"]
-    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs, events, hooks"]
+    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list<br/>spool.ts: drains the hook spool at start<br/>operations.ts: one checkpoint or switch per job<br/>engines.ts: the only calls into the checkpoint<br/>and switch engines<br/>workers.ts: the agents the daemon started"]
+    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>engine-errors.ts: engine errors as API errors<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs,<br/>actions (checkpoint and switch), events, hooks"]
     status["src/status/<br/>model.ts: rows, roles, closing sentence<br/>render-text.ts, render-json.ts, time-format.ts<br/>sources.ts: the saved state without the daemon"]
     state["src/state/<br/>schema.sql, db.ts: relay.db<br/>index-builder.ts, apply-event.ts: filling it<br/>queries.ts, availability.ts: reading it<br/>projects-list.ts: projects.list"]
     client["src/client/<br/>api-client.ts: the only fetch, over the socket<br/>ensure-daemon.ts: starts the daemon"]
@@ -47,9 +47,9 @@ flowchart TD
     coretests["core/: paths, relay folder, settings and log tests<br/>fixtures/config/: settings files"]
     fake["fixtures/fake-provider/<br/>guard programs, fake agent, scenarios"]
     buildtests["build/: no-network.test.ts"]
-    daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream<br/>hooks/delivery, mapping, spool-drain: hook events<br/>reaching the daemon; fixtures/hooks/: hook payloads<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
+    daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream,<br/>checkpoint and switch endpoints<br/>client/: the daemon started by relay switch<br/>hooks/delivery, mapping, spool-drain: hook events<br/>reaching the daemon; fixtures/hooks/: hook payloads<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
-    handofftests["handoff/, config/: the handoff parts and the switch<br/>handoff/job.ts, asker.ts, switch-helpers.ts: jobs,<br/>questions, scenario files and terminals<br/>e2e/: whole handoffs with the relay program<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/, fixtures/e2e/:<br/>test outputs, checkpoint.md files and prompts"]
+    handofftests["handoff/, config/: the handoff parts and the switch<br/>handoff/job.ts, asker.ts, switch-helpers.ts: jobs,<br/>questions, scenario files and terminals<br/>e2e/: whole handoffs with the relay program,<br/>hook attribution and the daemon and status path<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/, fixtures/e2e/:<br/>test outputs, checkpoint.md files and prompts"]
     runtests["run/: relay run with the fake agents,<br/>headless, interactive and end to end"]
     adaptertests["adapters/, accounts/, policies/, docs/:<br/>adapter core, accounts, policies and document tests<br/>adapters/contract.ts, fixtures.ts, registry.ts:<br/>the contract suite<br/>fixtures/providers/: the provider fixtures<br/>helpers/child.ts, helpers/fake-programs.ts"]
   end
@@ -197,8 +197,19 @@ writes each change to the event stream in `src/api/sse.ts`. The routes read the 
 `src/client/api-client.ts`, or else builds the saved state with `src/status/sources.ts` (an index
 in memory, a read-only `relay.db` and the hook spool read with `src/hooks/mapping.ts`), turns the
 data into rows with `src/status/model.ts`, and prints them with `src/status/render-text.ts` or
-`render-json.ts`. `src/client/ensure-daemon.ts` also has `ensureDaemon`, which `relay run` and
-`relay switch` will call. `docs/daemon.md` describes the daemon,
+`render-json.ts`. `src/client/ensure-daemon.ts` also has `ensureDaemon`, which `relay run` (in `src/run/run.ts`) and
+`relay switch` call before they start an agent.
+
+`src/api/routes/actions.ts` answers `POST /v1/jobs/{job}/checkpoint` and `POST
+/v1/jobs/{job}/switch`. It takes the project folder from the index and runs one operation per job
+through `src/daemon/operations.ts`, which also lets the daemon's shutdown wait for running
+operations. `src/daemon/engines.ts` is the only daemon file that calls the engines: `saveCheckpoint`
+for a checkpoint, and for a switch the preflight of `src/handoff/preflight.ts`, then either
+`handSwitchOver` in `src/run/control.ts` (when a `relay run` holds the agent) or a `JobSupervisor`
+from `src/run/run.ts` that runs `performHandoff` and supervises the next agent inside the daemon.
+`src/daemon/workers.ts` keeps those supervisors, lists their agents in `agents_running` and stops
+them when the daemon stops. `src/api/engine-errors.ts` turns the engines' errors into the API's
+error answers; `PersonNeeded` in `src/handoff/ask.ts` marks the questions the API cannot answer. `docs/daemon.md` describes the daemon,
 its files, the index, `relay status` and the checks on the way to an answer in diagrams, and `docs/api.md` describes
 every endpoint. The tests in `test/platform/`, `test/daemon/`, `test/api/`, `test/state/`,
 `test/client/` and `test/status/` (with its golden files in `test/status/golden/`) use the
@@ -347,8 +358,9 @@ switch in a fixed order after `preflight.ts` has done every check that changes n
 the journal of `journal.ts` after each step that changes something, records the handoff in git
 with `commit.ts`, builds the events with `events.ts`, and keeps the private record of each handoff
 with `handoff-record.ts`. The relay process that holds the agent stops and starts agents: that is
-`JobSupervisor` in `src/run/run.ts`, which `relay run` and `src/cli/commands/switch.ts` share, and
-`src/run/control.ts` lets a `relay switch` in another terminal hand it a switch request.
+`JobSupervisor` in `src/run/run.ts`, which `relay run`, `src/cli/commands/switch.ts` and the daemon
+share, and `src/run/control.ts` lets a `relay switch` in another terminal, or the daemon, hand it a
+switch request.
 `account.ts` turns the command's argument into an account, and `settings.ts` keeps each
 job's mode, permission ceiling and checks in `RELAY_HOME/jobs/<job>/handoff-settings.json`, written
 through `files.ts`. `checks.ts` runs the job's checks and `check-parsers/` reads their counts.

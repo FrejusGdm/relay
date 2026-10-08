@@ -2,6 +2,7 @@
 // they use an endpoint (decision 16). stream_epoch changes whenever the index, and with it the
 // event stream's numbering, is rebuilt (the Mac app proposal, design decision 17, requirement C).
 import type { Database } from "bun:sqlite";
+import type { RunningAgent } from "../../client/api-client";
 import { VERSION } from "../../core/version";
 import { streamEpoch } from "../../state/db";
 import type { Route } from "../router";
@@ -13,11 +14,11 @@ export interface DaemonInfo {
   schema_version: number;
 }
 
-// Each task group that adds endpoints adds their capability here; jobs.checkpoint and jobs.switch
-// come later.
-const CAPABILITIES = ["accounts", "jobs", "events.sse", "hooks"];
+const CAPABILITIES = ["accounts", "jobs", "events.sse", "jobs.checkpoint", "jobs.switch", "hooks"];
 
-export function versionRoute(daemon: DaemonInfo, db: Database): Route {
+// `agents` lists the headless agents the daemon started that still run; relay daemon stop reads it
+// (decision 7, step 4).
+export function versionRoute(daemon: DaemonInfo, db: Database, agents: () => RunningAgent[] = () => []): Route {
   return {
     method: "GET",
     path: "/v1/version",
@@ -30,7 +31,7 @@ export function versionRoute(daemon: DaemonInfo, db: Database): Route {
         schema_version: daemon.schema_version,
         stream_epoch: streamEpoch(db),
         capabilities: CAPABILITIES,
-        agents_running: [],
+        agents_running: agents(),
       })),
   };
 }

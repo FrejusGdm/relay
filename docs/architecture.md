@@ -137,10 +137,10 @@ writes `.relay/checkpoint.md` and starts Codex with a short prompt. The prompt t
 the task and the checkpoint, to check the previous agent's claims in `.relay/verify.md`, and then
 to continue.
 
-The parts of the handoff that the switch uses (checks, notes, `checkpoint.md`, the secret scan, the
-allow list) are on `main` from `add-relay-switch` task groups 1 to 4. The switch engine that joins
-them, the `relay switch` command and the end-to-end tests (task groups 5 to 7) are not built yet.
-`docs/handoff.md` describes each step in detail.
+The parts of the handoff (checks, notes, `checkpoint.md`, the secret scan, the allow list), the
+switch engine that joins them and the `relay switch` command are on `main` from `add-relay-switch`.
+The daemon's switch endpoint calls the same engine. `docs/handoff.md` describes each step in
+detail.
 
 ## What lives where on disk
 
@@ -196,13 +196,15 @@ flowchart LR
   subgraph clients["Clients"]
     direction TB
     daemoncmd["relay daemon start, status, stop,<br/>relay doctor --reindex"]
+    runswitch["relay run, relay switch<br/>(start the daemon on demand)"]
     status["relay status"]
     mac["Mac menu-bar app"]
     hook["relay hook"]
   end
 
   daemoncmd --> sock
-  status -.->|"in review, #18"| sock
+  runswitch --> sock
+  status --> sock
   mac --> sock
   hook --> sock
 
@@ -212,13 +214,11 @@ flowchart LR
   router --> reads["Read endpoints<br/>GET /v1/version, /v1/providers,<br/>/v1/accounts, /v1/jobs,<br/>/v1/jobs/{job}/workers,<br/>/v1/jobs/{job}/checkpoints"]
   router --> sse["GET /v1/events<br/>the event stream (SSE)"]
   router --> hooks["POST /v1/hooks/{provider}/{event}<br/>queued, then recorded in events.jsonl,<br/>availability.json and the index"]
-  router -.-> actions["POST /v1/jobs/{job}/checkpoint<br/>POST /v1/jobs/{job}/switch"]
+  router --> actions["POST /v1/jobs/{job}/checkpoint<br/>POST /v1/jobs/{job}/switch<br/>through the checkpoint and switch engines"]
+  actions --> agents["Headless agents that a switch started,<br/>children of the daemon"]
   reads --> index[("relay.db")]
   sse --> index
   index -->|"filled from"| files["config.toml, projects.list,<br/>.relay/ files, refs/relay/"]
-
-  classDef later stroke-dasharray: 5 5
-  class actions later
 ```
 
 The daemon answers on a Unix socket, a special file that only programs on the same computer can
@@ -230,19 +230,26 @@ refused.
 The read endpoints answer with JSON from the index. The event stream, `GET /v1/events`, uses
 server-sent events (SSE): the connection stays open and the daemon sends each new event as it
 happens, so a client does not have to ask again and again. The Mac app reads both the read
-endpoints and the event stream. `relay status`, in review in pull request #18, reads the read
-endpoints once and prints the job, its latest checkpoint and the availability of each account;
-when the daemon is not running, it builds the same view from the files. `relay hook` sends each
+endpoints and the event stream. `relay status` reads the read endpoints once and prints the job,
+its latest checkpoint and the availability of each account; when the daemon is not running, it
+builds the same view from the files. `relay hook` sends each
 hook event to `POST /v1/hooks/{provider}/{event}`; the daemon puts it on a queue, answers at once,
 and then records it in the job's event log, the account's `availability.json` and the index
 (`docs/hooks.md`).
 
-On `main`: the socket, the peer check, the read endpoints, the event stream and the `relay daemon`
-commands (`add-daemon-api-and-status` task groups 1 to 6), and the Mac app's client
-(`add-mac-menu-bar-app` task groups 1 to 3). Hook events sent straight to the daemon (task group
-8) are in review. Still to come: the checkpoint and switch endpoints (task group 7) and the
-end-to-end test (task group 11). `docs/daemon.md` and `docs/api.md` describe the
-daemon and every endpoint.
+`POST /v1/jobs/{job}/checkpoint` and `POST /v1/jobs/{job}/switch` call the same engines as `relay
+checkpoint` and `relay switch`, one operation per job at a time, with the project folder taken from
+the index. A switch through the daemon asks nothing it cannot ask: the first handoff to a new
+account needs `confirm_new_provider`, and a job whose agents run in a terminal gets `409
+interactive_start_required`. When no `relay run` holds the job's agent, the next agent runs
+headless as a child of the daemon, and `relay daemon stop` refuses without `--force` while it
+runs. `relay run` and `relay switch` start the daemon when it is not running, so the agents' hooks
+have a receiver.
+
+All of `add-daemon-api-and-status` is built: the socket, the peer check, the read endpoints, the
+event stream, the hooks, `relay status`, the checkpoint and switch endpoints, starting on demand
+and the end-to-end test. The Mac app's client is on `main` from `add-mac-menu-bar-app`.
+`docs/daemon.md` and `docs/api.md` describe the daemon and every endpoint.
 
 ## The safety rules
 

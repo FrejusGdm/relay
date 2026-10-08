@@ -9,6 +9,8 @@ import { Http1Connection, REQUEST_DEADLINE_MS } from "./http1";
 import type { Router } from "./router";
 
 export interface ApiServer {
+  // Stops accepting connections; a new connection attempt is refused. Open ones go on.
+  refuse(): void;
   // Stops accepting connections, lets open ones finish for up to waitMs, then closes the rest.
   stop(waitMs?: number): Promise<void>;
 }
@@ -78,9 +80,15 @@ export function startApiServer(opts: ServerOptions): ApiServer {
     },
   });
 
+  let accepting = true;
+  const refuse = () => {
+    if (accepting) listener.stop(false);
+    accepting = false;
+  };
   return {
+    refuse,
     async stop(waitMs = REQUEST_DEADLINE_MS) {
-      listener.stop(false);
+      refuse();
       const deadline = Date.now() + waitMs;
       while (open.size > 0 && Date.now() < deadline) await Bun.sleep(20);
       for (const socket of open) socket.terminate();
