@@ -1,8 +1,8 @@
 # Codebase map
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
-`add-checkpoint-engine`, task groups 1 to 4 of `add-handoff-evaluation`, and task groups 1 to 7
-of `add-website`.
+`add-checkpoint-engine`, task groups 1 and 2 of `add-provider-adapters`, task groups 1 to 4 of
+`add-handoff-evaluation`, and task groups 1 to 7 of `add-website`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
 `docs/first-version-index.md` lists every file that the six first-version changes will add, and
@@ -18,12 +18,13 @@ flowchart TD
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml"]
-    platform["src/platform/<br/>toml.ts: the only Bun-specific call"]
-    adapters["src/adapters/<br/>providers.ts: the list of providers"]
+    platform["src/platform/<br/>toml.ts: the only Bun-specific call<br/>clock.ts: now() and, for tests, setClock()"]
+    adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times"]
+    accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: the provider's own folders"]
     daemon["src/daemon/<br/>empty until add-daemon-api-and-status"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
     job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock and the events lock<br/>exclude.ts: the /.relay/ exclude line"]
-    secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names"]
+    secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names<br/>redact.ts: secret-looking values in facts"]
     text["src/text/<br/>invisible.ts: the one list<br/>of invisible characters"]
   end
 
@@ -36,9 +37,11 @@ flowchart TD
     coretests["core/: paths, relay folder, settings and log tests<br/>fixtures/config/: settings files"]
     fake["fixtures/fake-provider/<br/>guard programs, fake agent, scenarios"]
     buildtests["build/: no-network.test.ts"]
+    fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
+    adaptertests["adapters/, accounts/, docs/:<br/>adapter core, environment and document tests<br/>helpers/child.ts: a child for the process tests"]
   end
 
-  scripts["scripts/smoke-test.sh:<br/>runs a built program"]
+  scripts["scripts/smoke-test.sh: runs a built program<br/>scripts/check-release-binary.sh:<br/>no fake agent in the program"]
   ci[".github/workflows/ci.yml: the CI checks<br/>.github/dependabot.yml: weekly updates"]
 
   pkg -->|"bun run relay"| cli
@@ -70,6 +73,12 @@ flowchart TD
   jobtests -->|"check"| job
   jobtests -->|"check"| secrets
   jobtests -->|"check"| checkpoint
+  adapters -->|"reads the time from"| platform
+  accounts -->|"finds the home and relay folders with"| core
+  fakes -->|"fake-adapter.ts implements the interface of"| adapters
+  adaptertests -->|"start fake-claude through process.ts"| fakes
+  adaptertests -->|"check"| adapters
+  adaptertests -->|"check"| accounts
 ```
 
 The diagram shows how the pieces connect. `bun run relay` starts `src/cli/main.ts`, which passes
@@ -99,8 +108,29 @@ command's handler, and `src/cli/main.ts` uses it to record a signal that stops r
 files" section of `docs/cli.md` describes the events, the fields and what is never logged.
 
 `src/platform/` holds calls that only work on Bun, so that a later move to another runtime
-changes one folder. `src/adapters/providers.ts` names the two supported providers, `claude` and
+changes one folder, and `clock.ts`, the one clock that every comparison with a reset time or a
+file's age reads. `src/adapters/providers.ts` names the two supported providers, `claude` and
 `codex`. `src/daemon/` only holds a README until the change named in the diagram fills it.
+
+`src/adapters/` holds the adapter interface of `add-provider-adapters` in `types.ts` and the
+registry that gives each provider's adapter in `registry.ts`; the Claude Code and Codex adapters
+themselves come in later task groups. `process.ts` is the only code that starts an agent process:
+headless agents in their own process group with their output drained into a worker log of mode
+0600, interactive agents in the person's terminal, and signals only through the child relay holds.
+`test/adapters/no-other-spawn.test.ts` fails if another file under `src/adapters/` starts a process.
+`lines.ts` splits output into whole lines, `text.ts` encodes TOML strings for Codex, and
+`reset-time.ts` reads the reset times of usage limits. `src/accounts/environment.ts` builds every
+agent's environment without credential variables, and `src/accounts/profile.ts` recognises the
+providers' own folders. `src/secrets/redact.ts` replaces secret-looking values in the facts relay
+records. `docs/adapters.md` describes all of these with diagrams.
+
+`test/fakes/` holds the fake agents that every adapter test runs instead of the real programs:
+`fake-claude.ts` and `fake-codex.ts` print the output formats of Claude Code and Codex and follow a
+scenario file (`scenario.ts`), record what they received (`record.ts`) and run installed hooks
+(`run-hooks.ts`). `fake-adapter.ts` implements the adapter interface in memory for tests of code
+that uses adapters, and `fake-t3.ts` is the fake T3 Code server of `add-t3-limit-rules`. `scripts/check-release-binary.sh` builds relay and fails if a fake reached the
+program; CI runs it after each build. `docs/testing-adapters.md` describes the fakes and the
+scenario format.
 
 `src/git/run.ts` is the only code that starts git. Every call gets settings that turn off hooks
 and the file-system monitor, an environment without the parent's `GIT_` variables, and checks that

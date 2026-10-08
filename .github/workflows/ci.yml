@@ -59,6 +59,7 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bun run build:${{ matrix.target }}
+      - run: bash scripts/check-release-binary.sh
       - if: runner.os == 'macOS'
         run: codesign -dv dist/relay-darwin-arm64
       - run: sh scripts/smoke-test.sh dist/relay-${{ matrix.target }} "$(bun -p 'require("./package.json").version')"

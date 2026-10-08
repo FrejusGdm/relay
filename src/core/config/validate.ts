@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { credentialNameProblem } from "../../accounts/environment";
 import { PROVIDERS, type Provider } from "../../adapters/providers";
 import { expandPath } from "../paths";
 import { quote } from "../quote";
@@ -141,6 +142,12 @@ export function validateConfig(
       credential_env: (childKey, child) => {
         if (Array.isArray(child) && child.every((name) => typeof name === "string" && VARIABLE_NAME.test(name))) {
           found.credentialEnv = child as string[];
+          // One provider's key must never reach another provider's program (add-provider-adapters,
+          // design decision 6).
+          for (const name of found.credentialEnv) {
+            const problem = parsed === null ? null : credentialNameProblem(parsed.provider, name);
+            if (problem !== null) add(childKey, `${name} is not allowed: ${problem}.`);
+          }
         } else {
           add(childKey, 'must be a list of variable names in capitals, for example "ANTHROPIC_API_KEY".');
         }

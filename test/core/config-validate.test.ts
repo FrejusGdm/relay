@@ -184,6 +184,16 @@ describe("Credentials are refused", () => {
     expect(problems.join("\n")).not.toContain(value);
   });
 
+  test("credential_env names only variables of the account's own provider", () => {
+    expect(validate('[accounts."codex:work"]\ncredential_env = ["OPENAI_API_KEY", "CODEX_API_KEY"]\n').problems).toEqual([]);
+    expect(validate('[accounts."claude:work"]\ncredential_env = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]\n').problems).toEqual([
+      'accounts."claude:work".credential_env: OPENAI_API_KEY is not allowed: claude accounts may only receive ANTHROPIC_ names or CLAUDE_CODE_OAUTH_TOKEN.',
+    ]);
+    expect(validate('[accounts."codex:work"]\ncredential_env = ["CODEX_HOME"]\n').problems).toEqual([
+      'accounts."codex:work".credential_env: CODEX_HOME is not allowed: codex accounts may only receive OPENAI_ names, or CODEX_ names other than CODEX_HOME, CODEX_THREAD_ID and CODEX_SANDBOX names.',
+    ]);
+  });
+
   test("a value placed in an allow list or defaults.account is not shown", () => {
     const { problems } = validate(`[defaults]\naccount = "${value}"\n\n[[projects]]\npath = "/p"\nallow = ["${value}"]\n`);
     expect(problems).toEqual([

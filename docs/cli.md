@@ -35,7 +35,7 @@ of the command line is wrong. `relay --version` prints `relay <version>`.
 A command that is not built yet prints `relay: <command> is not built yet. This version only
 reads your settings and shows help.` and exits with code 69. `relay hook` is the exception: agents
 call it from their hooks, so it never prints anything and exits with code 0, except when it is
-stopped by a signal (130 for SIGINT, 143 for SIGTERM). When its standard input is not a
+stopped by a signal (130 for SIGINT, 143 for SIGTERM or SIGHUP). When its standard input is not a
 terminal, it reads it to the end and discards it, also when its arguments are wrong.
 
 ## How a run works
@@ -98,7 +98,7 @@ flowchart LR
 
 The diagram shows where a log line comes from and where it goes. `runCli` in `src/cli/run.ts`
 writes the events of a run, the `relay hook` handler writes one event of its own, and the signal
-handlers in `src/cli/main.ts` write an event when Control-C or `SIGTERM` stops relay. All of them
+handlers in `src/cli/main.ts` write an event when Control-C, `SIGTERM` or `SIGHUP` stops relay. All of them
 go through the same logger. The logger drops an entry whose level is below the active level.
 Otherwise it checks whether the entry still fits in the current file, rotates the files when it
 does not, and appends the entry as one line. The diagram names `cli.log`, and `hook.log` rotates
@@ -140,7 +140,7 @@ to the log by mistake.
 | `settings invalid` | `warn` | `path`, `problems` (how many) | `config.toml` or `RELAY_LOG_LEVEL` is wrong. |
 | `command finished` | `info` | `exit_code`, `duration_ms` | Last entry of every logged run. |
 | `unexpected error` | `error` | `error_name`, `stack` (the stack frames only) | An error that no command handles, just before relay exits with code 70. The error message is never logged. |
-| `command interrupted` | `warn` | `signal` (`SIGINT` or `SIGTERM`) | Control-C or `SIGTERM` stopped relay. |
+| `command interrupted` | `warn` | `signal` (`SIGINT`, `SIGTERM` or `SIGHUP`) | Control-C, `SIGTERM` or a closed terminal (`SIGHUP`) stopped relay. |
 | `hook ignored: not built yet` | `info` | `provider`, `event` | `relay hook` ran. `provider` is `null` unless it is `claude` or `codex`. `event` is `null` unless it is one of that provider's hook events listed below. |
 | `hook usage error` | `info` | `arguments` (how many words follow `hook`) | `relay hook` got a wrong command line. |
 
@@ -237,7 +237,7 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |
 | 130 | `Interrupted` | Stopped by SIGINT (Control-C). |
-| 143 | `Terminated` | Stopped by SIGTERM. |
+| 143 | `Terminated` | Stopped by SIGTERM, or by SIGHUP when its terminal closed. |
 
 The codes 64 to 78 follow the BSD `sysexits.h` convention, and 130 and 143 follow the shell
 convention of 128 plus the signal number.
