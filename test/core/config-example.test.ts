@@ -13,4 +13,15 @@ test("docs/config.example.toml has no problems and three accounts", () => {
   expect(config.projects).toEqual([
     { path: "/Users/josue/projects/relay", allow: ["claude:personal", "codex:personal"] },
   ]);
+  expect(config.t3).toEqual({
+    url: "http://127.0.0.1:3773/mcp",
+    projects: ["/Users/josue/projects/relay"],
+    instances: [
+      { id: "claude", account: "claude:personal", model: null },
+      { id: "codex", account: "codex:personal", model: "gpt-6.1-sol" },
+    ],
+  });
+  expect(config.limits).toEqual([
+    { account: "claude:personal", window: "seven_day", threshold: 90, action: null, switchTo: "codex:personal" },
+  ]);
 });

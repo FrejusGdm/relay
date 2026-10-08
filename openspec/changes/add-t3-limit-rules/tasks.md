@@ -33,7 +33,7 @@ provider or a real T3 Code: they use the fake T3 server of task 4.1, phase 3's `
 
 - [ ] 2.1 Add the `[t3]`, `[t3.instances.<id>]` and `[limits."<account>".<window>]` tables to
   phase 1's settings schema, `docs/config.md` and `docs/config.example.toml` (design.md 5). Verify
-  with `bun test test/config/t3-settings.test.ts test/config/limits-settings.test.ts`, which cover
+  with `bun test test/core/config-t3.test.ts test/core/config-limits.test.ts`, which cover
   every scenario of the `t3-connection` requirement "T3 settings" and of the `limit-rules`
   requirements "Rule settings" and "Switch targets are checked", each with exit code 78.
 - [ ] 2.2 Add `src/limits/rules.ts` with the defaults of the `limit-rules` requirement
@@ -64,20 +64,21 @@ provider or a real T3 Code: they use the fake T3 server of task 4.1, phase 3's `
 
 ## 4. Connecting to T3 Code
 
-- [ ] 4.1 Add `test/fakes/fake-t3.ts` (design.md 12): an MCP server built with the SDK's server
-  classes on a random `127.0.0.1` port, with the tools of design.md 1, scripted projects and
-  threads, OAuth endpoints with a fixed pairing code, a call log, and switches for `401`, "no
-  answer" and "old build" (no `t3_thread_configure`). Verify with `bun test
+- [x] 4.1 Add `test/fakes/fake-t3.ts` (design.md 12): an MCP server built with
+  `@modelcontextprotocol/server` and `createMcpHandler` on a random `127.0.0.1` port, with an
+  in-process `fetch`, the tools of design.md 1, scripted projects and threads, a call log, and
+  switches for `401`, "no answer" and "old build" (no `t3_thread_configure`). Verify with `bun test
   test/fakes/fake-t3.test.ts`, which lists the tools, runs one scripted thread from `running` to
   `failed`, and checks the call log.
-- [ ] 4.2 Add `@modelcontextprotocol/sdk` with `bun add` and `src/t3/client.ts`: the Streamable
-  HTTP client, the tool allow list, two retries 30 seconds apart, and `logs/t3.log` without
+- [x] 4.2 Use the runtime dependency `@modelcontextprotocol/client` in `src/t3/client.ts`: the
+  Streamable HTTP client, the tool allow list, two retries 30 seconds apart, and `logs/t3.log` without
   message text, titles or the token (design.md 1). Verify with `bun test test/t3/client.test.ts`,
   which checks that calling `t3_thread_merge_back` throws before any request reaches the fake
   server, the retry timing with the injectable clock, and that the log never contains the fake
   token or a thread title.
 - [ ] 4.3 Add `src/t3/oauth.ts` (design.md 3 and 4): the `OAuthClientProvider`, the loopback
-  listener, and storage with `Bun.secrets`. First confirm that the pinned Bun has `Bun.secrets`;
+  listener, and storage with `Bun.secrets`. Add OAuth endpoints with a fixed pairing code to
+  `test/fakes/fake-t3.ts`. First confirm that the pinned Bun has `Bun.secrets`;
   if not, stop and report it. Verify with `bun test test/t3/oauth.test.ts`, which signs in to the
   fake server with an injected browser opener, checks a wrong `state` is refused, checks the
   listener closes after 120 seconds, and checks the scenario "Nothing on disk" by searching every

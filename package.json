@@ -22,8 +22,13 @@
     "build:linux-x64": "bun build ./src/cli/main.ts --compile --target=bun-linux-x64 --minify --sourcemap --no-compile-autoload-dotenv --no-compile-autoload-bunfig --outfile=dist/relay-linux-x64"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
     "@playwright/test": "1.63.0",
     "@types/bun": "1.4.2",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "zod": "4.6.5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1"
   }
 }

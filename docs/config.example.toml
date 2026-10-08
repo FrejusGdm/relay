@@ -36,3 +36,22 @@ credential_env = []
 [[projects]]
 path = "~/projects/relay"
 allow = ["claude:personal", "codex:personal"]
+
+# Connect only to T3 Code on this computer. The token stays in the credential store.
+[t3]
+url = "http://127.0.0.1:3773/mcp"
+# relay may manage threads in these project folders.
+projects = ["~/projects/relay"]
+
+# Map each T3 provider instance to the relay account it uses.
+[t3.instances.claude]
+account = "claude:personal"
+
+[t3.instances.codex]
+account = "codex:personal"
+model = "gpt-6.1-sol"
+
+# Keep 10 percent of the weekly Claude limit. A target defaults the action to switch.
+[limits."claude:personal".seven_day]
+threshold = 90
+switch_to = "codex:personal"
