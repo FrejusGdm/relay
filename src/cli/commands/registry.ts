@@ -1,23 +1,35 @@
 import type { LogLevel, RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
-import { buildAgentEnv } from "../../accounts/environment";
-import { readCodexHookTrust } from "../../adapters/codex/hooks";
-import { acceptGitChanges } from "./accept-git-changes";
-import { account } from "./account";
-import { checkpoint } from "./checkpoint";
-import { checkpoints } from "./checkpoints";
-import { daemon } from "./daemon";
-import { doctor } from "./doctor";
-import { hook } from "./hook";
-import { hooksCommand } from "./hooks";
-import { init } from "./init";
 import { notBuilt } from "./not-built";
-import { policy } from "./policy";
-import { providers } from "./providers";
-import { rollback } from "./rollback";
-import { status } from "./status";
-import { statusline, statuslineWithoutSettings } from "./statusline";
+
+// Each command's module is loaded only when that command runs. relay hook and relay statusline run
+// on every agent event and must finish quickly, so they never load the database or git code
+// (add-daemon-api-and-status, design decision 18).
+type Handler = (ctx: CommandContext) => Promise<number>;
+const lazy = <K extends string>(load: () => Promise<Record<K, Handler>>, name: K): Handler =>
+  async (ctx) => (await load())[name](ctx);
+const acceptGitChanges = lazy(() => import("./accept-git-changes"), "acceptGitChanges");
+const account = lazy(() => import("./account"), "account");
+const checkpoint = lazy(() => import("./checkpoint"), "checkpoint");
+const checkpoints = lazy(() => import("./checkpoints"), "checkpoints");
+const daemon = lazy(() => import("./daemon"), "daemon");
+const doctor = lazy(() => import("./doctor"), "doctor");
+const hook = lazy(() => import("./hook"), "hook");
+const init = lazy(() => import("./init"), "init");
+const policy = lazy(() => import("./policy"), "policy");
+const providers = lazy(() => import("./providers"), "providers");
+const rollback = lazy(() => import("./rollback"), "rollback");
+const status = lazy(() => import("./status"), "status");
+const statusline = lazy(() => import("./statusline"), "statusline");
+const hooks: Handler = async (ctx) =>
+  (await import("./hooks")).hooksCommand(async (hookAccount, context) => {
+    const [{ readCodexHookTrust }, { buildAgentEnv }] = await Promise.all([
+      import("../../adapters/codex/hooks"),
+      import("../../accounts/environment"),
+    ]);
+    return readCodexHookTrust(hookAccount, buildAgentEnv(hookAccount, context.env), context.homedir);
+  })(ctx);
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
@@ -275,7 +287,7 @@ export const COMMANDS: CommandDef[] = [
     maxArgs: 2,
     quiet: false,
     built: true,
-    handler: hooksCommand((account, ctx) => readCodexHookTrust(account, buildAgentEnv(account, ctx.env), ctx.homedir)),
+    handler: hooks,
   },
   {
     name: "hook",
@@ -310,7 +322,7 @@ export const COMMANDS: CommandDef[] = [
     quiet: true,
     built: true,
     handler: statusline,
-    withoutSettings: statuslineWithoutSettings,
+    withoutSettings: async (ctx) => (await import("./statusline")).statuslineWithoutSettings(ctx),
   },
   {
     name: "daemon",

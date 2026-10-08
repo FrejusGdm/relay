@@ -10,7 +10,8 @@ receives the account's usage numbers.
 relay changes these files only when you ask, keeps a copy of the old file, and touches only its
 own entries. The design is decisions 13 and 14 of
 `openspec/changes/add-provider-adapters/design.md`, and the rules are in its `provider-hook-setup`
-spec. The daemon of `add-daemon-api-and-status` later receives the same events directly.
+spec. When the relay daemon runs, it receives the same events directly ("How hook events reach the
+daemon" below, from decision 18 of `openspec/changes/add-daemon-api-and-status/design.md`).
 
 ## What each hook records
 
@@ -20,8 +21,9 @@ spec. The daemon of `add-daemon-api-and-status` later receives the same events d
 | Codex | `hooks.json` | `SessionStart`, `Stop`, `SessionEnd`, `Interrupt`, `PreCompact` |
 
 Each hook runs `'<relay path>' hook <provider> <Event>`. `relay hook` reads at most 1 MiB of the
-event's JSON for at most 200 ms, prints nothing, always exits with code 0, and appends one line to
-`spool/hooks.jsonl` in the relay folder (mode 0600). It keeps only these fields of the event:
+event's JSON for at most 200 ms, prints nothing, always exits with code 0, and sends one line to
+the relay daemon, or appends it to `spool/hooks.jsonl` in the relay folder (mode 0600) when no
+daemon accepts it. It keeps only these fields of the event:
 `session_id`, `cwd`, `hook_event_name`, `error`, `notification_type`, `reason`, `source`, `model`
 and `turn_id`. Everything else, such as the commands the agent ran (`tool_input`), the provider's
 error details and the agent's last message, is dropped before anything is written. The line also
@@ -65,6 +67,98 @@ relay finds the account from `RELAY_TARGET`, otherwise from the profile folder: 
 `~/.claude` or `~/.codex` belongs to the account that uses that folder. relay resolves the folder
 the same way for hook lines and for the status line, so `~/.relay/profiles/claude-work/` and
 `~/.relay/profiles/claude-work` name the same account.
+
+## How hook events reach the daemon
+
+When the relay daemon runs, `relay hook` gives it each event directly, so `relay status` and the
+Mac app see a limit as soon as the agent reports it. The spool is now the fallback for the times
+the daemon is not running.
+
+```mermaid
+flowchart TD
+  agent["Claude Code or Codex"] -->|"event JSON on standard input"| hook["relay hook claude StopFailure"]
+  hook -->|"allowed fields only, as one spool line"| post{"POST /v1/hooks/claude/StopFailure<br/>answered with 202 within 150 ms?"}
+  post -- yes --> queue["the daemon's hook queue"]
+  post -- "no: no daemon, no answer, or another error" --> spool["spool/hooks.jsonl"]
+  spool -->|"when the daemon starts"| drain["rename to hooks.&lt;pid&gt;.draining,<br/>wait 1 second, queue each line, delete"]
+  drain --> queue
+  queue --> find["find the worker, the job and the account"]
+  find -->|"with a job"| events[".relay/events.jsonl of the job:<br/>hook, worker_session_identified, availability"]
+  find -->|"without a job"| index["the index and the event stream"]
+  find -->|"when the availability changes"| record["accounts/&lt;provider&gt;-&lt;name&gt;/availability.json"]
+  events -->|"followed by the daemon"| index
+```
+
+The diagram shows the two ways an event can take. `relay hook` builds the same line it would write
+to the spool and sends it to the daemon over its private socket. When the daemon answers `202`
+within 150 ms, the hook is done; the daemon has put the event on an in-memory queue and records it
+afterwards, so the hook never waits for a file lock. When nothing answers in time, the hook appends
+the line to the spool instead. Either way, the hook process ends no later than 500 ms after it
+started, prints nothing and exits with code 0. The command-line tool loads each command's code
+only when that command runs, so `relay hook` never loads the database or git code.
+
+The daemon checks every line again before it uses it, because any program running as the same
+user can write to the socket or the spool: the provider must be `claude` or `codex`, the event a
+name of letters, digits and underscores, the job, account and worker names must have their usual
+formats, the profile must be `default` or an absolute path, the time must not be more than a
+minute ahead, and the fields go through the allow list once more. A line that fails a check is
+refused with `400` or, in the spool, skipped. The daemon also refuses connections from other users
+before it reads them.
+
+The daemon then finds where the event belongs:
+
+- **The worker:** the one named by `RELAY_WORKER`; otherwise the newest worker of `RELAY_JOB` on
+  `RELAY_TARGET`; otherwise the newest worker whose provider session ID is the event's
+  `session_id`.
+- **The job:** the worker's job; otherwise `RELAY_JOB`; otherwise the job of the known project
+  whose folder contains the event's `cwd`.
+- **The account:** `RELAY_TARGET`; otherwise the worker's account; otherwise the account whose
+  profile folder the event names (`default` means `~/.claude` or `~/.codex`). Only accounts in
+  `config.toml` count.
+
+With a job, the daemon appends a `hook` event to the job's `.relay/events.jsonl` with the provider,
+the event name and the allowed fields, and the index picks it up from there. Without a job, the
+event goes only to the event stream. On `SessionStart`, when the worker has no provider session ID
+yet and `session_id` is a UUID, the daemon also appends a `worker_session_identified` event, so
+the worker's session can be resumed later.
+
+### Draining the spool
+
+One second after it starts, the daemon renames `spool/hooks.jsonl` to `spool/hooks.<pid>.draining`
+(with its own process ID), waits one more second so that a hook that opened the old file has
+finished writing, puts each line on the hook queue in order and deletes the file once the queue
+has processed every line. A `.draining` file left by a daemon that stopped while draining is
+processed first. When the daemon stops before it has queued every line of a file, it keeps the
+file, and the next start processes it again from the beginning: the job's event log may then hold
+a `hook` event twice, but the availability does not change, because a reading never replaces a
+newer one. A hook that runs while the daemon is busy or starting is not lost: it either reaches
+the daemon or writes to a new `spool/hooks.jsonl`, which the next start of the daemon drains.
+
+### What each event changes in availability
+
+The daemon changes an account's availability only when it found the account, and only for these
+events. Every reading has the source `hook`, the time the hook received the event as
+`measured_at`, and no reset time (`retry_at` is null), because no hook event carries one.
+
+| Provider | Event | Condition | New availability | Reason |
+|---|---|---|---|---|
+| Claude Code | `StopFailure` | `error` is `rate_limit` | `rate_limited` | Claude Code reported a rate limit |
+| Claude Code | `StopFailure` | `error` is `billing_error` | `unavailable` | Claude Code reported a billing problem |
+| Claude Code | `StopFailure` | `error` is `authentication_failed` | `unavailable` | Claude Code is signed out of this account |
+| Claude Code | `StopFailure` | `error` is `oauth_org_not_allowed` | `unavailable` | This organization does not allow this login |
+| Claude Code | `StopFailure` | `error` is `account_on_hold` | `unavailable` | Claude Code reported that the account is on hold |
+| Claude Code | `Notification` | `notification_type` is `quota_auto_resume_fired` | `available` | Claude Code continued after its reset. |
+| Claude Code or Codex | `Stop` | none | `available` | The last turn finished normally |
+
+`StopFailure` with `overloaded` or `server_error` is an outage of the service, not of the account,
+so it is recorded in the job's event log and leaves the availability as it was; so does every
+other event. With a job, the reading is appended to `events.jsonl` as an `availability` event;
+without one, it goes to the index and the event stream directly. In both cases the daemon also
+updates the account's `availability.json`, so the reading survives a rebuild of the index.
+
+`relay account status`, which folds the spool when no daemon has emptied it, uses the older table
+in "What each hook records" above. Its reasons are worded differently, and it takes a reset time
+for a rate limit from the latest status-line reading.
 
 ## Installing hooks
 

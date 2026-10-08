@@ -92,7 +92,8 @@ sequenceDiagram
   C->>H: status line data with the five-hour and weekly usage
   H->>R: accounts/claude-personal/availability.json, with the reset time
   C->>H: StopFailure hook with the error rate_limit
-  H->>R: one line in spool/hooks.jsonl, later read as rate_limited
+  H->>D: the event, or one line in spool/hooks.jsonl when the daemon does not answer
+  D->>R: claude:personal is rate_limited
 
   Note over P,S: First version, the person starts the switch. Automatic failover is phase 7.
   P->>S: relay switch codex:personal
@@ -119,8 +120,9 @@ continues it. Steps 1 to 4 are on `main`: Claude Code runs relay's status-line c
 hooks, which the person installs once with `relay hooks install claude:personal --status-line`.
 The status line gives relay the usage of the five-hour and weekly windows with their reset times,
 and the `StopFailure` hook with the error `rate_limit` tells relay that the account is out of
-usage. The hook only appends a line to the spool file; `relay account status` (and later the
-daemon) reads that line and marks the account `rate_limited`.
+usage. The hook gives the event to the relay daemon, which marks the account `rate_limited`; when
+the daemon is not running, the hook appends a line to the spool file, which the daemon reads when
+it starts and `relay account status` reads in the meantime.
 
 In the first version the person starts the handoff by typing `relay switch codex:personal`, or
 later from the Mac app's switch sheet. Starting it automatically when a limit is reported is
@@ -202,14 +204,15 @@ flowchart LR
   daemoncmd --> sock
   status -.->|"in review, #18"| sock
   mac --> sock
-  hook -.->|"add-daemon-api-and-status 8"| sock
+  hook --> sock
 
   sock["run/relay.sock<br/>a Unix socket, mode 0600,<br/>in a folder of mode 0700"] --> peer{"Peer check:<br/>is the connecting user<br/>the daemon's user?"}
   peer -->|"no"| closed["Connection closed,<br/>nothing read"]
   peer -->|"yes"| router{"No Origin header,<br/>path under /v1/"}
   router --> reads["Read endpoints<br/>GET /v1/version, /v1/providers,<br/>/v1/accounts, /v1/jobs,<br/>/v1/jobs/{job}/workers,<br/>/v1/jobs/{job}/checkpoints"]
   router --> sse["GET /v1/events<br/>the event stream (SSE)"]
-  router -.-> actions["POST /v1/jobs/{job}/checkpoint<br/>POST /v1/jobs/{job}/switch<br/>POST /v1/hooks/{provider}/{event}"]
+  router --> hooks["POST /v1/hooks/{provider}/{event}<br/>queued, then recorded in events.jsonl,<br/>availability.json and the index"]
+  router -.-> actions["POST /v1/jobs/{job}/checkpoint<br/>POST /v1/jobs/{job}/switch"]
   reads --> index[("relay.db")]
   sse --> index
   index -->|"filled from"| files["config.toml, projects.list,<br/>.relay/ files, refs/relay/"]
@@ -229,13 +232,16 @@ server-sent events (SSE): the connection stays open and the daemon sends each ne
 happens, so a client does not have to ask again and again. The Mac app reads both the read
 endpoints and the event stream. `relay status`, in review in pull request #18, reads the read
 endpoints once and prints the job, its latest checkpoint and the availability of each account;
-when the daemon is not running, it builds the same view from the files.
+when the daemon is not running, it builds the same view from the files. `relay hook` sends each
+hook event to `POST /v1/hooks/{provider}/{event}`; the daemon puts it on a queue, answers at once,
+and then records it in the job's event log, the account's `availability.json` and the index
+(`docs/hooks.md`).
 
 On `main`: the socket, the peer check, the read endpoints, the event stream and the `relay daemon`
 commands (`add-daemon-api-and-status` task groups 1 to 6), and the Mac app's client
-(`add-mac-menu-bar-app` task groups 1 to 3). Still to come: the checkpoint and switch endpoints
-(task group 7), hook events sent straight to the daemon (task group 8; today they go to the spool
-file), and the end-to-end test (task group 11). `docs/daemon.md` and `docs/api.md` describe the
+(`add-mac-menu-bar-app` task groups 1 to 3). Hook events sent straight to the daemon (task group
+8) are in review. Still to come: the checkpoint and switch endpoints (task group 7) and the
+end-to-end test (task group 11). `docs/daemon.md` and `docs/api.md` describe the
 daemon and every endpoint.
 
 ## The safety rules
