@@ -16,6 +16,7 @@ import { notBuilt } from "./not-built";
 import { policy } from "./policy";
 import { providers } from "./providers";
 import { rollback } from "./rollback";
+import { run } from "./run";
 import { status } from "./status";
 import { statusline, statuslineWithoutSettings } from "./statusline";
 
@@ -82,17 +83,33 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "run",
-    usage: "relay run [<provider[:account]>]",
+    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]",
     argsUsage: "[<provider[:account]>]",
     summary: "Start an agent inside a relay job",
-    details: ["Without an account, relay uses defaults.account from your settings."],
-    examples: ["relay run", "relay run claude:personal"],
-    options: [],
+    details: [
+      "Without an account, relay uses defaults.account from your settings.",
+      "The agent works in your terminal, or with --headless on its own, and relay records what it did.",
+    ],
+    examples: [
+      "relay run",
+      "relay run claude:personal",
+      'relay run codex:personal --headless --prompt "Fix the failing test."',
+      "relay run claude:personal --resume last",
+    ],
+    options: [
+      { name: "headless", description: "Run the agent without your terminal" },
+      { name: "prompt", value: "<text>", description: "The first message for the agent" },
+      { name: "prompt-file", value: "<path>", description: "Read the first message from a file" },
+      { name: "resume", value: "<id>", description: "Continue a session, or the last one with last" },
+      { name: "permission", value: "<level>", description: "headless: read-only or edit-in-workspace" },
+      { name: "model", value: "<name>", description: "The model the agent uses" },
+      { name: "json", description: "headless: print each worker event as JSON" },
+    ],
     minArgs: 0,
     maxArgs: 1,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: run,
   },
   {
     name: "checkpoint",

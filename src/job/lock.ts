@@ -1,17 +1,19 @@
 // Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
 // Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
-// command that writes, the short events lock, held while one event is appended, and the config
-// lock, held while config.toml is changed (add-provider-adapters, design decision 10). A job lock
-// or config lock file holds its owner as JSON. It is written to a temporary file first and then
-// linked into place, which fails when the lock exists, so a reader never sees half an owner. The
-// events lock is an flock lock instead (add-daemon-api-and-status, design decision 9): the kernel
-// releases it when its holder dies, so a crash never leaves it held.
+// command that writes, the short events lock, held while one event is appended, the config lock,
+// held while config.toml is changed (add-provider-adapters, design decision 10), and the worker
+// lock, held while relay run supervises an agent (add-provider-adapters, design decision 15). A
+// job, config or worker lock file holds its owner as JSON. It is written to a temporary file first
+// and then linked into place, which fails when the lock exists, so a reader never sees half an
+// owner. The events lock is an flock lock instead (add-daemon-api-and-status, design decision 9):
+// the kernel releases it when its holder dies, so a crash never leaves it held.
 import { randomBytes } from "node:crypto";
 import { closeSync, linkSync, mkdirSync, openSync, readFileSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
+import { printable } from "../core/quote";
 import { lock, LockTimeout } from "../platform/file-lock";
 import { isJobId } from "./id";
 
@@ -22,11 +24,18 @@ interface Owner {
   host: string;
 }
 
+// The worker lock's owner. add-relay-switch adds fields; readers ignore the ones they do not know.
+interface WorkerOwner {
+  pid: number;
+  account: string;
+  started_at: string;
+}
+
 const RETRY_MS = 10;
 const SHORT_WAIT_MS = 2000;
 const RECOVERY_STALE_MS = 10_000;
 
-function lockPath(relayHome: string, jobId: string, suffix: "lock" | "events.lock"): string {
+function lockPath(relayHome: string, jobId: string, suffix: "lock" | "events.lock" | "worker.lock"): string {
   if (!isJobId(jobId)) throw new Error(`relay refused to use the job ID ${JSON.stringify(jobId)} in a path.`);
   const dir = join(relayHome, "locks");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -40,10 +49,10 @@ export function takeJobLock(relayHome: string, jobId: string, command: string): 
   for (let attempt = 0; attempt < 3; attempt++) {
     const release = tryLock(path, command);
     if (release !== null) return release;
-    const owner = readOwner(path);
+    const owner = readOwner(path, isOwner);
     if (owner === "gone") continue;
     if (owner !== null && isStale(owner.parsed)) {
-      recoverStale(path, owner.text);
+      recoverStale(path, owner.text, isOwner);
       continue;
     }
     const holder = owner === null ? "another relay command" : `relay ${owner.parsed.command}, process ${owner.parsed.pid}`;
@@ -52,6 +61,26 @@ export function takeJobLock(relayHome: string, jobId: string, command: string): 
     ]);
   }
   throw new CommandError(ExitCode.Busy, ["Another relay command is working on this job. Try again when it finishes."]);
+}
+
+// Holds the worker lock of the job for `account` and returns the function that releases it. Only
+// one agent works on a job at a time; a lock left by a process that no longer runs is replaced.
+export function takeWorkerLock(relayHome: string, jobId: string, account: string): () => void {
+  const path = lockPath(relayHome, jobId, "worker.lock");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const owner: WorkerOwner = { pid: process.pid, account, started_at: new Date().toISOString() };
+    const release = createLock(path, owner);
+    if (release !== null) return release;
+    const current = readOwner(path, isWorkerOwner);
+    if (current === "gone") continue;
+    if (current !== null && isStale(current.parsed)) {
+      recoverStale(path, current.text, isWorkerOwner);
+      continue;
+    }
+    const holder = current === null ? "" : ` (${printable(current.parsed.account)}, process ${current.parsed.pid})`;
+    throw new CommandError(ExitCode.Busy, [`Another agent is already working on this job${holder}.`]);
+  }
+  throw new CommandError(ExitCode.Busy, ["Another agent is already working on this job."]);
 }
 
 // Runs `action` while holding the events lock, trying every 10 ms for up to 2 seconds.
@@ -89,8 +118,8 @@ export function withConfigLock<T>(relayHome: string, action: () => T): T {
         release();
       }
     }
-    const owner = readOwner(path);
-    if (owner !== null && owner !== "gone" && isStale(owner.parsed)) recoverStale(path, owner.text);
+    const owner = readOwner(path, isOwner);
+    if (owner !== null && owner !== "gone" && isStale(owner.parsed)) recoverStale(path, owner.text, isOwner);
     if (Date.now() >= deadline) {
       throw new CommandError(ExitCode.Busy, ["Another relay command is changing config.toml. Try again when it finishes."]);
     }
@@ -100,7 +129,10 @@ export function withConfigLock<T>(relayHome: string, action: () => T): T {
 
 // Creates the lock with this process as its owner, or returns null when it exists.
 function tryLock(path: string, command: string): (() => void) | null {
-  const owner: Owner = { pid: process.pid, command, started_at: new Date().toISOString(), host: hostname() };
+  return createLock(path, { pid: process.pid, command, started_at: new Date().toISOString(), host: hostname() } satisfies Owner);
+}
+
+function createLock(path: string, owner: object): (() => void) | null {
   const text = `${JSON.stringify(owner)}\n`;
   const temporary = `${path}.${randomBytes(4).toString("hex")}.tmp`;
   const fd = openSync(temporary, "wx", 0o600);
@@ -119,13 +151,21 @@ function tryLock(path: string, command: string): (() => void) | null {
   }
   // Releasing removes the lock only while it still holds this owner.
   return () => {
-    const current = readOwner(path);
+    const current = readOwner(path, () => true);
     if (current !== null && current !== "gone" && current.text === text) unlinkSync(path);
   };
 }
 
+function isOwner(value: Owner): boolean {
+  return Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.host === "string" && typeof value.command === "string";
+}
+
+function isWorkerOwner(value: WorkerOwner): boolean {
+  return Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.account === "string";
+}
+
 // The lock's owner; "gone" when the lock disappeared, null when its content cannot be read.
-function readOwner(path: string): { text: string; parsed: Owner } | "gone" | null {
+function readOwner<T extends { pid: number }>(path: string, valid: (value: T) => boolean): { text: string; parsed: T } | "gone" | null {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -134,19 +174,18 @@ function readOwner(path: string): { text: string; parsed: Owner } | "gone" | nul
     throw error;
   }
   try {
-    const parsed = JSON.parse(text) as Owner;
-    if (Number.isSafeInteger(parsed.pid) && parsed.pid > 0 && typeof parsed.host === "string" && typeof parsed.command === "string") {
-      return { text, parsed };
-    }
+    const parsed = JSON.parse(text) as T;
+    if (typeof parsed === "object" && parsed !== null && valid(parsed)) return { text, parsed };
   } catch {
     // Not an owner relay wrote.
   }
   return null;
 }
 
-// A lock is stale when it was taken on this computer by a process that no longer exists.
-function isStale(owner: Owner): boolean {
-  if (owner.host !== hostname()) return false;
+// A lock is stale when it was taken on this computer by a process that no longer exists. The worker
+// lock names no computer; it lives in the relay folder of this computer.
+function isStale(owner: { pid: number; host?: string }): boolean {
+  if (owner.host !== undefined && owner.host !== hostname()) return false;
   try {
     process.kill(owner.pid, 0);
     return false;
@@ -160,7 +199,11 @@ function isStale(owner: Owner): boolean {
 // owner it read, whose process is gone. A live owner's lock is never removed. When another process
 // is recovering, this one does nothing and tries the lock again. A recovery lock older than
 // 10 seconds was left by a process that stopped while recovering, and is removed.
-function recoverStale(path: string, staleText: string): void {
+function recoverStale<T extends { pid: number; host?: string }>(
+  path: string,
+  staleText: string,
+  valid: (value: T) => boolean,
+): void {
   const recovery = `${path}.recover`;
   let fd: number;
   try {
@@ -172,7 +215,7 @@ function recoverStale(path: string, staleText: string): void {
     return;
   }
   try {
-    const current = readOwner(path);
+    const current = readOwner(path, valid);
     if (current !== null && current !== "gone" && current.text === staleText && isStale(current.parsed)) unlinkSync(path);
   } finally {
     closeSync(fd);

@@ -1,7 +1,7 @@
 # Codebase map
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
-`add-checkpoint-engine`, task groups 1 to 8 of `add-provider-adapters`, task groups 1 to 4 of
+`add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, task groups 1 to 4 of
 `add-relay-switch` (except tasks 1.5, 2.3 and 3.5), task groups 1 to 7 of
 `add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 6, 9 and 10 of
 `add-daemon-api-and-status`, and task groups 1 to 4 of `add-mac-menu-bar-app`.
@@ -16,7 +16,7 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
     hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
@@ -35,6 +35,7 @@ flowchart TD
     job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock, the events lock<br/>and the config lock<br/>exclude.ts: the /.relay/ exclude line"]
     secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names<br/>redact.ts: secret-looking values in facts"]
     text["src/text/<br/>invisible.ts: the one list<br/>of invisible characters"]
+    runfolder["src/run/<br/>run.ts: relay run, from the checks to the exit code<br/>job-context.ts: the job of this checkout<br/>instructions.ts: relay's fixed instructions<br/>worker-record.ts: the worker records<br/>progress.ts: the lines of a headless run"]
     handoff["src/handoff/<br/>the parts of relay switch: account.ts, settings.ts, files.ts,<br/>checks.ts and check-parsers/, notes-request.ts, notes-parse.ts,<br/>notes-build.ts, context.ts, claims.ts, fence.ts,<br/>render-checkpoint.ts, verify-file.ts, scan.ts, ask.ts,<br/>instruction-files.ts, permission.ts, allow-list.ts"]
   end
 
@@ -49,6 +50,7 @@ flowchart TD
     buildtests["build/: no-network.test.ts"]
     daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
+    runtests["run/: relay run with the fake agents,<br/>headless, interactive and end to end"]
     handofftests["handoff/, config/: the handoff parts<br/>handoff/job.ts, asker.ts: a job and a question function<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/:<br/>test outputs and checkpoint.md files"]
     adaptertests["adapters/, accounts/, policies/, docs/:<br/>adapter core, accounts, policies and document tests<br/>adapters/contract.ts, fixtures.ts, registry.ts:<br/>the contract suite<br/>fixtures/providers/: the provider fixtures<br/>helpers/child.ts, helpers/fake-programs.ts"]
   end
@@ -119,6 +121,11 @@ flowchart TD
   commands -->|"hook.ts, hooks.ts, statusline.ts use"| hooks
   hooks -->|"writes availability.json through"| accounts
   adapters -->|"interactive workers read the spool of"| hooks
+  commands -->|"run.ts calls"| runfolder
+  runtests -->|"check"| runfolder
+  runfolder -->|"starts and watches the agent through"| adapters
+  runfolder -->|"checks the account and its sign-in with"| accounts
+  runfolder -->|"takes the worker lock and appends events with"| job
   handoff -->|"saves, scans and reads through"| checkpoint
   handoff -->|"asks the outgoing agent through"| adapters
   handoff -->|"adds to the allow list through"| config
@@ -134,8 +141,8 @@ argument counts. In this version every handler is `not-built.ts`, except `hook.t
 `checkpoints.ts` for `relay checkpoints`, `rollback.ts` for `relay rollback`, which restores an
 earlier checkpoint's files after saving an undo checkpoint, `accept-git-changes.ts` for
 `relay accept-git-changes`, `daemon.ts` for `relay daemon`, `account.ts` for `relay account`,
-`providers.ts` for `relay providers` and `policy.ts` for `relay policy show`. `--version` prints
-the version from `src/core/version.ts`, which reads the
+`providers.ts` for `relay providers`, `policy.ts` for `relay policy show` and `run.ts` for
+`relay run`. `--version` prints the version from `src/core/version.ts`, which reads the
 `version` field of `package.json`. `docs/cli.md` describes the command line and its exit codes.
 
 Before a command's handler runs, `runCli` finds the relay folder with `src/core/paths.ts`,
@@ -230,6 +237,15 @@ with a backup, and `src/cli/commands/hooks.ts` is `relay hooks install | remove 
 `statusline.ts` is `relay statusline claude`, which records the usage windows of Claude Code's
 status line and then runs the person's own. `fold.ts` turns spool lines into availability readings
 for `relay account status`. `docs/hooks.md` describes these with a diagram.
+
+`src/run/` is `relay run`, which `src/cli/commands/run.ts` calls. `run.ts` checks the account, its
+program, profile folder and sign-in and the project's allow list, takes the worker lock with
+`src/job/lock.ts`, starts the agent through its adapter, appends the worker events to the job's
+event log with `src/job/events.ts`, and chooses the exit code. `job-context.ts` finds the job of
+this checkout, `instructions.ts` holds relay's fixed instructions for every agent,
+`worker-record.ts` writes `RELAY_HOME/jobs/<job>/workers/<worker>.json`, and `progress.ts` writes
+the lines of a headless run. `test/run/` tests it with the fake agents. The section "Running an
+agent" of `docs/adapters.md` describes it with a diagram.
 
 `test/adapters/contract.ts` declares the contract suite that every adapter registered in
 `test/adapters/registry.ts` must pass, and `test/adapters/fixtures.ts` loads and replays the
