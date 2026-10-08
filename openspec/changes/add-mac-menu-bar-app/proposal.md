@@ -133,7 +133,7 @@ None. The app uses the `local-api` capability of `add-daemon-api-and-status` wit
 
 - New folder `mac/`: `Package.swift`, `Sources/RelayKit/` (socket, HTTP, event stream, API models,
   the app's state), `Sources/RelayUI/` (tokens, fonts, cards, sheets), `Sources/Relay/` (the app
-  entry, menu-bar scene, link handling), `Tests/`, `Resources/Fonts/` (Satoshi, Public Sans and IBM
+  entry, menu-bar scene, link handling), `Tests/`, `Resources/Fonts/` (Public Sans and IBM
   Plex Mono with their licenses), `Support/Info.plist`, `scripts/make-app.sh` and
   `scripts/smoke-test.sh`.
 - New workflow `.github/workflows/mac-app.yml`; the release workflow of queue item 10 gains one job

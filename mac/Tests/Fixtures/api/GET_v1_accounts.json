@@ -1,0 +1,57 @@
+{
+  "accounts": [
+    {
+      "target": "claude:personal",
+      "provider": "claude",
+      "provider_name": "Claude Code",
+      "account": "personal",
+      "configured": true,
+      "availability": {
+        "status": "unknown",
+        "reason": null,
+        "retry_at": null,
+        "measured_at": null,
+        "source": null
+      },
+      "usage": []
+    },
+    {
+      "target": "claude:work",
+      "provider": "claude",
+      "provider_name": "Claude Code",
+      "account": "work",
+      "configured": true,
+      "availability": {
+        "status": "rate_limited",
+        "reason": "Claude Code reported a rate limit",
+        "retry_at": "2026-10-07T19:00:00.000Z",
+        "measured_at": "2026-10-07T14:02:11.402Z",
+        "source": "hook"
+      },
+      "usage": []
+    },
+    {
+      "target": "codex:personal",
+      "provider": "codex",
+      "provider_name": "Codex",
+      "account": "personal",
+      "configured": true,
+      "availability": {
+        "status": "available",
+        "reason": null,
+        "retry_at": null,
+        "measured_at": "2026-10-07T14:30:02.000Z",
+        "source": "usage"
+      },
+      "usage": [
+        {
+          "window": "five_hour",
+          "window_minutes": 300,
+          "used_percent": 9,
+          "resets_at": "2026-10-07T19:00:00.000Z",
+          "measured_at": "2026-10-07T14:30:02.000Z"
+        }
+      ]
+    }
+  ]
+}
