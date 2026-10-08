@@ -8,6 +8,7 @@ import { startApiServer } from "../../src/api/server";
 import type { LogFields, Logger } from "../../src/core/log";
 import { VERSION } from "../../src/core/version";
 import { openDatabase, streamEpoch } from "../../src/state/db";
+import { streamSeq } from "../../src/state/queries";
 import { removeTempRelayHomes, tempRelayHome } from "../helpers/relay-home";
 
 afterAll(removeTempRelayHomes);
@@ -67,7 +68,7 @@ describe("the API server", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("connection")).toBe("close");
     expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
-    expect(response.headers.get("relay-stream-seq")).toBe("0");
+    expect(response.headers.get("relay-stream-seq")).toBe(String(streamSeq(db)));
     expect(await response.json()).toEqual({
       api: "v1",
       daemon_version: VERSION,

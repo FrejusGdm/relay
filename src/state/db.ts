@@ -1,7 +1,10 @@
 // Opening relay.db, the daemon's live-state index (design.md decisions 10 and 11). The database is
 // a cache: when it is missing, damaged or of another schema version, a new one is created and the
 // caller rebuilds it from the files. Each new database gets a new stream_epoch, so a client can
-// tell a rebuilt event stream from a daemon restart that kept its history.
+// tell a rebuilt event stream from a daemon restart that kept its history. A new database also
+// numbers its stream events from the time it was created, in microseconds since 1970, which is
+// above every number an older database used: a client's saved event id from before a rebuild is
+// then older than the new history, and the client gets a reset instead of missing events.
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -63,6 +66,9 @@ function create(path: string): Database {
   insert.run("built_at", new Date().toISOString());
   insert.run("daemon_version", VERSION);
   insert.run("stream_epoch", Buffer.from(crypto.getRandomValues(new Uint8Array(8))).toString("hex"));
+  db.prepare("INSERT INTO sqlite_sequence (name, seq) VALUES ('stream_events', ?)").run(
+    Math.floor((performance.timeOrigin + performance.now()) * 1000),
+  );
   return db;
 }
 

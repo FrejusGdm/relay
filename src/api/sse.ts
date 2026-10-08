@@ -2,7 +2,8 @@
 // the stream_events table, in the same transaction as the index change it describes, and its seq
 // is the event's id. A client receives the rows after its position, then each new row as it is
 // committed. A position the table no longer holds, or one ahead of the newest row (a cursor from
-// a rebuilt database), gets a reset event first, so the client reloads with the GET endpoints.
+// a rebuilt database), gets a reset event first, so the client reloads with the GET endpoints,
+// and then only the rows that come after the reset.
 import type { Database } from "bun:sqlite";
 import type { StreamChange } from "../state/apply-event";
 import { streamEpoch } from "../state/db";
@@ -26,6 +27,9 @@ interface Client {
   cursor: number;
   controller: ReadableStreamDefaultController<Uint8Array>;
   ping: ReturnType<typeof setInterval>;
+  closed: boolean;
+  // Resolves the read that waits for new rows.
+  wake: (() => void) | null;
 }
 
 export interface StreamOptions {
@@ -61,9 +65,9 @@ export class EventStream {
     }
   }
 
-  // Sends every committed row a client has not seen yet.
+  // Wakes the clients that wait for new rows.
   publish(): void {
-    for (const client of this.clients) this.sendNew(client);
+    for (const client of this.clients) this.wake(client);
   }
 
   get clientCount(): number {
@@ -71,7 +75,8 @@ export class EventStream {
   }
 
   // The answer to GET /v1/events. `since` is the last id the client saw, or null for "only new
-  // events".
+  // events". Rows are read from the table only when the client has taken what it was sent, so a
+  // client that stops reading holds at most one batch in memory.
   open(since: number | null, job: string | null): Response {
     if (this.closed) return errorResponse(503, "shutting_down", "The relay daemon is stopping.");
     if (this.clients.size >= this.maxClients) {
@@ -79,9 +84,10 @@ export class EventStream {
     }
     const newest = streamSeq(this.db);
     const oldest = this.db.query<{ seq: number | null }, []>("SELECT MIN(seq) AS seq FROM stream_events").get()?.seq ?? null;
-    let cursor = since ?? newest;
-    const reset = since !== null && (since > newest || (oldest !== null && since < oldest - 1));
-    if (reset) cursor = (oldest ?? newest + 1) - 1;
+    // A position is kept when it is the newest, or not older than the row before the oldest one.
+    const kept = since === null || since === newest || (since < newest && oldest !== null && since >= oldest - 1);
+    // After a reset the client reloads everything with the GET endpoints, so old rows are not sent.
+    const cursor = since !== null && kept ? since : newest;
 
     let client: Client;
     const stream = new ReadableStream<Uint8Array>({
@@ -90,13 +96,18 @@ export class EventStream {
           job,
           cursor,
           controller,
-          ping: setInterval(() => this.write(client, ": ping\n\n"), this.pingMs),
+          closed: false,
+          wake: null,
+          ping: setInterval(() => {
+            // A client that is not reading gets no more pings than it has room for.
+            if ((controller.desiredSize ?? 0) > 0) this.write(client, ": ping\n\n");
+          }, this.pingMs),
         };
         this.clients.add(client);
         this.write(client, "retry: 1000\n\n");
-        if (reset) this.write(client, frame(null, "reset", JSON.stringify({ stream_epoch: streamEpoch(this.db) })));
-        this.sendNew(client);
+        if (!kept) this.write(client, frame(null, "reset", JSON.stringify({ stream_epoch: streamEpoch(this.db) })));
       },
+      pull: (controller) => this.pull(client, controller),
       cancel: () => this.drop(client),
     });
     return new Response(stream, {
@@ -119,19 +130,33 @@ export class EventStream {
     }
   }
 
-  private sendNew(client: Client): void {
-    for (;;) {
+  // Called when the client's queue has room: sends the next batch of rows it has not seen, or
+  // waits until publish() or shutdown() wakes it.
+  private async pull(client: Client, controller: ReadableStreamDefaultController<Uint8Array>): Promise<void> {
+    while (!client.closed) {
       const rows = this.db
         .query<Row, [number, number]>("SELECT seq, job_id, type, data FROM stream_events WHERE seq > ? ORDER BY seq LIMIT ?")
         .all(client.cursor, BATCH);
+      if (rows.length === 0) {
+        await new Promise<void>((resolve) => (client.wake = resolve));
+        continue;
+      }
+      let text = "";
       for (const row of rows) {
         client.cursor = row.seq;
-        if (client.job === null || row.job_id === null || row.job_id === client.job) {
-          this.write(client, frame(row.seq, row.type, row.data));
-        }
+        if (client.job === null || row.job_id === null || row.job_id === client.job) text += frame(row.seq, row.type, row.data);
       }
-      if (rows.length < BATCH) return;
+      if (text !== "") {
+        controller.enqueue(encoder.encode(text));
+        return;
+      }
     }
+  }
+
+  private wake(client: Client): void {
+    const wake = client.wake;
+    client.wake = null;
+    wake?.();
   }
 
   private write(client: Client, text: string): void {
@@ -144,11 +169,17 @@ export class EventStream {
 
   private drop(client: Client | undefined): void {
     if (client === undefined) return;
+    client.closed = true;
     clearInterval(client.ping);
     this.clients.delete(client);
+    this.wake(client);
   }
 }
 
+// One event in the server-sent events format. A field value with a line break would start a new
+// field, so such an event is left out (the event types are already checked when events.jsonl is
+// read, and the data is JSON, which escapes line breaks).
 function frame(id: number | null, type: string, data: string): string {
+  if (/[\r\n]/.test(type) || /[\r\n]/.test(data)) return "";
   return `${id === null ? "" : `id: ${id}\n`}event: ${type}\ndata: ${data}\n\n`;
 }

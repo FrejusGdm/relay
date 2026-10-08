@@ -36,12 +36,16 @@ for (const args of [["nonsense"], []]) {
   }, 30000);
 }
 
-for (const args of [["summarize", "x"], ["annotate", "a", "b", "c"]]) {
-  test(`The ${args[0]} command reports that it is not built yet`, async () => {
-    const result = await run(args);
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toBe("Not built yet.\n");
-    expect(result.stdout).toBe("");
+test("Summarize and annotate name a campaign or run that does not exist", async () => {
+  const summary = await run(["summarize", "x"]);
+  expect(summary.exitCode).toBe(2);
+  expect(summary.stderr).toMatch(/^No campaign x in .+\/campaigns\.\n$/);
+  expect(await run(["annotate", "a", "b", "c"])).toEqual({ exitCode: 2, stdout: "", stderr: "No run b in campaign a.\n" });
+}, 30000);
+
+for (const args of [["summarize"], ["summarize", "a", "b"], ["annotate", "a", "b"], ["annotate", "a", "b", "c", "d"]]) {
+  test(`Wrong arguments print usage: ${args.join(" ")}`, async () => {
+    expect(await run(args)).toEqual({ exitCode: 2, stdout: "", stderr: usage });
   }, 30000);
 }
 

@@ -1,9 +1,11 @@
 // Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
-// command that writes, and the short events lock, held while one event is appended. A job lock
-// file holds its owner as JSON. It is written to a temporary file first and then linked into
-// place, which fails when the lock exists, so a reader never sees half an owner. The events lock
-// is an flock lock instead (add-daemon-api-and-status, design decision 9): the kernel releases it
-// when its holder dies, so a crash never leaves it held.
+// Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
+// command that writes, the short events lock, held while one event is appended, and the config
+// lock, held while config.toml is changed (add-provider-adapters, design decision 10). A job lock
+// or config lock file holds its owner as JSON. It is written to a temporary file first and then
+// linked into place, which fails when the lock exists, so a reader never sees half an owner. The
+// events lock is an flock lock instead (add-daemon-api-and-status, design decision 9): the kernel
+// releases it when its holder dies, so a crash never leaves it held.
 import { randomBytes } from "node:crypto";
 import { closeSync, linkSync, mkdirSync, openSync, readFileSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
@@ -20,7 +22,8 @@ interface Owner {
   host: string;
 }
 
-const EVENTS_WAIT_MS = 2000;
+const RETRY_MS = 10;
+const SHORT_WAIT_MS = 2000;
 const RECOVERY_STALE_MS = 10_000;
 
 function lockPath(relayHome: string, jobId: string, suffix: "lock" | "events.lock"): string {
@@ -56,7 +59,7 @@ export async function withEventsLock<T>(relayHome: string, jobId: string, action
   const path = lockPath(relayHome, jobId, "events.lock");
   let handle;
   try {
-    handle = await lock(path, EVENTS_WAIT_MS);
+    handle = await lock(path, SHORT_WAIT_MS);
   } catch (error) {
     if (!(error instanceof LockTimeout)) throw error;
     throw new CommandError(ExitCode.Busy, [
@@ -67,6 +70,31 @@ export async function withEventsLock<T>(relayHome: string, jobId: string, action
     return action();
   } finally {
     handle.release();
+  }
+}
+
+// Runs `action` while holding $RELAY_HOME/locks/config.lock, trying every 10 ms for up to 2
+// seconds. The wait blocks, because the change to config.toml that it protects is synchronous.
+export function withConfigLock<T>(relayHome: string, action: () => T): T {
+  const dir = join(relayHome, "locks");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, "config.lock");
+  const deadline = Date.now() + SHORT_WAIT_MS;
+  for (;;) {
+    const release = tryLock(path, "edit-config");
+    if (release !== null) {
+      try {
+        return action();
+      } finally {
+        release();
+      }
+    }
+    const owner = readOwner(path);
+    if (owner !== null && owner !== "gone" && isStale(owner.parsed)) recoverStale(path, owner.text);
+    if (Date.now() >= deadline) {
+      throw new CommandError(ExitCode.Busy, ["Another relay command is changing config.toml. Try again when it finishes."]);
+    }
+    Bun.sleepSync(RETRY_MS);
   }
 }
 

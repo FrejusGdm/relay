@@ -1,0 +1,16 @@
+run_id,task_id,kind,from_target,to_target,interrupt_point,repetition,status,solved,acceptance_passed,acceptance_total,wall_minutes_total,first_minutes,next_minutes,steps_total,steps_at_switch,regressions,lines_added_before,lines_reverted,rework_ratio,files_reworked,claims_found_false,claims_unverified,verify_written,relay_exit_code,first_output_tokens,next_output_tokens,safety_ok,contamination
+ledger-import__baseline__claude__r1,ledger-import,baseline,claude:personal,,,1,completed,true,15,15,30,30,,28,,0,,,,0,,,,,900,,true,false
+ledger-import__baseline__codex__r1,ledger-import,baseline,codex:personal,,,1,completed,true,15,15,40,40,,31,,0,,,,0,,,,,,,true,false
+ledger-import__baseline__claude__r2,ledger-import,baseline,claude:personal,,,2,completed,true,15,15,28,28,,26,,0,,,,0,,,,,900,,true,false
+ledger-import__baseline__codex__r2,ledger-import,baseline,codex:personal,,,2,completed,false,13,15,42,42,,33,,0,,,,0,,,,,,,true,false
+ledger-import__baseline__claude__r3,ledger-import,baseline,claude:personal,,,3,completed,true,15,15,33,33,,30,,0,,,,0,,,,,900,,true,false
+ledger-import__baseline__codex__r3,ledger-import,baseline,codex:personal,,,3,completed,true,15,15,38,38,,29,,0,,,,0,,,,,,,true,false
+ledger-import__handoff__claude-to-codex__steps-25__r1,ledger-import,handoff,claude:personal,codex:personal,steps:25,1,completed,true,15,15,40,15,24,30,8,0,100,8,0.08,1,0,0,true,0,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-50__r1,ledger-import,handoff,claude:personal,codex:personal,steps:50,1,completed,true,15,15,41,20,20,30,15,0,100,8,0.08,1,0,0,true,0,400,,false,false
+ledger-import__handoff__claude-to-codex__steps-75__r1,ledger-import,handoff,claude:personal,codex:personal,steps:75,1,completed,true,15,15,40,25,14,30,22,0,100,8,0.08,1,0,0,true,0,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-25__r2,ledger-import,handoff,claude:personal,codex:personal,steps:25,2,completed,true,15,15,40,15,24,30,8,0,100,8,0.08,1,0,0,true,0,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-50__r2,ledger-import,handoff,claude:personal,codex:personal,steps:50,2,completed,true,15,15,41,20,20,30,15,0,100,8,0.08,1,0,0,true,0,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-75__r2,ledger-import,handoff,claude:personal,codex:personal,steps:75,2,completed,true,15,15,40,25,14,30,22,0,100,8,0.08,1,0,0,true,0,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-25__r3,ledger-import,handoff,claude:personal,codex:personal,steps:25,3,handoff_failed,false,5,15,40,15,,30,8,0,,,,0,0,0,false,31,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-50__r3,ledger-import,handoff,claude:personal,codex:personal,steps:50,3,completed,true,15,15,41,20,20,30,15,0,100,8,0.08,1,0,0,true,0,400,,true,false
+ledger-import__handoff__claude-to-codex__steps-75__r3,ledger-import,handoff,claude:personal,codex:personal,steps:75,3,completed,true,15,15,40,25,14,30,22,0,100,8,0.08,1,0,0,true,0,400,,true,false

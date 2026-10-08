@@ -1,6 +1,6 @@
 // Task 4.4: the daemon follows each job's events.jsonl and projects.list.
 import { afterEach, expect, test } from "bun:test";
-import { appendFileSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { appendEvent, type JobRef } from "../../src/job/events";
 import { runRelay } from "../helpers/cli";
@@ -104,6 +104,18 @@ test("an events.jsonl replaced by a shorter copy makes the daemon rebuild that j
   await within(2500, async () => (await get(scratch.relayHome, `/v1/jobs/${job.id}/workers`)).workers.length === 0);
   const log = readFileSync(join(scratch.relayHome, "logs", "daemon.log"), "utf8");
   expect(log).toContain('"msg":"job_rebuilt"');
+}, 30_000);
+
+test("a project deleted while the daemon runs is marked missing, and its checkpoints answer 409", async () => {
+  const { scratch, job } = await project();
+  rmSync(scratch.repo, { recursive: true, force: true });
+  await within(2500, async () => (await get(scratch.relayHome, `/v1/jobs/${job.id}`)).job?.project_missing === true);
+  const response = await fetch(`http://relay/v1/jobs/${job.id}/checkpoints`, { unix: testSocket(scratch.relayHome) });
+  expect(response.status).toBe(409);
+  expect(((await response.json()) as any).error.code).toBe("project_missing");
+  // The job stays in the index on the next checks, shown as missing.
+  await Bun.sleep(2500);
+  expect((await get(scratch.relayHome, `/v1/jobs/${job.id}`)).job).toMatchObject({ id: job.id, project_missing: true });
 }, 30_000);
 
 test("a project set up after the daemon started is picked up from projects.list", async () => {

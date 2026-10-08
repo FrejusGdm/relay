@@ -18,7 +18,8 @@ export interface Applied {
   reloadCheckpoint: boolean;
 }
 
-const WORKER_MODES = new Set(["headless", "interactive", "external"]);
+const MAX_PASSED_DATA = 16 * 1024;
+const WORKER_MODES =new Set(["headless", "interactive", "external"]);
 const TARGET = /^([a-z][a-z0-9-]*):([a-z0-9][a-z0-9_-]*)$/;
 
 const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
@@ -116,8 +117,9 @@ export function applyEvent(db: Database, jobId: string, event: RelayEvent): Appl
       changes.push({ jobId, type: "hook", data: { job_id: jobId, provider: text(data.provider), event: text(data.event) } });
       break;
     default:
-      // Unknown types are passed to the stream as they are and otherwise ignored.
-      changes.push({ jobId, type: event.type, data });
+      // Unknown types are passed to the stream as they are and otherwise ignored. Data larger
+      // than 16 KiB is not passed on.
+      if (Buffer.byteLength(JSON.stringify(data)) <= MAX_PASSED_DATA) changes.push({ jobId, type: event.type, data });
   }
   return { changes, reloadCheckpoint: false };
 }

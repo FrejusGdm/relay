@@ -4,7 +4,7 @@ import type { EventStream } from "../sse";
 import { errorResponse } from "../errors";
 import type { Route } from "../router";
 
-const WHOLE_NUMBER = /^\d{1,15}$/;
+const WHOLE_NUMBER = /^\d{1,16}$/;
 const JOB_ID = /^[0-9a-f]{8}$/;
 
 export function eventRoutes(stream: EventStream): Route[] {
@@ -15,7 +15,7 @@ export function eventRoutes(stream: EventStream): Route[] {
       handle: (request) => {
         const query = new URL(request.url).searchParams;
         const position = query.get("since") ?? request.headers.get("last-event-id");
-        if (position !== null && !WHOLE_NUMBER.test(position)) {
+        if (position !== null && !(WHOLE_NUMBER.test(position) && Number.isSafeInteger(Number(position)))) {
           return errorResponse(400, "bad_request", "since and Last-Event-ID must be whole numbers.");
         }
         const job = query.get("job");

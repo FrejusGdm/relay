@@ -2,6 +2,7 @@ import type { LogLevel, RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
 import { acceptGitChanges } from "./accept-git-changes";
+import { account } from "./account";
 import { checkpoint } from "./checkpoint";
 import { checkpoints } from "./checkpoints";
 import { daemon } from "./daemon";
@@ -9,6 +10,8 @@ import { doctor } from "./doctor";
 import { hook } from "./hook";
 import { init } from "./init";
 import { notBuilt } from "./not-built";
+import { policy } from "./policy";
+import { providers } from "./providers";
 import { rollback } from "./rollback";
 import { status } from "./status";
 
@@ -195,27 +198,42 @@ export const COMMANDS: CommandDef[] = [
       "Each account has its own profile folder.",
       "Signing in runs the provider's own login. relay never sees your password or token.",
     ],
-    examples: ["relay account list", "relay account add codex work", "relay account login codex:work"],
-    options: [],
+    examples: [
+      "relay account list",
+      "relay account add codex work",
+      "relay account add claude personal --profile-dir ~/.claude",
+      "relay account add claude api --api-key-env ANTHROPIC_API_KEY",
+      "relay account status claude:personal",
+      "relay account login codex:work",
+      "relay account remove codex:work",
+    ],
+    options: [
+      { name: "profile-dir", value: "<dir>", description: "add: use this folder as the profile" },
+      { name: "api-key-env", value: "<VAR>", multiple: true, description: "add: pass this key variable" },
+      { name: "kind", value: "<kind>", description: "add: personal or work" },
+      { name: "no-login", description: "add: do not sign in now" },
+      { name: "yes", description: "add, remove: do not ask" },
+      { name: "json", description: "list, status: print JSON" },
+    ],
     minArgs: 1,
     maxArgs: 3,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: account,
   },
   {
     name: "providers",
-    usage: "relay providers",
+    usage: "relay providers [--json]",
     argsUsage: "",
     summary: "Show which agent programs are installed",
-    details: [],
-    examples: ["relay providers"],
-    options: [],
+    details: ["relay runs each program's --version and lists what relay can do with it."],
+    examples: ["relay providers", "relay providers --json"],
+    options: [{ name: "json", description: "Print the result as JSON" }],
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: providers,
   },
   {
     name: "policy",
@@ -228,8 +246,8 @@ export const COMMANDS: CommandDef[] = [
     minArgs: 2,
     maxArgs: 2,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: policy,
   },
   {
     name: "hooks",

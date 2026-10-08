@@ -14,6 +14,7 @@ import { appendEvent, type JobRef } from "../job/events";
 import { takeJobLock } from "../job/lock";
 import { readState, StateFileError, writeState, type JobState } from "../job/state";
 import { scanCheckpoint } from "../secrets/scan";
+import { registerProject } from "../state/projects-list";
 import { cleanMessage, commitCheckpoint, gitFailed, readJobRefs, type CheckpointKind } from "./commit";
 import { buildSnapshotTree, type LeftOutFile } from "./snapshot";
 
@@ -188,10 +189,14 @@ export async function openJob(
 }
 
 // Reads state.json and checks that its job was set up in this checkout, without the trust check.
-// relay accept-git-changes uses it, because it shows what the trust check would refuse.
+// relay accept-git-changes uses it, because it shows what the trust check would refuse. The
+// project root is added to projects.list when it is not listed yet, so the daemon finds the job
+// (the live-state-index spec, "Known projects list").
 export function findJob(repo: Repository, relayHome: string): { state: JobState; job: JobRef } {
   const state = readJobState(join(repo.worktreeRoot, ".relay"));
-  return { state, job: { id: checkJobBelongsHere(repo, state, relayHome), worktreeRoot: repo.worktreeRoot, relayHome } };
+  const id = checkJobBelongsHere(repo, state, relayHome);
+  registerProject(relayHome, repo.worktreeRoot);
+  return { state, job: { id, worktreeRoot: repo.worktreeRoot, relayHome } };
 }
 
 // The job named in state.json must be the one relay init set up in this checkout: the job ID is

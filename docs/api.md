@@ -47,8 +47,11 @@ $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/version
 {"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse"],"agents_running":[]}
 ```
 
-`stream_epoch` changes whenever the daemon rebuilds its index, which restarts the numbering of the
-event stream. A client that saved an event `id` keeps it only while `stream_epoch` stays the same.
+`stream_epoch` changes whenever the daemon rebuilds its index. A rebuilt index numbers its events
+from the time it was built, in microseconds since 1970, so its numbers are above every number the
+old index used, and an event `id` saved before the rebuild gets a `reset` (see the event stream
+below). A client that saved an event `id` can also compare `stream_epoch` to see that the index
+was rebuilt.
 
 ### GET /v1/providers
 
@@ -143,10 +146,11 @@ data: {"job_id":"3f9a2c1d","checkpoint":{…}}
 | `checkpoint` | `{"job_id": …, "checkpoint": Checkpoint}` |
 | `availability` | the whole Account, as `GET /v1/accounts/{target}` returns it |
 | `hook` | `{"job_id": …, "provider": …, "event": …}` |
-| `reset` | `{"stream_epoch": …}`: the requested position is older than the events the daemon keeps, or ahead of its newest event (a position from a rebuilt index). Reload with the `GET` endpoints. |
+| `reset` | `{"stream_epoch": …}`: the requested position is older than the events the daemon keeps, or ahead of its newest event, or from before a rebuild of the index. Reload with the `GET` endpoints; the stream then sends only the events that come after the reset. |
 | `shutdown` | `{}`: the daemon is stopping; the stream ends next |
 
-The daemon keeps the newest 10,000 events for resuming. A comment line `: ping` arrives every
+The daemon keeps the newest 10,000 events for resuming. It reads the events for a stream only when
+the client has read what it was sent, so a client that stops reading slows only its own stream. A comment line `: ping` arrives every
 15 seconds. At most 32 streams can be open at once; the next one gets `503 too_many_streams`.
 
 ## Errors

@@ -1,8 +1,9 @@
 // Following the job files (design.md decision 12). For each indexed job the daemon watches
 // events.jsonl and also checks it every 2 seconds, because watching alone misses changes on some
 // file systems. New complete lines are applied from the saved byte cursor; a file that shrank or
-// was replaced makes the daemon rebuild that job. The same check picks up new roots in
-// projects.list and finds workers whose process is gone without a recorded end.
+// was replaced makes the daemon rebuild that job, and a file that is gone marks the project
+// missing. The same check picks up new roots in projects.list and finds workers whose process is
+// gone without a recorded end.
 import type { Database } from "bun:sqlite";
 import { statSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
@@ -90,7 +91,9 @@ export class Follower {
       let stats;
       try {
         stats = statSync(cursor.path);
-      } catch {
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "ENOENT" || code === "ENOTDIR") this.markMissing(cursor);
         continue;
       }
       if (stats.ino !== cursor.inode || stats.dev !== cursor.device || stats.size < cursor.offset) {
@@ -130,6 +133,20 @@ export class Follower {
       })();
       stream.publish();
     }
+  }
+
+  // The project folder or its events file is gone: the job stays in the index, shown with
+  // project_missing true, until the files are back.
+  private markMissing(cursor: Cursor): void {
+    const { db, stream, log } = this.opts;
+    let marked = false;
+    db.transaction(() => {
+      marked = db.prepare("UPDATE projects SET missing = 1 WHERE root_path = ? AND missing = 0").run(cursor.project_root).changes > 0;
+      if (marked) stream.record({ jobId: cursor.job_id, type: "job", data: getJob(db, cursor.job_id) });
+    })();
+    if (!marked) return;
+    log.warn("project_missing", { root: cursor.project_root });
+    stream.publish();
   }
 
   // Rebuilds one project's rows from its files and tells clients about the job and its current

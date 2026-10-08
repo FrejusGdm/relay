@@ -15,6 +15,7 @@ import { applyEvent } from "../../src/state/apply-event";
 import { STALE_REASON } from "../../src/state/availability";
 import { openDatabase } from "../../src/state/db";
 import { syncTargets } from "../../src/state/index-builder";
+import { streamSeq } from "../../src/state/queries";
 import { removeTempRelayHomes, tempRelayHome } from "../helpers/relay-home";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -85,7 +86,7 @@ test.each([
 ])("GET %s matches fixtures/%s.json and carries Relay-Stream-Seq", async (path, name) => {
   const { status, seq, body } = await answer(path);
   expect(status).toBe(200);
-  expect(seq).toBe("0");
+  expect(seq).toBe(String(streamSeq(db)));
   expect(body).toEqual(fixture(name));
   expect(keys(body)).not.toContain("total");
 });
@@ -119,6 +120,14 @@ test.each([
   const result = await answer(path);
   expect(result.status).toBe(status);
   expect(result.body).toEqual(fixture(name));
+});
+
+test("checkpoints of a job whose project folder is gone answer 409 project_missing, not 500", async () => {
+  const result = await answer("/v1/jobs/3f9a2c1d/checkpoints");
+  expect(result.status).toBe(409);
+  expect(result.body).toEqual({
+    error: { code: "project_missing", message: "The project for job 3f9a2c1d is not at /projects/app any more." },
+  });
 });
 
 test("the fixture files exist for every case", () => {
