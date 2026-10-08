@@ -84,8 +84,8 @@ export function resultText(result: CheckResult): string {
     case "passed":
       return counts ?? "passed";
     case "failed": {
-      const how = result.exitCode !== null ? `exit code ${result.exitCode}` : `stopped by ${result.signal}`;
-      return counts === null ? `failed (${how})` : `${counts} (${how})`;
+      const how = result.exitCode !== null ? ` (exit code ${result.exitCode})` : result.signal !== null ? ` (stopped by ${result.signal})` : "";
+      return `${counts ?? "failed"}${how}`;
     }
     case "timed_out":
       return `did not finish in ${result.timeoutSeconds} ${result.timeoutSeconds === 1 ? "second" : "seconds"}`;
@@ -97,7 +97,9 @@ export function resultText(result: CheckResult): string {
 function checkEnv(base: Record<string, string | undefined>, credentialNames: string[]): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(base)) {
-    if (value !== undefined && !isRemovedVariable(name) && !credentialNames.includes(name)) env[name] = value;
+    // relay's own variables, such as RELAY_HOME, tell a program where relay keeps its files.
+    if (value === undefined || name.startsWith("RELAY_") || isRemovedVariable(name) || credentialNames.includes(name)) continue;
+    env[name] = value;
   }
   return { ...env, RELAY_CHECK: "1", CI: "1", NO_COLOR: "1" };
 }
@@ -186,14 +188,14 @@ function readEnd(path: string): string {
 }
 
 // The last 30 lines, without escape sequences, control characters other than tab, or invisible
-// characters, with secret values from the environment replaced, each cut to 200 characters.
+// characters, with secret values from the environment replaced, each cut to 200 characters. The
+// output is cleaned and redacted whole before it is split, so a value that spans lines, or one
+// broken up by colour codes, is still found.
 function excerpt(output: string, env: Record<string, string | undefined>): string[] {
-  const lines = output.replace(/\r\n?/g, "\n").split("\n");
+  const plain = removeInvisible(output.replace(ESCAPES, "").replace(/\r\n?/g, "\n")).text.replace(/(?![\t\n])\p{Cc}/gu, "");
+  const lines = redactEnvValues(plain, env).split("\n");
   if (lines.at(-1) === "") lines.pop();
-  return lines.slice(-EXCERPT_LINES).map((line) => {
-    const plain = removeInvisible(line.replace(ESCAPES, "").replace(/(?!\t)\p{Cc}/gu, "")).text;
-    return Array.from(redactEnvValues(plain, env)).slice(0, EXCERPT_WIDTH).join("");
-  });
+  return lines.slice(-EXCERPT_LINES).map((line) => Array.from(line).slice(0, EXCERPT_WIDTH).join(""));
 }
 
 async function snapshot(run: CheckRun): Promise<string> {

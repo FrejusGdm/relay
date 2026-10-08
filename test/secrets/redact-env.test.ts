@@ -33,3 +33,18 @@ test("a value that holds another secret value is replaced whole", () => {
   expect(result).toBe("[redacted: LONG_TOKEN] and [redacted: SHORT_TOKEN]");
   expect(result).not.toContain(inner);
 });
+
+test("each line of a value that spans lines is replaced on its own", () => {
+  const first = value(10, "ab");
+  const second = value(12, "cd");
+  const result = redactEnvValues(`one ${first}\nother text\n${second} two`, { PRIVATE_KEY: `${first}\n${second}` });
+  expect(result).toBe("one [redacted: PRIVATE_KEY]\nother text\n[redacted: PRIVATE_KEY] two");
+});
+
+test("two values that overlap in the text leave nothing of either", () => {
+  const a = "abcdefgh12";
+  const b = "12345678xy";
+  const result = redactEnvValues(`x abcdefgh12345678xy z`, { A_TOKEN: a, B_TOKEN: b });
+  expect(result).toBe("x [redacted: A_TOKEN] z");
+  for (const piece of ["abcdefgh", "345678xy"]) expect(result).not.toContain(piece);
+});

@@ -37,15 +37,29 @@ change in the design or the specs. These are the differences:
 - Phase 2's `scanTexts` ends the message of a scan that cannot finish with "Nothing was saved.".
   The handoff scan says "Nothing was written or sent." instead, as design decision 14 requires.
 - Phase 2's list of invisible characters in `src/text/invisible.ts` also holds U+061C, U+2028 and
-  U+2029, which design decision 17 does not name. The handoff uses the list as it is.
+  U+2029, which design decision 17 does not name. The handoff uses the list as it is. After the
+  review of this change, the list also holds the variation selectors U+FE00 to U+FE0F, in the code
+  and in the designs.
+- Design decision 7 builds the notes from the event log. Agents can write to `.relay/events.jsonl`,
+  so after the review relay takes how the worker started and ended, and the reason of its last
+  failed turn, from its own record of the worker under `RELAY_HOME` and from what the adapter
+  reported, never from the event log. A forged `turn_failed` line therefore cannot make relay skip
+  the notes request. The event log is still quoted under "Recent events", inside the fence, with
+  every value flattened to one cleaned line, and `readEvents` skips lines whose time, type or data
+  is not well formed.
 - Phase 3's policy files had no `company` field. This change adds `company` and
   `own_accounts_note`, the sentence printed before the first handoff to another account of the same
   provider.
 - Phase 2's errors carry their lines without the `relay: ` prefix, and the command prints them. The
-  handoff modules follow the same rule; `relay switch` will add the prefix to every line except hint
-  lines that start with `Run "relay`.
+  handoff modules follow the same rule. `relay switch` will add the prefix to every line except the
+  hint line: a line that starts with `Run "relay`, and the last line of a secret-scan message
+  (`Fix the output of the check, ...`, `Remove the secret from ...` or `Rename the file ...`), which
+  the specs show without it.
 - The tests that need the real gitleaks follow phase 2's rule: they always run and fail with a clear
-  message when gitleaks is missing, instead of waiting for `RELAY_TEST_REAL_GITLEAKS=1`.
+  message when gitleaks is missing. Tasks 4.1 and 7.8 say so too.
+- When the secret scan finds something in the new `checkpoint.md`, the message also names the part
+  of the file (for example `in the commit messages`) and gives a hint for that part, because the
+  file was never written and its line number alone helps little.
 - Exit code 32 is added to `src/cli/exit-codes.ts` now, because the permission rules use it. Codes
   31 and 33 come with the switch engine.
 
@@ -97,8 +111,13 @@ the job started, and, when the agent did not write notes, a section relay built 
 and the repository. "Recorded activity and agent-written text" holds everything agents wrote or
 their code printed, between two fence lines such as `<<<relay-untrusted-notes-5b9e04c1` and
 `relay-untrusted-notes-5b9e04c1>>>`. The marker is 8 random hexadecimal characters that the text
-does not contain, so the text cannot close the fence, and every notes line that starts with `#`
-gets one more `#`, so an agent's heading never looks like one of relay's.
+does not contain, so the text cannot close the fence. Every notes line that starts with `#` (after
+up to three spaces) gets one more `#`, and a line of only `=` or `-` gets a backslash in front, so an
+agent's heading never looks like one of relay's.
+
+The files that instruct agents are matched in any case (`claude.md` counts as `CLAUDE.md`), because
+a Mac's file system ignores case. When one of them is a symbolic link, relay also compares the file
+it points to, and checks that file's text for invisible characters.
 
 ## The notes
 
@@ -123,7 +142,8 @@ The person records a job's check commands with `--check`, only from a terminal; 
 `RELAY_HOME/jobs/<job>/handoff-settings.json`, outside the project, because relay runs them outside
 any sandbox. At every handoff relay runs each check once, in the worktree root, as
 `/bin/sh -c "<command>"`, with standard input at end of file, in a process group of its own, without
-provider credential variables, and with `RELAY_CHECK=1`, `CI=1` and `NO_COLOR=1`. A check still
+provider credential variables or relay's own `RELAY_` variables, and with `RELAY_CHECK=1`, `CI=1`
+and `NO_COLOR=1`. A check still
 running after `handoff.check_timeout_seconds` gets `SIGTERM`, and `SIGKILL` 5 seconds later, for the
 whole group. Its whole output goes to `RELAY_HOME/logs/checks/<job>-h<n>-<i>.log` with mode 0600;
 only the last 30 lines of a failed check reach `checkpoint.md`, without escape sequences, control or
@@ -145,6 +165,11 @@ answer and needs `--yes`, which answers only relay's own questions and is record
 flag.
 
 ## What relay cannot protect against
+
+- A check that starts a program in a new session (for example with `setsid`) leaves relay's process
+  group, so relay cannot stop that program when the check ends or times out.
+- A file that instructs agents and is a symbolic link to a file outside the project cannot be
+  compared with its earlier version, so relay lists it and asks at every handoff.
 
 - A program that runs as the same user can edit `config.toml`, `handoff-settings.json` and every
   other file relay keeps, and so can add an account to the allow list or change the checks.

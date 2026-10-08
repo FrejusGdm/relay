@@ -35,6 +35,7 @@ describe("relay runs the checks at every handoff", () => {
     const env = readFileSync(join(scratch.repo, "env.txt"), "utf8");
     for (const name of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "MY_PROVIDER_KEY"]) expect(env).not.toContain(`${name}=`);
     for (const line of ["RELAY_CHECK=1", "CI=1", "NO_COLOR=1"]) expect(env.split("\n")).toContain(line);
+    expect(env.split("\n").filter((line) => line.startsWith("RELAY_"))).toEqual(["RELAY_CHECK=1"]);
     expect(readFileSync(join(scratch.repo, "pwd.txt"), "utf8").trim()).toBe(scratch.repo);
   });
 
@@ -95,6 +96,18 @@ describe("Check output stays private and short", () => {
     expect(statSync(result!.logPath).mode & 0o777).toBe(0o600);
     expect(statSync(join(scratch.relayHome, "logs", "checks")).mode & 0o777).toBe(0o700);
     expect(readFileSync(result!.logPath, "utf8")).toContain("line 1\n");
+  });
+
+  test("a secret printed across two lines or broken by colour codes is still redacted", async () => {
+    const secret = `${fakeValue()}\n${fakeValue().toUpperCase()}`;
+    const [first, second] = secret.split("\n");
+    const half = Math.floor(first!.length / 2);
+    const command = `printf '%s\\n' "$PRIVATE_KEY"; printf '%s\\033[31m%s\\033[0m\\n' '${first!.slice(0, half)}' '${first!.slice(half)}'; exit 1`;
+    const [result] = await run([check(command)], { env: { PRIVATE_KEY: secret } });
+    const text = result!.excerpt.join("\n");
+    for (const piece of [first!, second!]) expect(text).not.toContain(piece);
+    // The whole two-line value is one replacement; the line broken by colour codes is the second.
+    expect(result!.excerpt).toEqual(["[redacted: PRIVATE_KEY]", "[redacted: PRIVATE_KEY]"]);
   });
 
   test("colour codes are removed from the excerpt", async () => {

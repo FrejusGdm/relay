@@ -39,16 +39,33 @@ export function redact(text: string, maxLength = 500): string {
 
 // Replaces the value of every environment variable whose name ends in _KEY, _TOKEN, _SECRET or
 // PASSWORD, and whose value has at least 8 characters, with [redacted: <NAME>] (add-relay-switch,
-// design decision 9). Check output passes through it before any of it reaches checkpoint.md.
-// Longer values go first, so a value that holds a shorter one is replaced whole.
+// design decision 9). Check output passes through it before any of it reaches checkpoint.md. Each
+// line of a value that spans lines is also replaced on its own, so a value cut by line breaks
+// still disappears. Every character covered by any value is replaced, longest values first, so
+// two values that overlap in the text leave nothing of either.
 const SECRET_NAME = /(?:_KEY|_TOKEN|_SECRET|PASSWORD)$/i;
 const MIN_SECRET_LENGTH = 8;
 
 export function redactEnvValues(text: string, env: Record<string, string | undefined>): string {
-  const secrets = Object.entries(env)
-    .filter((entry): entry is [string, string] => SECRET_NAME.test(entry[0]) && (entry[1]?.length ?? 0) >= MIN_SECRET_LENGTH)
-    .sort((a, b) => b[1].length - a[1].length);
-  let result = text;
-  for (const [name, value] of secrets) result = result.split(value).join(`[redacted: ${name}]`);
+  const pieces: { name: string; value: string }[] = [];
+  for (const [name, value] of Object.entries(env)) {
+    if (value === undefined || !SECRET_NAME.test(name) || value.length < MIN_SECRET_LENGTH) continue;
+    for (const piece of new Set([value, ...value.split(/\r?\n/)])) {
+      if (piece.length >= MIN_SECRET_LENGTH) pieces.push({ name, value: piece });
+    }
+  }
+  pieces.sort((a, b) => b.value.length - a.value.length);
+  const owner: (string | undefined)[] = new Array(text.length);
+  for (const { name, value } of pieces) {
+    for (let at = text.indexOf(value); at !== -1; at = text.indexOf(value, at + 1)) {
+      for (let i = at; i < at + value.length; i++) owner[i] ??= name;
+    }
+  }
+  let result = "";
+  for (let i = 0; i < text.length; i++) {
+    const name = owner[i];
+    if (name === undefined) result += text[i];
+    else if (owner[i - 1] === undefined) result += `[redacted: ${name}]`;
+  }
   return result;
 }

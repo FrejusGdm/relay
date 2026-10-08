@@ -19,7 +19,7 @@ test("real gitleaks finds a planted GitHub token in the notes", async () => {
   const token = fakeGithubToken();
   const notes = `## Done\n- The login form.\n\n## Problems\n- The test account uses ${token}\n`;
   const error = await scanHandoff(
-    { checkpointMd: `# Checkpoint\n\n${notes}`, checkOutput: { from: 0, to: 0 }, stateJson: "{}\n", events: "", instructions: "Instructions.\n", prompt: "Continue.\n", notes },
+    { checkpointMd: `# Checkpoint\n\n${notes}`, sections: [], stateJson: "{}\n", events: "", instructions: "Instructions.\n", prompt: "Continue.\n", notes },
     { from: "claude", to: { id: "codex:personal", provider: "codex" }, checkpoint: "912ec1", env: { ...process.env, RELAY_HOME: relayHome, RELAY_GITLEAKS: "" } },
   ).then(() => null, (caught) => caught as CommandError);
   expect(error).toBeInstanceOf(CommandError);

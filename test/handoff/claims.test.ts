@@ -81,7 +81,9 @@ describe("Claims are compared with facts", () => {
     ["an option", "`--config/x.ts`"],
     ["an absolute path", "`/etc/passwd.d`"],
     ["a word without a slash or an ending", "`handleCallback`"],
-    ["a token of 200 characters", `\`src/${"a".repeat(196)}\``],
+    ["a token of 121 characters", `\`src/${"a".repeat(117)}\``],
+    ["a token with other characters", "`src/a$(rm).ts`"],
+    ["a token with a non-ASCII letter", "`src/café.ts`"],
   ])("%s is not a path", async (_name, token) => {
     expect(await compare(`## Done\n- Added ${token}.\n## Files touched\n- ${token.slice(1, -1)}\n`)).toEqual([]);
   });

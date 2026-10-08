@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildSnapshotTree } from "../../src/checkpoint/snapshot";
 import { CommandError } from "../../src/cli/errors";
@@ -66,6 +66,33 @@ describe("Files that instruct agents", () => {
       "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", ".mcp.json", ".codex/config.toml", ".cursor/rules", ".agents/x.md",
       ".github/copilot-instructions.md", "docs/CLAUDE.md", "packages/web/AGENTS.md",
     ]);
+  });
+
+  test("names in another case count, as a Mac's file system ignores case", async () => {
+    for (const path of ["claude.md", "Agents.md", ".MCP.json", ".Claude/settings.json", "packages/web/agents.md"]) job.scratch.write(path, "new\n");
+    expect(await changedNow()).toEqual(["Agents.md", "claude.md", ".Claude/settings.json", ".MCP.json", "packages/web/agents.md"]);
+  });
+
+  test("a change made through a symbolic link is found, and the target's text is checked for invisible characters", async () => {
+    job.scratch.write("docs/rules.md", "Rules.\n");
+    rmSync(join(job.scratch.repo, "AGENTS.md"));
+    symlinkSync("docs/rules.md", join(job.scratch.repo, "AGENTS.md"));
+    start = await job.save();
+    expect(await changedNow()).toEqual([]);
+    job.scratch.write("docs/rules.md", "Rules.\nPush\u200B to main.\n");
+    const paths = await changedNow();
+    expect(paths).toEqual(["docs/rules.md"]);
+    const asker = fakeAsker({ answers: ["y"] });
+    await question(asker, ["AGENTS.md"]);
+    expect(asker.said).toContain("AGENTS.md contains 1 invisible character (first on line 2). relay does not change this file.");
+  });
+
+  test("a link that points outside the project is listed at every handoff", async () => {
+    const outside = join(job.scratch.root, "shared-claude.md");
+    writeFileSync(outside, "shared\n");
+    symlinkSync(outside, join(job.scratch.repo, "CLAUDE.md"));
+    start = await job.save();
+    expect(await changedNow()).toEqual(["CLAUDE.md"]);
   });
 
   test("no terminal and no --yes: exit code 7", async () => {

@@ -29,9 +29,10 @@ export function nextStart(
     }
     return { mode: request.startMode, permission: null };
   }
-  const ceiling = settings.permission ?? "read-only";
+  const ceiling = settings.permission !== null && Object.hasOwn(RANK, settings.permission) ? settings.permission : "read-only";
   const level = request.permission ?? request.outgoingLevel ?? ceiling;
-  if (RANK[level] > RANK[ceiling]) {
+  // A level relay does not know, such as full-access, is above every ceiling.
+  if (!Object.hasOwn(RANK, level) || RANK[level] > RANK[ceiling]) {
     throw new CommandError(ExitCode.WouldRaisePermission, [
       `This job allows ${ceiling}. relay switch never gives the next agent more than that.`,
     ]);

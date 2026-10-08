@@ -158,6 +158,26 @@ describe("Second account of the same provider", () => {
   });
 });
 
+describe("--yes still shows the note and the warning", () => {
+  test("the same-provider note is printed when --yes answers", async () => {
+    write(configText('["claude:personal"]'));
+    const asker = fakeAsker({ terminal: false, yes: true });
+    expect((await check(asker, "claude:work")).allowed).toMatchObject({ how: "flag" });
+    expect(asker.said).toEqual([
+      "Anthropic says Pro and Max limits assume ordinary, individual use. Moving this job between your own Claude accounts is your choice.",
+    ]);
+  });
+
+  test("the work-to-personal warning is printed when --yes answers", async () => {
+    write(configText('["claude:work", "codex:personal"]'));
+    const asker = fakeAsker({ terminal: false, yes: true });
+    expect((await check(asker, "codex:personal", "claude:work")).confirmations).toEqual([
+      { question: "This job ran on a work account (claude:work). codex:personal is marked personal.", how: "flag" },
+    ]);
+    expect(asker.said).toEqual(["This job ran on a work account (claude:work). codex:personal is marked personal."]);
+  });
+});
+
 describe("Work code moving to a personal account", () => {
   const WARNING = "This job ran on a work account (claude:work). codex:personal is marked personal.";
 

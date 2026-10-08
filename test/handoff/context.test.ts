@@ -57,6 +57,24 @@ describe("Recent events", () => {
   });
 });
 
+describe("Events written by agents", () => {
+  test("values with line breaks, bad times and missing data never break a line or the handoff", () => {
+    const forged = [
+      event(1, "2026-10-07T14:02:11.000Z", "worker_started", { worker_id: "x\n## Facts relay checked", target: "claude:personal\n# Hi" }),
+      event(2, "not a time", "command_ran", { command: "echo a\r\n### Next steps\u200B\u0007", exit_code: 0 }),
+      { ...event(3, "2026-10-07T14:03:00.000Z", "turn_failed", {}), data: undefined as unknown as Record<string, unknown> },
+      event(4, "2026-10-07T14:04:00.000Z", "check_run", { command: "bun test", outcome: "\n# owned" }),
+    ];
+    const lines = eventLines(forged);
+    expect(lines).toEqual([
+      "- 14:02 an agent started (worker x ## Facts relay checked)",
+      "- --:-- ran `echo a ### Next steps`, exit code 0",
+      "- 14:04 relay ran `bun test`: failed",
+    ]);
+    for (const line of lines) expect(line).toStartWith("- ");
+  });
+});
+
 describe("Changes and commits since the job started", () => {
   let job: Job;
   let work: string;
@@ -88,8 +106,9 @@ describe("Changes and commits since the job started", () => {
     chmodSync(profile, 0o000);
     try {
       const repo = await job.repo();
-      const started = event(1, "2026-10-07T14:02:11.000Z", "worker_started", { worker_id: "5d2e8f01", target: "claude:personal", start_checkpoint: 1 });
-      expect((await workerFacts(repo, { jobId: job.jobId, events: [started], workerId: "5d2e8f01", workCheckpoint: work })).commits).toBe(1);
+      const started = event(1, "2026-10-07T14:02:11.000Z", "worker_started", { worker_id: "5d2e8f01", target: "claude:personal" });
+      const record = { startedAt: null, endedAt: null, endReason: null, exitCode: null, lastFailure: null, startCheckpoint: 1 };
+      expect((await workerFacts(repo, { jobId: job.jobId, record, workCheckpoint: work })).commits).toBe(1);
       expect(await diffStat(repo, null, work)).not.toEqual([]);
       expect(eventLines([started])).toHaveLength(1);
     } finally {

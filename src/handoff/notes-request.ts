@@ -39,8 +39,10 @@ export interface OutgoingWorker {
   sessionId: string | null;
   // The capabilities of the transport the worker ran in.
   capabilities: Capabilities;
-  // The reason of the worker's last turn_failed event, if any.
+  // The reason of the worker's last failed turn, from relay's own record of the worker
+  // (WorkerRecord in notes-build.ts), never from .relay/events.jsonl, which agents can write to.
   lastFailure: FailureReason | null;
+  // The account's availability from RELAY_HOME/accounts/, which relay writes itself.
   availability: AvailabilityState;
 }
 

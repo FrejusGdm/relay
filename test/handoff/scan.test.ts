@@ -3,9 +3,18 @@ import { CommandError } from "../../src/cli/errors";
 import { scanHandoff, type HandoffTexts } from "../../src/handoff/scan";
 import { FAKE_GITLEAKS } from "./job";
 
+// Lines 1-3 facts, 4-5 files, 6 fence, 7-9 notes, 10-12 check output, 13-15 commits, 16-18 events.
 const TEXTS: HandoffTexts = {
-  checkpointMd: "# Checkpoint 912ec1\n\nfacts\n\n## Output of failing checks\n\nexcerpt\n\n## Commits since the job started\n",
-  checkOutput: { from: 5, to: 8 },
+  checkpointMd: ["# Checkpoint 912ec1", "", "facts", "    file.ts | 1 +", "", "<<<fence", "", "## Notes", "",
+    "## Output of failing checks", "excerpt", "", "## Commits", "    a1b2c3d subject", "", "## Recent events", "- 14:02 ran `x`", ""].join("\n"),
+  sections: [
+    { name: "the facts relay checked", from: 1, to: 3 },
+    { name: "the list of changed files", from: 4, to: 5 },
+    { name: "the notes", from: 7, to: 9 },
+    { name: "the output of failing checks", from: 10, to: 12 },
+    { name: "the commit messages", from: 13, to: 15 },
+    { name: "the recent events", from: 16, to: 18 },
+  ],
   stateJson: "{}\n", events: "{\"type\":\"handoff\"}\n", instructions: "Instructions.\n", prompt: "Continue.\n",
   notes: "## Done\n- a\n",
 };
@@ -41,17 +50,18 @@ describe("Secret scan before anything is written or sent", () => {
     ]]);
   });
 
-  test("a secret in a check's output inside checkpoint.md", async () => {
-    const error = await refused({ checkpointMd: TEXTS.checkpointMd.replace("excerpt", "FAKE-SECRET:aws-access-token") });
-    expect(error.lines).toEqual([
-      "Stopped: possible secret in the new .relay/checkpoint.md, line 7 (aws-access-token).",
-      NOT_SENT,
-      "Fix the output of the check, or change the checks with --check.",
-    ]);
+  test.each([
+    ["excerpt", 11, "the output of failing checks", "Fix the output of the check, or change the checks with --check."],
+    ["a1b2c3d subject", 14, "the commit messages", "Remove the secret from the commit message that holds it, then run relay switch codex:personal again."],
+    ["file.ts | 1 +", 4, "the list of changed files", "Rename the file whose name holds the secret, then run relay switch codex:personal again."],
+    ["ran `x`", 17, "the recent events", "Remove the secret from the command recorded in .relay/events.jsonl, then run relay switch codex:personal again."],
+    ["facts", 3, "the facts relay checked", "Remove the secret from the job title, the branch name or the file it came from, then run relay switch codex:personal again."],
+  ] as const)("a secret in checkpoint.md near %p names %s and gives its hint", async (text, line, section, hint) => {
+    const error = await refused({ checkpointMd: TEXTS.checkpointMd.replace(text, `${text} FAKE-SECRET:aws-access-token`) });
+    expect(error.lines).toEqual([`Stopped: possible secret in the new .relay/checkpoint.md, line ${line}, in ${section} (aws-access-token).`, NOT_SENT, hint]);
   });
 
   test.each([
-    ["checkpointMd", "the new .relay/checkpoint.md", "facts FAKE-SECRET\n"],
     ["stateJson", "the new .relay/state.json", "FAKE-SECRET\n"],
     ["events", "the new events", "FAKE-SECRET\n"],
     ["instructions", "the instructions for Codex", "FAKE-SECRET\n"],

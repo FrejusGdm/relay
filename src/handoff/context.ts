@@ -6,6 +6,7 @@ import type { Repository } from "../git/repo";
 import { git } from "../git/run";
 import type { RelayEvent } from "../job/events";
 import { accountLabel, displayName } from "./account";
+import { removeInvisible } from "../text/invisible";
 import { resultText, type CheckResult } from "./checks";
 
 const RELEVANT = new Set([
@@ -13,7 +14,8 @@ const RELEVANT = new Set([
   "handoff_notes", "check_run", "handoff", "handoff_failed", "verification_recorded",
 ]);
 const EVENT_LIMIT = 20;
-const COMMAND_WIDTH = 120;
+const FIELD_WIDTH = 120;
+const OUTCOMES: CheckResult["outcome"][] = ["passed", "failed", "timed_out", "could_not_start"];
 const STAT_LINES = 60;
 const COMMIT_LIMIT = 20;
 // Paths are compared without the job files, which change at every checkpoint.
@@ -61,26 +63,40 @@ export async function commitLines(repo: Repository, base: string | null, work: s
   return output.split("\n").filter((line) => line !== "");
 }
 
-// The newest 20 relevant events, oldest first, one line each. Command lines were chosen by agents,
-// so these lines go inside the fence in checkpoint.md.
+// The newest 20 relevant events, oldest first, one line each. Agents can write to the event log,
+// so every value taken from an event is flattened to one line, cleaned and cut, and these lines go
+// inside the fence in checkpoint.md.
 export function eventLines(events: RelayEvent[]): string[] {
   const targets = new Map<string, string>();
   for (const event of events) {
-    if (event.type === "worker_started") targets.set(String(event.data.worker_id), String(event.data.target));
+    if (event.type === "worker_started") targets.set(flat(event.data.worker_id), flat(event.data.target));
   }
-  const targetOf = (id: unknown) => targets.get(String(id));
+  const targetOf = (id: unknown) => targets.get(flat(id));
   return events
-    .filter((event) => RELEVANT.has(event.type))
+    .filter((event) => RELEVANT.has(event.type) && typeof event.data === "object" && event.data !== null)
     .slice(-EVENT_LIMIT)
-    .map((event) => `- ${hhmm(new Date(event.ts))} ${eventText(event, targetOf)}`);
+    .map((event) => `- ${eventTime(event.ts)} ${eventText(event, targetOf)}`);
 }
 
 export function hhmm(date: Date): string {
   return date.toISOString().slice(11, 16);
 }
 
+function eventTime(ts: unknown): string {
+  const date = new Date(typeof ts === "string" ? ts : Number.NaN);
+  return Number.isNaN(date.getTime()) ? "--:--" : hhmm(date);
+}
+
+// One line of at most 120 characters: line breaks and runs of white space become one space, and
+// control and invisible characters are removed.
+function flat(value: unknown): string {
+  const text = removeInvisible(String(value)).text.replace(/\s+/gu, " ").replace(/\p{Cc}/gu, "").trim();
+  const characters = Array.from(text);
+  return characters.length > FIELD_WIDTH ? `${characters.slice(0, FIELD_WIDTH).join("")}...` : text;
+}
+
 function label(target: string | undefined): string {
-  const match = /^(claude|codex):(.+)$/.exec(target ?? "");
+  const match = /^(claude|codex):([a-z0-9][a-z0-9-]{0,31})$/.exec(target ?? "");
   return match === null ? "an agent" : accountLabel({ provider: match[1] as "claude" | "codex", name: match[2]! });
 }
 
@@ -96,43 +112,38 @@ function eventText(event: RelayEvent, targetOf: (workerId: unknown) => string | 
   const workerLabel = (id: unknown) => label(targetOf(id));
   switch (event.type) {
     case "worker_started":
-      return `${label(String(data.target))} started (worker ${data.worker_id})`;
+      return `${label(flat(data.target))} started (worker ${flat(data.worker_id)})`;
     case "worker_ended": {
-      const words = END_WORDS[String(data.end_reason)]
-        ?? (data.exit_code === null || data.exit_code === undefined ? `exited (${data.signal})` : `exited with code ${data.exit_code}`);
+      const words = END_WORDS[flat(data.end_reason)]
+        ?? (typeof data.exit_code === "number" ? `exited with code ${data.exit_code}` : `exited (${flat(data.signal)})`);
       return `${workerLabel(data.worker_id)} ${words}`;
     }
     case "turn_failed":
-      return `a turn of ${workerLabel(data.worker_id)} failed (${data.reason})`;
+      return `a turn of ${workerLabel(data.worker_id)} failed (${flat(data.reason)})`;
     case "command_ran":
-      return `ran \`${cut(String(data.command))}\`${typeof data.exit_code === "number" ? `, exit code ${data.exit_code}` : ""}`;
+      return `ran \`${flat(data.command)}\`${typeof data.exit_code === "number" ? `, exit code ${data.exit_code}` : ""}`;
     case "checkpoint_saved":
-      return `saved checkpoint ${data.number} (${data.kind})`;
+      return `saved checkpoint ${flat(data.number)} (${flat(data.kind)})`;
     case "checkpoint_refused":
-      return `relay refused to save a checkpoint (${data.reason})`;
+      return `relay refused to save a checkpoint (${flat(data.reason)})`;
     case "rollback":
-      return `rolled back to checkpoint ${data.to_checkpoint}`;
+      return `rolled back to checkpoint ${flat(data.to_checkpoint)}`;
     case "handoff_notes": {
       const provider = /^(claude|codex):/.exec(targetOf(data.from_worker_id) ?? "")?.[1] as "claude" | "codex" | undefined;
       const name = provider === undefined ? "The agent" : displayName(provider);
-      return data.outcome === "received" ? `${name} wrote handoff notes` : `relay built the handoff notes: ${data.reason}`;
+      return data.outcome === "received" ? `${name} wrote handoff notes` : `relay built the handoff notes: ${flat(data.reason)}`;
     }
     case "check_run":
-      return `relay ran \`${cut(String(data.command))}\`: ${resultText(checkFromEvent(data))}`;
+      return `relay ran \`${flat(data.command)}\`: ${flat(resultText(checkFromEvent(data)))}`;
     case "handoff":
-      return `handoff ${data.number} from ${data.from_target} to ${data.to_target}`;
+      return `handoff ${flat(data.number)} from ${flat(data.from_target)} to ${flat(data.to_target)}`;
     case "handoff_failed":
-      return `the handoff to ${data.to_target} stopped at the step ${data.step}`;
+      return `the handoff to ${flat(data.to_target)} stopped at the step ${flat(data.step)}`;
     case "verification_recorded":
-      return `.relay/verify.md for handoff ${data.handoff}: ${data.yes} yes, ${data.no} no, ${data.unclear} unclear`;
+      return `.relay/verify.md for handoff ${flat(data.handoff)}: ${flat(data.yes)} yes, ${flat(data.no)} no, ${flat(data.unclear)} unclear`;
     default:
-      return event.type;
+      return flat(event.type);
   }
-}
-
-function cut(command: string): string {
-  const characters = Array.from(command.replace(/\s+/g, " "));
-  return characters.length > COMMAND_WIDTH ? `${characters.slice(0, COMMAND_WIDTH).join("")}...` : characters.join("");
 }
 
 function checkFromEvent(data: Record<string, unknown>): CheckResult {
@@ -140,7 +151,8 @@ function checkFromEvent(data: Record<string, unknown>): CheckResult {
   const passed = number(data.passed);
   const failed = number(data.failed);
   return {
-    command: String(data.command), outcome: data.outcome as CheckResult["outcome"],
+    command: String(data.command),
+    outcome: OUTCOMES.includes(data.outcome as CheckResult["outcome"]) ? (data.outcome as CheckResult["outcome"]) : "failed",
     exitCode: number(data.exit_code), signal: typeof data.signal === "string" ? data.signal : null,
     seconds: number(data.seconds) ?? 0,
     counts: passed === null || failed === null ? null : { passed, failed, skipped: number(data.skipped) ?? 0 },

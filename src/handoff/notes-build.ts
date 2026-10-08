@@ -1,18 +1,35 @@
 // The facts relay holds about the outgoing worker (add-relay-switch, design decision 7): when it
 // worked, how it ended, which files changed and how many commits it made. They fill the From line
-// of checkpoint.md, and the section relay writes when the agent did not write notes. They come
-// from the event log and the repository only, so they hold no text an agent wrote.
+// of checkpoint.md, and the section relay writes when the agent did not write notes.
+//
+// Agents can write to .relay/events.jsonl, so these facts never come from it: how the worker
+// started and ended comes from relay's own record of the worker under RELAY_HOME, or from what the
+// adapter reported to the running relay process, and the files and commits come from git.
 import { git } from "../git/run";
 import type { Repository } from "../git/repo";
 import { gitFailed, jobPrefix } from "../checkpoint/commit";
-import type { RelayEvent } from "../job/events";
+import type { FailureReason } from "../adapters/types";
 import { changedPaths, checkpointHead } from "./context";
+
+// What relay recorded itself about the worker.
+export interface WorkerRecord {
+  startedAt: Date | null;
+  endedAt: Date | null;
+  // phase 3's end_reason: exited, interrupted, relay_stopped, and this change's stopped_by_switch
+  // and start_failed; null while relay knows of no end.
+  endReason: string | null;
+  exitCode: number | null;
+  // The reason of the worker's last failed turn, as the adapter reported it to relay.
+  lastFailure: FailureReason | null;
+  // The number of the checkpoint that was latest when the worker started.
+  startCheckpoint: number | null;
+}
 
 export interface WorkerFacts {
   startedAt: Date | null;
   endedAt: Date | null;
   howItEnded: string;
-  // The checkpoint that was latest when the worker started, or null when it is unknown.
+  // The commit of the start checkpoint, or null when it is unknown.
   startCheckpoint: string | null;
   filesChanged: string[];
   commits: number;
@@ -22,35 +39,31 @@ const decoder = new TextDecoder();
 
 export async function workerFacts(
   repo: Repository,
-  input: { jobId: string; events: RelayEvent[]; workerId: string; workCheckpoint: string },
+  input: { jobId: string; record: WorkerRecord; workCheckpoint: string },
 ): Promise<WorkerFacts> {
-  const mine = input.events.filter((event) => event.data.worker_id === input.workerId);
-  const started = mine.find((event) => event.type === "worker_started");
-  const ended = mine.findLast((event) => event.type === "worker_ended");
-  const failure = mine.findLast((event) => event.type === "turn_failed");
-  const startCheckpoint = await checkpointCommit(repo, input.jobId, started?.data.start_checkpoint);
-  const filesChanged = startCheckpoint === null ? [] : await changedPaths(repo, startCheckpoint, input.workCheckpoint);
+  const { record } = input;
+  const startCheckpoint = await checkpointCommit(repo, input.jobId, record.startCheckpoint);
   return {
-    startedAt: started === undefined ? null : new Date(started.ts),
-    endedAt: ended === undefined ? null : new Date(ended.ts),
-    howItEnded: howItEnded(failure?.data.reason, ended?.data),
+    startedAt: record.startedAt,
+    endedAt: record.endedAt,
+    howItEnded: howItEnded(record),
     startCheckpoint,
-    filesChanged,
+    filesChanged: startCheckpoint === null ? [] : await changedPaths(repo, startCheckpoint, input.workCheckpoint),
     commits: await commitsBetween(repo, startCheckpoint, input.workCheckpoint),
   };
 }
 
 // The first wording that applies, in the order of design decision 7.
-function howItEnded(failure: unknown, ended: Record<string, unknown> | undefined): string {
-  if (failure === "usage_limit") return "stopped at its usage limit";
-  if (failure === "rate_limit") return "stopped at a rate limit";
-  if (ended?.end_reason === "stopped_by_switch") return "stopped by relay switch";
-  if (ended?.end_reason === "exited" && typeof ended.exit_code === "number") return `exited by itself with code ${ended.exit_code}`;
+function howItEnded(record: WorkerRecord): string {
+  if (record.lastFailure === "usage_limit") return "stopped at its usage limit";
+  if (record.lastFailure === "rate_limit") return "stopped at a rate limit";
+  if (record.endReason === "stopped_by_switch") return "stopped by relay switch";
+  if (record.endReason === "exited" && record.exitCode !== null) return `exited by itself with code ${record.exitCode}`;
   return "was stopped when its relay run ended";
 }
 
-async function checkpointCommit(repo: Repository, jobId: string, number: unknown): Promise<string | null> {
-  if (!Number.isSafeInteger(number) || (number as number) < 1) return null;
+async function checkpointCommit(repo: Repository, jobId: string, number: number | null): Promise<string | null> {
+  if (number === null || !Number.isSafeInteger(number) || number < 1) return null;
   const result = await git(repo, ["rev-parse", "-q", "--verify", `${jobPrefix(jobId)}checkpoints/${number}^{commit}`]);
   return result.code === 0 ? decoder.decode(result.stdout).trim() : null;
 }

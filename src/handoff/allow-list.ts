@@ -74,10 +74,11 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
   return result;
 }
 
+// The lines in `before` (a policy note or a warning) are printed also when --yes answers.
 async function answer(asker: Asker, question: string, needsYes: string[], refusal: string, before: string[]): Promise<AnswerHow> {
-  if (asker.yes) return "flag";
-  if (!asker.terminal) throw new CommandError(ExitCode.NeedsPerson, needsYes);
+  if (!asker.yes && !asker.terminal) throw new CommandError(ExitCode.NeedsPerson, needsYes);
   for (const line of before) asker.say(line);
+  if (asker.yes) return "flag";
   if (isYes(await asker.ask(question))) return "terminal";
   throw new CommandError(ExitCode.NeedsPerson, [refusal]);
 }

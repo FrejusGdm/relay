@@ -6,11 +6,12 @@ import { ExitCode } from "../cli/exit-codes";
 import { scanTexts } from "../secrets/scan";
 import { displayName } from "./account";
 import type { Provider } from "../adapters/providers";
+import type { CheckpointSection } from "./render-checkpoint";
 
 export interface HandoffTexts {
   checkpointMd: string;
-  // The lines of checkpoint.md, counted from 1, that hold the output of failing checks.
-  checkOutput: { from: number; to: number };
+  // The parts of checkpoint.md by their lines, from renderCheckpoint.
+  sections: { name: CheckpointSection; from: number; to: number }[];
   stateJson: string;
   events: string;
   instructions: string;
@@ -54,14 +55,24 @@ export async function scanHandoff(texts: HandoffTexts, context: ScanContext): Pr
   }
   const first = findings[0];
   if (first === undefined) return;
-  const inCheckOutput = first.label === labels.checkpoint && first.line >= texts.checkOutput.from && first.line <= texts.checkOutput.to;
-  const hint = first.label === labels.notes
-    ? `Run "relay switch ${context.to.id} --no-summary" to hand off without ${fromName}'s notes.`
-    : inCheckOutput
-      ? "Fix the output of the check, or change the checks with --check."
-      : `Remove the secret from the file named above, then run relay switch ${context.to.id} again.`;
+  const section = first.label === labels.checkpoint
+    ? texts.sections.find((part) => first.line >= part.from && first.line <= part.to)?.name ?? null
+    : null;
+  const again = `then run relay switch ${context.to.id} again.`;
+  const hints: Record<CheckpointSection, string> = {
+    "the notes": `Run "relay switch ${context.to.id} --no-summary" to hand off without ${fromName}'s notes.`,
+    "the output of failing checks": "Fix the output of the check, or change the checks with --check.",
+    "the commit messages": `Remove the secret from the commit message that holds it, ${again}`,
+    "the list of changed files": `Rename the file whose name holds the secret, ${again}`,
+    "the recent events": `Remove the secret from the command recorded in .relay/events.jsonl, ${again}`,
+    "the facts relay checked": `Remove the secret from the job title, the branch name or the file it came from, ${again}`,
+  };
+  const hint = first.label === labels.notes ? hints["the notes"]
+    : section !== null ? hints[section]
+    : `Remove the secret from the file named above, ${again}`;
+  const where = section === null ? "" : `, in ${section}`;
   throw new CommandError(ExitCode.SecretFound, [
-    `Stopped: possible secret in ${first.label}, line ${first.line} (${first.rule}).`,
+    `Stopped: possible secret in ${first.label}, line ${first.line}${where} (${first.rule}).`,
     `Nothing was written or sent. ${fromName} is stopped, and your work is saved in checkpoint ${context.checkpoint}.`,
     hint,
   ]);

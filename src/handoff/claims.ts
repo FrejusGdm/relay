@@ -69,12 +69,12 @@ export async function compareClaims(repo: Repository, input: {
   return mismatches;
 }
 
-// A token that looks like a path: no spaces, a "/" or an ending such as ".ts", no "..", not
-// starting with "-", "http" or "/", and shorter than 200 characters.
+// A token that looks like a path: plain characters only (letters, digits and . _ / @ + -), a "/"
+// or an ending such as ".ts", no "..", not starting with "-", "http" or "/", and at most 120
+// characters. Only such tokens go into relay's sentences, so they carry no agent sentence.
 function isPath(token: string): boolean {
-  return token.length > 0 && token.length < 200 && !/\s/.test(token) && !token.includes("..")
-    && !/^(?:-|http|\/)/.test(token) && (token.includes("/") || /\.[A-Za-z0-9]+$/.test(token))
-    && !token.includes("`");
+  return /^[A-Za-z0-9._/@+-]{1,120}$/.test(token) && !token.includes("..")
+    && !/^(?:-|http|\/)/.test(token) && (token.includes("/") || /\.[A-Za-z0-9]+$/.test(token));
 }
 
 async function existsIn(repo: Repository, commit: string, path: string): Promise<boolean> {

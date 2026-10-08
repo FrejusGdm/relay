@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CommandError } from "../../src/cli/errors";
@@ -60,13 +60,30 @@ describe("Permission never goes up", () => {
     beforeEach(() => { root = mkdtempSync(join(realpathSync(tmpdir()), "relay-permission-")); });
     afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-    test("editing state.json does not raise the ceiling", () => {
+    test("editing state.json does not raise the ceiling: the ceiling is read from handoff-settings.json", () => {
       const relayHome = join(root, "relay-home");
       writeHandoffSettings(relayHome, job("headless", "read-only"));
-      writeFileSync(join(root, "state.json"), JSON.stringify({ permission: "full-access", mode: "headless" }));
+      const relayDir = join(root, "repo", ".relay");
+      mkdirSync(relayDir, { recursive: true });
+      writeFileSync(join(relayDir, "state.json"), JSON.stringify({ permission: "full-access", mode: "headless", ceiling: "edit-in-workspace" }));
       const settings = readHandoffSettings(relayHome, "3f9a2c1d")!;
+      expect(settings.permission).toBe("read-only");
       expect(nextStart(settings, { startMode: "headless", outgoingLevel: "read-only" }).permission).toBe("read-only");
-      expect(refused(() => nextStart(settings, { startMode: "headless", permission: "edit-in-workspace", outgoingLevel: "read-only" })).code).toBe(32);
+      // A caller that took the level from state.json is refused, whatever the level is called.
+      const forged = JSON.parse(readFileSync(join(relayDir, "state.json"), "utf8"));
+      for (const permission of [forged.permission, forged.ceiling]) {
+        expect(refused(() => nextStart(settings, { startMode: "headless", permission, outgoingLevel: "read-only" })).code).toBe(32);
+      }
+    });
+
+    test("a level relay does not know is above every ceiling", () => {
+      const settings = job("headless", "edit-in-workspace");
+      for (const permission of ["full-access", "__proto__", "toString"]) {
+        expect(refused(() => nextStart(settings, { startMode: "headless", permission: permission as "read-only", outgoingLevel: null }))).toEqual({
+          code: 32, lines: ["This job allows edit-in-workspace. relay switch never gives the next agent more than that."],
+        });
+      }
+      expect(refused(() => nextStart(settings, { startMode: "headless", outgoingLevel: "full-access" as "read-only" })).code).toBe(32);
     });
   });
 });
