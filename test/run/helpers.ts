@@ -27,6 +27,11 @@ export interface RunFixture {
 // failed expectation.
 const running = new Set<ChildProcess>();
 
+// Registers a relay process another helper started, so that cleanup stops it too.
+export function trackRun(child: ChildProcess): void {
+  running.add(child);
+}
+
 // SIGTERM makes relay stop its agent, which runs in its own process group, before relay exits.
 async function stopRunning(): Promise<void> {
   for (const child of running) {

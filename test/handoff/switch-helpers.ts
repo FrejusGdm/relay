@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAIN, runRelayInProcess, type RelayResult } from "../helpers/cli";
 import { FAKE_CLAUDE, FAKE_CODEX } from "../helpers/fake-programs";
-import { runFixture, type RunFixture } from "../run/helpers";
+import { runFixture, trackRun, type RunFixture } from "../run/helpers";
 import type { Scenario } from "../fakes/scenario";
 
 export const FAKE_GITLEAKS = join(import.meta.dir, "..", "helpers", "fake-gitleaks.ts");
@@ -77,6 +77,7 @@ export function relayProcess(fixture: SwitchFixture, args: string[], env: Record
     cwd: fixture.scratch.repo, detached: true, stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, RELAY_HOME: fixture.relayHome, ...fixture.env, ...env },
   });
+  trackRun(child);
   let stdout = "";
   let stderr = "";
   child.stdout!.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
