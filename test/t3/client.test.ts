@@ -165,3 +165,14 @@ test("after T3 stops answering, the next attempt reconnects instead of reusing t
   expect(Array.isArray(result.projects)).toBe(true);
   expect(setup.lines.map((line) => line.fields?.outcome)).toEqual(["not_answering", "ok"]);
 });
+
+test("a 404 for a session T3 forgot after a restart makes the next attempt reconnect", async () => {
+  const setup = await setUp();
+  const client = setup.makeClient();
+  await client.connect();
+  setup.fake.forgetSessionOnce();
+  const result = await client.call("t3_project_list", {});
+  expect(Array.isArray(result.projects)).toBe(true);
+  expect(setup.lines.map((line) => line.fields?.outcome)).toEqual(["tool_failed", "ok"]);
+  expect(setup.delays).toEqual([30_000]);
+});

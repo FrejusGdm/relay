@@ -33,6 +33,7 @@ export interface FakeT3 {
   calls: { tool: string; args: Record<string, unknown>; authorization: string | null }[];
   threads: FakeThread[];
   setMode(mode: "normal" | "unauthorized" | "down"): void;
+  forgetSessionOnce(): void;   // the next request gets 404, as T3 answers a session it no longer knows after a restart
   stop(): Promise<void>;
 }
 
@@ -45,6 +46,7 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
   const authorization = new AsyncLocalStorage<string>();
   const sent = new Map<string, Record<string, unknown>>();
   let mode: "normal" | "unauthorized" | "down" = "normal";
+  let forgetSession = false;
   let sequence = 0;
 
   const schemas = {
@@ -128,6 +130,10 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
     if (mode === "down") return Promise.reject(new Error("The fake T3 server is not answering."));
     const header = request.headers.get("Authorization");
     if (mode === "unauthorized" || header !== `Bearer ${token}`) return Promise.resolve(new Response(null, { status: 401 }));
+    if (forgetSession) {
+      forgetSession = false;
+      return Promise.resolve(new Response("Session not found", { status: 404 }));
+    }
     return authorization.run(header, () => handler.fetch(request));
   };
   let listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handle });
@@ -139,6 +145,7 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
     url,
     fetch: (target, init) => handle(new Request(target.toString(), init)),
     calls, threads,
+    forgetSessionOnce() { forgetSession = true; },
     setMode(next) {
       if (next === "down") void listener.stop(true);
       else if (mode === "down" && !stopped) listener = Bun.serve({ hostname: "127.0.0.1", port, fetch: handle });

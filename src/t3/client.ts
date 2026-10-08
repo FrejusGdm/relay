@@ -128,8 +128,9 @@ export function createT3Client(options: T3ClientOptions): T3Client {
         } catch (error) {
           const safe = rejected ? expired() : error instanceof T3Error ? error : new T3Error("tool_failed", `T3 Code refused ${tool}.`);
           outcome = safe.kind;
-          if (safe.kind === "not_answering") {
-            // T3 may come back as a new process without our session, so the next attempt reconnects.
+          // Only a tool's own refusal (isError) leaves the session usable. Any other failure, such as
+          // T3 answering 404 to a session it forgot after a restart, makes the next attempt reconnect.
+          if (!(error instanceof T3Error && error.kind === "tool_failed")) {
             const dead = client;
             client = null;
             serverVersion = null;
