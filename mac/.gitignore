@@ -1,0 +1,5 @@
+.build/
+build/
+Resources/Fonts/*.otf
+Resources/Fonts/*.ttf
+Resources/Fonts/*-LICENSE.txt

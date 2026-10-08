@@ -1,0 +1,11 @@
+{
+  "job_id": "3f9a2c1d",
+  "checkpoint": {
+    "number": 7,
+    "commit": "912ec1a4b0d3e5f60718293a4b5c6d7e8f901234",
+    "ref": "refs/relay/jobs/3f9a2c1d/checkpoints/7",
+    "kind": "handoff",
+    "created_at": "2026-10-07T14:35:51.000Z",
+    "message": "Handoff from claude:work to codex:personal"
+  }
+}

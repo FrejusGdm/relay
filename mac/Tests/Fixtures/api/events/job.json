@@ -1,0 +1,30 @@
+{
+  "id": "3f9a2c1d",
+  "title": "Build authentication",
+  "state": "running",
+  "project_root": "/Users/dev/projects/auth",
+  "project_missing": false,
+  "current_worker": {
+    "id": "5d2e8f01",
+    "job_id": "3f9a2c1d",
+    "target": "codex:personal",
+    "mode": "interactive",
+    "state": "running",
+    "pid": 5120,
+    "provider_session_id": null,
+    "from_handoff": true,
+    "started_at": "2026-10-07T14:36:12.000Z",
+    "ended_at": null,
+    "exit_code": null,
+    "end_reason": null
+  },
+  "last_checkpoint": {
+    "number": 7,
+    "commit": "912ec1a4b0d3e5f60718293a4b5c6d7e8f901234",
+    "ref": "refs/relay/jobs/3f9a2c1d/checkpoints/7",
+    "kind": "handoff",
+    "created_at": "2026-10-07T14:35:51.000Z",
+    "message": "Handoff from claude:work to codex:personal"
+  },
+  "updated_at": "2026-10-07T14:36:12.000Z"
+}

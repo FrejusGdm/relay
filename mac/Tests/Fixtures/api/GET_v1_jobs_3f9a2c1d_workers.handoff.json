@@ -1,0 +1,32 @@
+{
+  "workers": [
+    {
+      "id": "5d2e8f01",
+      "job_id": "3f9a2c1d",
+      "target": "codex:personal",
+      "mode": "interactive",
+      "state": "running",
+      "pid": 5120,
+      "provider_session_id": null,
+      "from_handoff": true,
+      "started_at": "2026-10-07T14:36:12.000Z",
+      "ended_at": null,
+      "exit_code": null,
+      "end_reason": null
+    },
+    {
+      "id": "a17c9e42",
+      "job_id": "3f9a2c1d",
+      "target": "claude:work",
+      "mode": "interactive",
+      "state": "ended",
+      "pid": 4890,
+      "provider_session_id": "7b1f0c52-9a3e-4d61-8f20-3c5e9d1a7b44",
+      "from_handoff": false,
+      "started_at": "2026-10-07T12:10:40.000Z",
+      "ended_at": "2026-10-07T14:35:58.000Z",
+      "exit_code": 143,
+      "end_reason": "stopped_by_switch"
+    }
+  ]
+}
