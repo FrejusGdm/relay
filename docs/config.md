@@ -103,6 +103,8 @@ allow = ["claude:personal"]
 | `checkpoint` | table | empty | Checkpoint settings, below. |
 | `accounts` | table of tables | no accounts | Your accounts, below. |
 | `projects` | list of `[[projects]]` tables | no projects | The accounts each project may use, below. |
+| `t3` | table | default local address, no projects or instances | The T3 Code connection and account mappings, below. |
+| `limits` | table of account and window tables | default rules | The usage thresholds and actions for each account, below. |
 
 ### `[defaults]`
 
@@ -154,16 +156,57 @@ listed here.
 | `path` | path | required | The project folder. Two entries cannot name the same folder. |
 | `allow` | list of account names | required | The accounts this project may use, each once. Each must be one of your accounts. `allow = []` allows none. |
 
+### `[t3]`
+
+| Setting | Type | Default | Meaning |
+|---|---|---|---|
+| `url` | string | `"http://127.0.0.1:3773/mcp"` | The T3 Code MCP address. Its host must be `127.0.0.1` or `localhost`, its scheme must be `http`, and its path must be `/mcp`. |
+| `projects` | list of paths | `[]` | The project folders whose T3 threads relay may manage. Two entries cannot name the same folder. |
+| `instances` | table of tables | no instances | The T3 provider instances mapped to your accounts, below. |
+
+The defaults also apply when `[t3]` is absent. The T3 token is never stored in this file.
+relay keeps the token T3 issues to it only in the operating system's credential store.
+
+### `[t3.instances.<id>]`
+
+Each table maps a T3 provider instance ID to a relay account. IDs use letters, digits, `_` and
+`-`, start with a letter or digit, and have at most 64 characters. Two instances cannot name
+the same account. The account's profile folder must be the one T3 uses for that provider.
+
+| Setting | Type | Default | Meaning |
+|---|---|---|---|
+| `account` | account name | required | The relay account this T3 instance uses. It must be one of your accounts. |
+| `model` | non-empty string | none | The model ID relay uses when switching to this instance. When absent, relay uses the first model T3 lists for it. |
+
+### `[limits."<provider>:<name>".<window>]`
+
+The account must be defined under `accounts`. The window is `five_hour` for the 5-hour limit
+or `seven_day` for the weekly limit. relay resolves both windows for each account named by a T3
+instance or a limits table, including a window whose table is absent.
+
+| Setting | Type | Default | Meaning |
+|---|---|---|---|
+| `threshold` | whole number from 1 to 100 | `100` for `five_hour`; `90` for `seven_day` | The percentage of usage at which the rule is crossed. |
+| `action` | `"wait"`, `"switch"` or `"notify"` | `"wait"` for `five_hour`; `"switch"` for `seven_day` with `switch_to`, otherwise `"notify"` | `wait` lets the limit reset. `switch` moves work to the target account. `notify` tells you without moving work. |
+| `switch_to` | account name | none | The account to switch to. It must be defined, use another provider, and be mapped to a T3 instance. It is required when `action` is `"switch"`. |
+
+Explicit settings replace these defaults. With `wait` or `notify`, `switch_to` is ignored and
+the rule description says `(switch_to is ignored)`. The target still has to pass the account,
+provider and T3 mapping checks. relay refuses automatic switches between two Claude accounts
+or between two Codex accounts, following each provider's terms.
+
 ### Paths
 
-`profile_dir` and a project's `path` accept an absolute path, `~`, or a path starting with `~/`.
+`profile_dir`, a project's `path` and each `t3.projects` entry accept an absolute path, `~`, or
+a path starting with `~/`.
 relay replaces `~` with your home folder, removes a trailing `/`, and resolves `.` and `..`, so
 `"~/.codex/"` becomes `/Users/josue/.codex`. relay does not check that the folder exists; the
 command that uses it does.
 
 ## Credentials are refused
 
-relay never stores passwords, tokens, API keys or cookies, and `config.toml` must not hold any.
+`config.toml` must not hold passwords, tokens, API keys or cookies. The token T3 issues to relay
+is kept only in the operating system's credential store.
 You sign in to each account with the provider's own login command, and the provider keeps the
 sign-in in the account's profile folder. An account can only name the credential variables it may
 receive, with `credential_env`; the values stay in your shell.
@@ -176,8 +219,8 @@ accounts."claude:personal".api_key: relay never stores credentials. Remove this 
 ```
 
 relay never prints the value of such a key, and never writes it to a log. More generally, a
-problem names the key and not its value. The one exception is an account name in `allow` or
-`defaults.account`, which relay repeats only when it has the `provider:name` form.
+problem names the key and not its value. The one exception is an account reference, which relay
+repeats only when it has the `provider:name` form.
 
 ## The file itself
 
@@ -213,6 +256,8 @@ accounts and allow-list entries, through one module, and never write a credentia
 When the file has problems, relay lists all of them, in the order of the keys in the file, and
 exits with code 78. (One exception comes from the TOML parser relay uses: keys that look like
 whole numbers, such as `"1"`, are listed before the other keys of their table.)
+Switch-target checks run after the whole file is read, in rule order, so a target can be
+mapped to T3 later in the file.
 
 ```
 relay: /Users/josue/.relay/config.toml has 2 problems:
@@ -241,6 +286,19 @@ what your terminal shows. `[[projects]]` entries are counted from 1, as in `proj
 | Two projects with one path | `the same path as projects[1].` |
 | A required setting is missing | `is required.` |
 | `checkpoint.max_file_size_mb` is not a whole number from 1 to 1024 | `must be a whole number from 1 to 1024.` |
+| `t3.url` does not parse, uses another scheme or has another path | `must look like http://127.0.0.1:3773/mcp.` |
+| `t3.url` names another host | `relay only connects to T3 Code on this computer (127.0.0.1 or localhost).` |
+| `t3.projects` is not a list | `must be a list of folders.` |
+| Two T3 projects with one path | `the same path as t3.projects[1].` |
+| A T3 instance ID has the wrong form | `T3 provider instance IDs use letters, digits, "_" and "-".` |
+| Two T3 instances with one account | `the same account as t3.instances.claude.` |
+| A limit window is unknown | `unknown window. Use five_hour or seven_day.` |
+| A threshold is not a whole number from 1 to 100 | `must be a whole number from 1 to 100.` |
+| A limit action is unknown | `must be "wait", "switch" or "notify".` |
+| `action = "switch"` has no `switch_to` | `is required when action is "switch".` |
+| A switch target uses the same Claude provider | `relay does not move work between two Claude accounts on its own. Anthropic's terms say plan limits assume ordinary, individual use.` |
+| A switch target uses the same Codex provider | `relay does not move work between two Codex accounts on its own. OpenAI's terms forbid getting around rate limits.` |
+| A switch target has no T3 mapping | `T3 Code has no provider mapped to codex:personal. Run relay t3 connect to map it.` |
 | A wrong type | `must be a string.`, `must be a table.`, `must be a list of [[projects]] tables.`, `must be a list of account names.`, `must be a list of variable names in capitals, for example "ANTHROPIC_API_KEY".`, `must be "personal" or "work".`, `must be debug, info, warn or error.` |
 
 ## Adding a setting

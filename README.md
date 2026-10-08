@@ -23,7 +23,8 @@ and decisions.
   (`claude`, `codex`). It does not use private APIs, scrape screens or change those
   programs.
 - relay never reads, copies, stores or shares your logins, tokens or API keys. Each
-  tool keeps its own sign-in.
+  tool keeps its own sign-in. The one exception: if you connect relay to T3 Code, relay
+  keeps the access token T3 gives it, in your operating system's credential store only.
 - relay does not pool, share or rotate accounts to get around a provider's limits or
   terms. It moves your work between different tools, each used under its own
   provider's terms.
@@ -60,7 +61,7 @@ in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 | Path | What it is |
 |---|---|
 | `VISION.md` | The idea behind relay |
-| `docs/research/` | Provider control surfaces, architecture, security, prior art and pricing, lessons from jstack, published advice on agent handoffs |
+| `docs/research/` | Provider control surfaces, architecture, security, prior art and pricing, lessons from jstack, published advice on agent handoffs, T3 Code's door for outside programs |
 | `docs/ROADMAP.md` | Phases, and the decisions still open |
 | `docs/first-version-index.md` | Every command, exit code, event, job file and module of the first version |
 | [Codebase map](docs/codebase-map.md) | The folders of the source code and tests, with a diagram |

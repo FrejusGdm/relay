@@ -1,6 +1,6 @@
 # First version index
 
-Last updated 2026-10-07.
+Last updated 2026-10-08.
 
 The first version of relay is described by six change proposals in `openspec/changes/`. Different
 people wrote them at the same time, so on 2026-10-07 they were checked against each other and
@@ -45,6 +45,7 @@ The changes are built in this order. Each change needs the ones before it.
 | 4 | `add-relay-switch` | `relay switch` (the handoff) and the handoff parts of `relay run` | Phases 1 to 3 |
 | 5 | `add-daemon-api-and-status` | The daemon, the local API, SQLite, `relay status`, delivery of hook events to the daemon, and `relay doctor --reindex` | Phases 1 to 4 (its switch endpoint calls the phase 4 engine) |
 | 6 | `add-handoff-evaluation` | The opt-in evaluation harness in `eval/handoff/`, run with `bun run eval:handoff` | Phases 1 to 5 for real runs; its task groups 2 to 7 use a stub `relay` and can be built while phases 3 to 5 are built |
+| 7 (first part) | `add-t3-limit-rules` | Usage readings, limit rules per account and window, and moving T3 Code threads to another provider past a threshold; `relay t3` | Phases 1, 3, 4 and 5; its settings, rules engine and T3 client need only phase 1 |
 
 Some later changes modify code that an earlier change created. Each of these is declared in the
 later change:
@@ -95,6 +96,7 @@ command its real behaviour and its final options.
 | `relay statusline <provider>` | 1 | Called by Claude Code's status line; records usage and runs the person's own status line | `add-provider-adapters` | |
 | `relay daemon <start\|stop\|restart\|status\|run>` | 1 | Controls the background service | `add-daemon-api-and-status` | |
 | `relay doctor --reindex` | 0 | Rebuilds the daemon's index from the job files and git | `add-daemon-api-and-status` | |
+| `relay t3 <connect\|enable\|disable\|status\|disconnect> [<folder>]` | 1 to 2 | Connects relay to T3 Code and chooses the projects whose threads relay manages; `enable` and `disable` take a folder | `add-t3-limit-rules` | |
 
 Every command also accepts `-h`, `--help` and `--log-level <level>`. `relay --help` and
 `relay --version` work without a command.
@@ -125,13 +127,16 @@ number for different meanings. A command returns only the codes that apply to it
 | 31 | The next agent did not start; the handoff is ready to retry | `add-relay-switch` |
 | 32 | The switch would give the next agent less supervision or more permission than the job had | `add-relay-switch` |
 | 33 | The current agent could not be stopped, or the `relay run` that holds it did not answer | `add-relay-switch` |
+| 40 | T3 Code is not answering at its address | `add-t3-limit-rules` |
+| 41 | This T3 Code build cannot be driven by other programs (a nightly build is needed) | `add-t3-limit-rules` |
+| 42 | relay is not connected to T3 Code, or the connection expired | `add-t3-limit-rules` |
 | 69 | The command exists but this version cannot do it yet | `add-cli-scaffold` |
 | 70 | A bug inside relay | `add-cli-scaffold` |
 | 78 | The relay folder, `config.toml`, a relay environment variable or a profile folder is wrong or unsafe | `add-cli-scaffold` |
 | 130 | Stopped by Control-C (`SIGINT`) | `add-cli-scaffold` |
 | 143 | Stopped by `SIGTERM` | `add-cli-scaffold` |
 
-The numbers 9, 11 to 19, 26 to 30 and 34 to 63 are free. The evaluation harness
+The numbers 9, 11 to 19, 26 to 30, 34 to 39 and 43 to 63 are free. The evaluation harness
 (`bun run eval:handoff`) is a separate program, not a relay command, and has its own codes 0 to 5
 and 130, described in `add-handoff-evaluation` design decision 12.
 
@@ -168,9 +173,14 @@ or secrets.
 | `handoff_failed` | `add-relay-switch` | `number`, `to_target`, `step`, `reason`, `exit_code`, `kept_checkpoint` |
 | `hook` | `add-daemon-api-and-status` | `provider`, `event`, and the allow-listed hook fields |
 
+`add-t3-limit-rules` writes its events to `RELAY_HOME/t3/events.jsonl`, not to a job's
+`.relay/events.jsonl`, because T3 threads are not relay jobs. They use the same envelope with
+`job` set to `null`: `usage_reading`, `limit_crossed`, `t3_thread_switched`,
+`t3_thread_continued`, `t3_action_failed` and `t3_disconnected` (fields in that change's specs).
+
 The availability `status` is one of `available`, `rate_limited`, `quota_exhausted`, `unavailable`
 and `unknown`. Its `source` says where the reading came from: `provider_api`, `stream_event`,
-`hook`, `status_line`, `message_text`, `user` or `none`. Window names are `five_hour`, `seven_day`,
+`hook`, `status_line`, `message_text`, `usage_command` (`add-t3-limit-rules`), `user` or `none`. Window names are `five_hour`, `seven_day`,
 or `<n>_minutes` for other lengths.
 
 ## Job files
@@ -232,6 +242,7 @@ never compiled into the `relay` binary.
 | `src/run/control.ts` | `add-relay-switch` | Switch requests sent to a running `relay run` |
 | `src/handoff/` | `add-relay-switch` | The switch engine, notes, checks, claims, templates, allow list and safety checks |
 | `src/daemon/`, `src/api/`, `src/state/`, `src/status/`, `src/client/` | `add-daemon-api-and-status` | The daemon, the local API, the SQLite index, `relay status`, and the only code that opens a connection (to relay's own socket) |
+| `src/limits/`, `src/usage/`, `src/t3/` | `add-t3-limit-rules` | Limit rules and crossings, usage readings, and the T3 Code client (the only code that connects to T3, on `127.0.0.1`) |
 
 ## Functions used across changes
 
@@ -266,6 +277,7 @@ every change.
 | `add-relay-switch` | `agent-switch`, `run-continuation`, `handoff-content`, `handoff-checks`, `provider-allow-list`, `handoff-safety` |
 | `add-daemon-api-and-status` | `daemon-lifecycle`, `local-api`, `live-state-index`, `provider-hooks`, `status-command` |
 | `add-handoff-evaluation` | `handoff-evaluation` |
+| `add-t3-limit-rules` | `t3-connection`, `usage-readings`, `limit-rules`, `t3-thread-actions` |
 
 Two pairs of capabilities touch the same command, and each pair is written so that the two parts
 agree. `agent-runs` (phase 3) defines `relay run`, and `run-continuation` (phase 4) adds the
