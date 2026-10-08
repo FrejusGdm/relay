@@ -1,6 +1,6 @@
 // relay account add: every scenario of the provider-accounts spec for adding an account.
 import { expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { displayPath } from "../../src/accounts/profile";
 import { runRelayInProcess } from "../helpers/cli";
@@ -70,6 +70,29 @@ test("comments in config.toml survive an add", async () => {
   expect(result.code).toBe(0);
   expect(config(relayHome).startsWith(`${before}\n# Added by relay on `)).toBe(true);
   expect(config(relayHome).endsWith('[accounts."codex:personal"]\n')).toBe(true);
+});
+
+test("adding an account again under a removed account's name starts a new record and forgets old readings", async () => {
+  const relayHome = relayFolder();
+  const folder = join(relayHome, "accounts", "claude-work");
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const old = "2026-01-02T03:04:05.000Z";
+  writeFileSync(join(folder, "account.json"), JSON.stringify({
+    v: 1, account: "claude:work", added_at: old, policy_checked_on_seen: "2026-01-01", policy_seen_at: old,
+    last_auth: { signed_in: true, method: "old", checked_at: old }, hooks_installed_at: old, status_line_installed_at: old,
+  }));
+  writeFileSync(join(folder, "availability.json"), JSON.stringify({
+    v: 1, account: "claude:work", state: "quota_exhausted", retry_at: null, windows: [], observed_at: old, source: "hook",
+    detail: null, spool_seen_until: null,
+  }));
+  const result = await runRelayInProcess(["account", "add", "claude", "work", "--yes", "--no-login"], { relayHome, env: fakeEnv() });
+  expect(result.code).toBe(0);
+  const saved = record(relayHome, "claude-work");
+  expect(saved.added_at).not.toBe(old);
+  expect(saved.policy_checked_on_seen).toBe("2026-10-07");
+  expect(saved.hooks_installed_at).toBeNull();
+  expect(saved.status_line_installed_at).toBeNull();
+  expect(existsSync(join(folder, "availability.json"))).toBe(false);
 });
 
 test("an answer other than y or yes changes nothing and exits 7", async () => {

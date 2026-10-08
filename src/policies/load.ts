@@ -31,3 +31,11 @@ export function policyAgeDays(policy: ProviderPolicy, today: Date = now()): numb
 export function isStale(policy: ProviderPolicy, today: Date = now()): boolean {
   return policyAgeDays(policy, today) > policy.maxAgeDays;
 }
+
+// True when checked_on has not begun yet even in UTC+14, the time zone furthest ahead, so it cannot
+// be the day someone read the terms. A policy with such a date would not count as stale for too
+// long. It is checked by scripts/check-policies.ts, not when relay starts, so that a computer whose
+// clock is wrong can still run relay.
+export function isFutureDate(policy: ProviderPolicy, today: Date = now()): boolean {
+  return Date.parse(`${policy.checkedOn}T00:00:00Z`) - 14 * 3_600_000 > today.getTime();
+}

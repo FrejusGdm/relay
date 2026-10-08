@@ -90,6 +90,25 @@ test("relay account remove refuses while a project allows the account", async ()
   expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(before);
 });
 
+test("relay account remove refuses while [defaults] names the account", async () => {
+  const relayHome = relayWith(`[defaults]\naccount = "claude:work"\n\n${TWO}`);
+  const before = readFileSync(join(relayHome, "config.toml"), "utf8");
+  const result = await runRelayInProcess(["account", "remove", "claude:work", "--yes"], { relayHome, env: fakeEnv() });
+  expect(result).toEqual({
+    code: 2, stdout: "",
+    stderr: "claude:work is named in [defaults], [t3] or [limits] in config.toml. Remove it there first.\n",
+  });
+  expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(before);
+});
+
+test("relay account remove keeps the comment above the next table", async () => {
+  const rest = '# limits: keep me\n[defaults]\naccount = "codex:personal"\n\n[accounts."codex:personal"]\n';
+  const relayHome = relayWith(`version = 1\n\n[accounts."claude:work"]\nkind = "work"\n\n${rest}`);
+  const result = await runRelayInProcess(["account", "remove", "claude:work", "--yes"], { relayHome, env: fakeEnv() });
+  expect(result.code).toBe(0);
+  expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(`version = 1\n\n${rest}`);
+});
+
 test("relay account remove: no answer changes nothing, and dotted keys are refused", async () => {
   const relayHome = relayWith(TWO);
   const no = await runRelayInProcess(["account", "remove", "claude:work"], { relayHome, env: fakeEnv(), answers: ["n"] });

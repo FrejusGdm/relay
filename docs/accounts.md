@@ -191,6 +191,10 @@ relay stores, for each account:
   status line were installed;
 - in `accounts/<provider>-<name>/availability.json`: usage readings with their source and time.
 
+When you add an account under the name of an account you removed earlier, relay writes a new
+`account.json` and deletes the old `availability.json`, so nothing recorded for the earlier
+account carries over. It does not change the profile folder.
+
 relay never reads, copies, stores or logs a password, a token, an API key's value, an email
 address or a provider account ID. The provider's status output is read only for its exit code and
 the sign-in method; everything else in it is discarded. The sign-in itself stays in the profile
@@ -238,9 +242,39 @@ table, says so and exits with code 1; remove it in `config.toml` yourself.
 
 `src/core/config/edit.ts` is the only code that writes `config.toml`. It appends whole tables or
 removes one whole `[accounts."<id>"]` table and keeps every other byte, so your comments and order
-survive. It checks the new text with the same checks as loading, writes it to a temporary file
-with mode 0600 and renames it over the old file. When the new text does not pass, the file keeps
-its old bytes and relay exits with code 70.
+survive.
+
+```mermaid
+flowchart TD
+  start["relay account add or remove"] --> lock{"take RELAY_HOME/locks/config.lock<br/>within 2 seconds?"}
+  lock -->|"no: another command holds it"| busy["exit 6, nothing changed"]
+  lock -->|"yes"| link{"config.toml is a<br/>symbolic link?"}
+  link -->|"yes"| refuse["exit 78, nothing changed"]
+  link -->|"no"| change["read the file, append or remove one table"]
+  change --> check{"new text passes<br/>the settings checks?"}
+  check -->|"no"| failed["exit 70, old bytes kept"]
+  check -->|"yes"| write["write config.toml.tmp-&lt;pid&gt; (0600),<br/>rename it over config.toml"]
+  write --> release["release the lock"]
+```
+
+The diagram shows one change. relay first takes the config lock, a file in `~/.relay/locks/`, so
+two relay commands that change `config.toml` at the same moment run one after the other and
+neither loses the other's account. A command waits up to 2 seconds for the lock and then exits
+with code 6 and "Another relay command is changing config.toml. Try again when it finishes.". A
+lock left by a relay process that has ended is replaced.
+
+relay does not change a `config.toml` that is a symbolic link, because writing the new file and
+renaming it would replace the link with a regular file. It exits with code 78 and asks you to make
+the change in the file the link leads to, or to replace the link with that file. Reading a linked
+`config.toml` still works.
+
+relay checks the new text with the same checks as loading, writes it to a temporary file with mode
+0600 and renames it over the old file. When the new text does not pass, the file keeps its old
+bytes and relay exits with code 70.
+
+When relay removes a table, it removes the lines from the table's header to its last setting, and
+a `# Added by relay on <date>.` comment directly above the header. Comments and blank lines after
+the last setting stay, because they usually describe the table that follows them.
 
 ## Exit codes
 
@@ -249,9 +283,10 @@ its old bytes and relay exits with code 70.
 | 0 | Done. |
 | 1 | The account's table is not in a form relay can remove. |
 | 2 | Wrong arguments, an unsupported provider, an existing account, a shared profile folder, or an account still named elsewhere in `config.toml`. |
+| 6 | Another relay command is changing `config.toml`. |
 | 7 | relay needs your answer and has no terminal, or you answered no. |
 | 20 | The provider's program is not installed. |
 | 21 | The account is not in `config.toml`. |
 | 22 | The sign-in did not finish. |
 | 70 | A change to `config.toml` did not pass relay's checks; nothing was saved. |
-| 78 | The profile folder is unsafe, or the settings are wrong. |
+| 78 | The profile folder is unsafe, the settings are wrong, or `config.toml` is a symbolic link that relay would have to change. |

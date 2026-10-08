@@ -37,6 +37,8 @@ test("other broken copies are refused", () => {
     [{ ...raw("claude"), terms: [{ title: "Terms", url: "http://example.com" }] }, "terms entry 1 needs a url"],
     [{ ...raw("claude"), unattended_subscription_use: "yes" }, "unattended_subscription_use must be"],
     [{ ...raw("claude"), extra: 1 }, "extra is not a policy field."],
+    [{ ...raw("claude"), max_age_days: 91 }, "max_age_days must be a whole number from 1 to 90."],
+    [{ ...raw("claude"), max_age_days: 0 }, "max_age_days must be a whole number from 1 to 90."],
   ];
   for (const [copy, message] of cases) expect(() => parsePolicy(copy, POLICY_FILES.claude)).toThrow(message);
 });

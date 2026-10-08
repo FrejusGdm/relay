@@ -42,6 +42,21 @@ export function readAccountRecord(relayHome: string, account: Pick<Account, "id"
   };
 }
 
+// Writes a new record for an account that is being added, so nothing recorded for an earlier
+// account of the same name carries over.
+export function startAccountRecord(
+  relayHome: string,
+  account: Pick<Account, "id" | "provider" | "name">,
+  fields: Partial<Omit<AccountRecord, "v" | "account">>,
+): AccountRecord {
+  const record: AccountRecord = {
+    v: 1, account: account.id, added_at: null, policy_checked_on_seen: null, policy_seen_at: null,
+    last_auth: null, hooks_installed_at: null, status_line_installed_at: null, ...fields,
+  };
+  writeJsonFile(recordPath(relayHome, account), record);
+  return record;
+}
+
 export function updateAccountRecord(
   relayHome: string,
   account: Pick<Account, "id" | "provider" | "name">,

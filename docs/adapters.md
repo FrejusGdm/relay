@@ -326,7 +326,7 @@ Each adapter carries a dated record of what relay may do under the provider's te
 |---|---|
 | `provider`, `display_name` | The provider's ID and the name relay shows. |
 | `checked_on` | The date someone last read the terms below, such as `"2026-10-07"`. |
-| `max_age_days` | After how many days the notes count as out of date (90). |
+| `max_age_days` | After how many days the notes count as out of date: a whole number from 1 to 90. |
 | `sign_in_methods` | The ways an account can sign in. |
 | `unattended_subscription_use` | `allowed`, `api_key_only` or `unclear`. |
 | `same_provider_automatic_switching` | Always `off` in this version. |
@@ -349,7 +349,11 @@ them with `parsePolicy` in `src/policies/schema.ts`; a missing or invalid field,
 `checked_on`, stops the tests with a message like "src/adapters/codex/policy.toml: checked_on is
 required.". `relay policy show <provider>` prints the whole record, adding "This may be out of
 date." when `checked_on` is older than `max_age_days`, and `relay account add` prints the summary,
-the date and the links before it asks. `bun run scripts/check-policies.ts` lists every stale policy
-and exits 1, and the release build in CI runs it, so the terms are read again before a release.
+the date and the links before it asks. `bun run scripts/check-policies.ts` lists every stale policy,
+and every policy whose `checked_on` is a date that has not begun yet in any time zone, and exits 1.
+A future date would keep a policy from counting as stale. CI runs the script in a job of its own,
+so the terms are read again before a release, and a stale date does not stop the build, the
+release-binary check or the smoke test. relay itself does not refuse a future date when it starts,
+so that a computer with a wrong clock can still run it.
 `mayAutoSwitch(from, to)` in `src/policies/switching.ts` answers no, with the reason, whenever both
 accounts belong to the same provider, and no setting changes that.

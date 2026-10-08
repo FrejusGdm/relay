@@ -24,7 +24,7 @@ flowchart TD
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
     daemon["src/daemon/<br/>empty until add-daemon-api-and-status"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
-    job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock and the events lock<br/>exclude.ts: the /.relay/ exclude line"]
+    job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock, the events lock<br/>and the config lock<br/>exclude.ts: the /.relay/ exclude line"]
     secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names<br/>redact.ts: secret-looking values in facts"]
     text["src/text/<br/>invisible.ts: the one list<br/>of invisible characters"]
   end
@@ -146,7 +146,8 @@ creates profile folders with `src/accounts/profile.ts`, writes `config.toml` onl
 fixtures in `test/fixtures/providers/`. `scripts/record-fixture.ts` records a real fixture when
 `RELAY_RECORD=1` is set, `scripts/check-codex-protocol.ts` checks the Codex protocol subset in
 `src/adapters/codex/protocol-used.json`, and `scripts/check-policies.ts` fails when a policy is
-older than its `max_age_days`; CI runs it before each release build. `docs/testing-adapters.md`
+older than its `max_age_days` or dated in the future; CI runs it in a job of its own, so a stale
+date does not stop the release build. `docs/testing-adapters.md`
 describes the contract suite and the fixtures.
 
 `test/fakes/` holds the fake agents that every adapter test runs instead of the real programs:
@@ -207,7 +208,8 @@ files with `src/job/files.ts` and `src/job/state.ts`, adds the exclude line with
 `src/job/exclude.ts`, records the git trust record with `src/git/trust.ts`, and appends the first
 event with `appendEvent` from `src/job/events.ts`. That function is the only code that writes
 `events.jsonl`, and `test/job/single-writer.test.ts` fails if another source file does.
-`src/job/lock.ts` holds the job lock and the short events lock under `RELAY_HOME/locks/`, and
+`src/job/lock.ts` holds the job lock, the short events lock and the config lock, which
+`src/core/config/edit.ts` holds while it changes `config.toml`, under `RELAY_HOME/locks/`, and
 `src/job/names.ts` names the job files for the modules that need the list. `src/text/invisible.ts`
 removes invisible characters from the job title, and `src/git/trust.ts` uses the same list to
 mark them in its report. `src/secrets/scan.ts` runs gitleaks on text relay builds itself, and

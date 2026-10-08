@@ -1,6 +1,7 @@
 // The recorded availability of one account, RELAY_HOME/accounts/<provider>-<name>/availability.json
 // (add-provider-adapters, design decision 9). Every reading says where it came from, and relay
 // never infers that a limit has ended: once the reset time passes, the state reads as unknown.
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Availability, AvailabilityState, LimitWindow, ReadingSource } from "../adapters/types";
 import type { Account } from "../core/config/types";
@@ -29,6 +30,12 @@ interface AvailabilityFile {
 
 export function availabilityPath(relayHome: string, account: AccountRef): string {
   return join(accountFolder(relayHome, account), "availability.json");
+}
+
+// Removes the recorded readings, for an account that is added again under the name of an earlier
+// one.
+export function forgetAvailability(relayHome: string, account: AccountRef): void {
+  rmSync(availabilityPath(relayHome, account), { force: true });
 }
 
 // The account's availability as relay reports it now: the recorded reading, or `unknown` with

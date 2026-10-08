@@ -10,6 +10,7 @@ const FIELDS = [
   "same_provider_automatic_switching", "usage_signals", "summary", "unclear", "terms",
 ] as const;
 const UNATTENDED = ["allowed", "api_key_only", "unclear"];
+const MAX_AGE_DAYS = 90;
 
 type Table = Record<string, unknown>;
 
@@ -34,7 +35,9 @@ export function parsePolicy(raw: unknown, file: string): ProviderPolicy {
   const checkedOn = table.checked_on;
   if (typeof checkedOn !== "string" || !isCalendarDate(checkedOn)) fail("checked_on must be a date such as 2026-10-07, in quotes.");
   const maxAge = table.max_age_days;
-  if (!Number.isInteger(maxAge) || (maxAge as number) < 1) fail("max_age_days must be a whole number above 0.");
+  if (!Number.isInteger(maxAge) || (maxAge as number) < 1 || (maxAge as number) > MAX_AGE_DAYS) {
+    fail(`max_age_days must be a whole number from 1 to ${MAX_AGE_DAYS}.`);
+  }
   for (const field of ["sign_in_methods", "usage_signals"] as const) {
     if (!isTextList(table[field])) fail(`${field} must be a list of texts with at least one entry.`);
   }

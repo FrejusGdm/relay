@@ -356,6 +356,17 @@ temporary folder and checks that every method, field and value in
 for each one that does not and exiting 1. Run it by hand before using relay with a new Codex
 version; `--schema-dir <folder>` checks a folder of schema files instead.
 
+Each entry has one of three forms. `Type.field` needs the field in the definition `Type` or in one
+of its variants. `Type=value` needs the value among the values of `Type` itself, such as
+`TurnStatus=completed`. `Type.field=value` needs the value among the values of that field, such as
+`UserInput.type=text`. A value found only somewhere deeper in the definition does not count. A
+method is written as a value of the field `method` of the message type for its direction:
+`ClientRequest.method=turn/start` for a request relay sends, `ServerNotification.method=turn/started`
+for a notification Codex sends, and `ServerRequest.method=item/fileChange/requestApproval` for a
+request Codex sends to relay. The generated files define many types more than once; the script
+compares the copies without their titles and descriptions and exits 1, naming the type, when two
+copies differ.
+
 ## What is not verified
 
 The fakes follow the formats that Claude Code's and Codex's documentation and Codex's generated

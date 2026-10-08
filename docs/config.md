@@ -255,7 +255,11 @@ leads nowhere is such an error, not a missing file.
 relay changes `config.toml` only to add or remove accounts (and, in a later version, allow-list
 entries), through one module, `src/core/config/edit.ts`, and never writes a credential to it. It
 keeps every other byte, checks the result like any loaded file, and writes it to a temporary file
-with mode 0600 that it renames over the old one, so a failed change leaves the file as it was.
+with mode 0600 that it renames over the old one, so a failed change leaves the file as it was. It
+holds the lock `locks/config.lock` while it reads, changes and writes the file, so two relay
+commands never change it at once, and it refuses to change a `config.toml` that is a symbolic
+link, because the rename would replace the link. `docs/accounts.md`, "How relay changes
+config.toml", shows the steps.
 
 ## Problem messages
 

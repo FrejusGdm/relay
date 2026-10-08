@@ -2,9 +2,9 @@
 // only by running the provider's own login in the person's terminal, and keeps only whether the
 // account is signed in and the method the provider reported.
 import { buildAgentEnv } from "../../accounts/environment";
-import { readAvailability } from "../../accounts/availability";
+import { forgetAvailability, readAvailability } from "../../accounts/availability";
 import { checkProfileFolder, displayPath, ensureProfileFolder, ProfileError, usesProviderDefaultFolder } from "../../accounts/profile";
-import { authFact, readAccountRecord, updateAccountRecord } from "../../accounts/record";
+import { authFact, readAccountRecord, startAccountRecord, updateAccountRecord } from "../../accounts/record";
 import {
   ACCOUNT_NAME, accountReferences, defaultProfileDir, findAccount, isProvider, splitAccountArgs,
 } from "../../accounts/registry";
@@ -172,7 +172,8 @@ async function add(ctx: CommandContext, args: string[]): Promise<number> {
   );
   const added = findAccount(config, id)!;
   const time = now().toISOString();
-  updateAccountRecord(ctx.relayHome, added, { added_at: time, policy_checked_on_seen: policy.checkedOn, policy_seen_at: time });
+  startAccountRecord(ctx.relayHome, added, { added_at: time, policy_checked_on_seen: policy.checkedOn, policy_seen_at: time });
+  forgetAvailability(ctx.relayHome, added);
   ctx.log.info("account added", { account: id, provider, api_key: keys.length > 0 });
 
   const summary = [`Added ${id}.`, `  Profile    ${show(ctx, profileDir)}`];

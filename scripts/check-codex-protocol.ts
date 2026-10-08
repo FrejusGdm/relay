@@ -10,14 +10,31 @@ type Json = Record<string, unknown>;
 function object(value: unknown): value is Json {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function contains(value: unknown, check: (value: Json) => boolean): boolean {
-  if (Array.isArray(value)) return value.some((item) => contains(item, check));
-  return object(value) && (check(value) || Object.values(value).some((item) => contains(item, check)));
+function variants(value: Json, keys: string[]): unknown[] {
+  return keys.flatMap((key) => (Array.isArray(value[key]) ? (value[key] as unknown[]) : []));
 }
-function hasField(value: unknown, field: string): boolean {
-  if (!object(value)) return false;
-  if (object(value.properties) && field in value.properties) return true;
-  return [value.oneOf, value.anyOf, value.allOf].some((members) => Array.isArray(members) && members.some((member) => hasField(member, field)));
+// The schemas of a field: the property of that name in the definition or in one of its variants.
+function fieldSchemas(value: unknown, field: string): unknown[] {
+  if (!object(value)) return [];
+  const own = object(value.properties) && Object.hasOwn(value.properties, field) ? [value.properties[field]] : [];
+  return [...own, ...variants(value, ["oneOf", "anyOf", "allOf"]).flatMap((member) => fieldSchemas(member, field))];
+}
+// The values a schema itself allows: its const and enum, and those of the variants it lists. The
+// values of its properties are not included.
+function ownValues(value: unknown): unknown[] {
+  if (!object(value)) return [];
+  const own = [...(Object.hasOwn(value, "const") ? [value.const] : []), ...(Array.isArray(value.enum) ? value.enum : [])];
+  return [...own, ...variants(value, ["oneOf", "anyOf"]).flatMap(ownValues)];
+}
+// A definition without its documentation and nested definitions, with sorted keys, so that two
+// copies of one definition in different files compare equal. The combined schema file refers to
+// "#/definitions/v2/<name>" where the single files refer to "#/definitions/<name>".
+function shape(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(shape);
+  if (!object(value)) return value;
+  const ignored = new Set(["$schema", "definitions", "title", "description"]);
+  return Object.fromEntries(Object.keys(value).filter((key) => !ignored.has(key)).sort().map((key) => [key,
+    key === "$ref" && typeof value[key] === "string" ? (value[key] as string).replace("#/definitions/v2/", "#/definitions/") : shape(value[key])]));
 }
 function files(folder: string): string[] {
   return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
@@ -51,25 +68,30 @@ async function main(): Promise<number> {
     if (temporary !== undefined) await run(["app-server", "generate-json-schema", "--out", folder]);
     const schemas = files(folder).map((file) => ({ name: basename(file, ".json"), value: JSON.parse(readFileSync(file, "utf8")) as unknown }));
     const definitions: Json = {};
+    const conflicts = new Set<string>();
+    const define = (name: string, value: unknown) => {
+      if (Object.hasOwn(definitions, name) && JSON.stringify(shape(definitions[name])) !== JSON.stringify(shape(value))) conflicts.add(name);
+      else definitions[name] ??= value;
+    };
     for (const { name, value } of schemas) {
-      if (object(value)) {
-        if (object(value.definitions)) Object.assign(definitions, value.definitions);
-        definitions[typeof value.title === "string" ? value.title : name] = value;
-      }
+      if (!object(value)) continue;
+      if (object(value.definitions)) for (const [key, definition] of Object.entries(value.definitions)) define(key, definition);
+      define(typeof value.title === "string" ? value.title : name, value);
     }
+    for (const name of conflicts) console.log(`Codex ${version} defines ${name} more than once, with different shapes, so relay cannot tell which one to check.`);
+    if (conflicts.size > 0) return 1;
     const entries = JSON.parse(readFileSync(resolve(import.meta.dir, "../src/adapters/codex/protocol-used.json"), "utf8")) as string[];
+    // "Type.field" needs the field; "Type=value" needs the value among the type's own values;
+    // "Type.field=value" needs it among the field's values. A method is a value of the field
+    // "method" of ClientRequest, ServerRequest or ServerNotification, so its direction is checked too.
     const missing = entries.filter((entry) => {
-      if (entry.startsWith("method:")) {
-        const method = entry.slice(7);
-        return !schemas.some(({ value }) => contains(value, (node) => object(node.method) && (node.method.const === method || Array.isArray(node.method.enum) && node.method.enum.includes(method))));
-      }
       const equals = entry.indexOf("=");
-      if (equals !== -1) {
-        const value = entry.slice(equals + 1);
-        return !contains(definitions[entry.slice(0, equals)], (node) => node.const === value || Array.isArray(node.enum) && node.enum.includes(value));
-      }
-      const dot = entry.indexOf(".");
-      return !hasField(definitions[entry.slice(0, dot)], entry.slice(dot + 1));
+      const path = equals === -1 ? entry : entry.slice(0, equals);
+      const dot = path.indexOf(".");
+      const definition = definitions[dot === -1 ? path : path.slice(0, dot)];
+      const targets = dot === -1 ? [definition] : fieldSchemas(definition, path.slice(dot + 1));
+      if (equals === -1) return definition === undefined || targets.length === 0;
+      return !targets.some((target) => ownValues(target).includes(entry.slice(equals + 1)));
     });
     for (const entry of missing) console.log(`Missing in Codex ${version}: ${entry}`);
     if (missing.length > 0) return 1;
