@@ -9,7 +9,7 @@ public struct CardInput: Sendable {
     public var accounts: [Account]
     public var capabilities: [String]
     /// The app that runs the current agent, for example Terminal, when the app found one.
-    public var host: Host?
+    public var host: AgentHost?
     /// The job a `relay://` window shows; `nil` for the menu-bar card, which chooses its job.
     public var jobID: String?
     /// The API's message when the daemon does not know `jobID`.
@@ -21,7 +21,7 @@ public struct CardInput: Sendable {
         workersByJob: [String: [Worker]],
         accounts: [Account],
         capabilities: [String],
-        host: Host? = nil,
+        host: AgentHost? = nil,
         jobID: String? = nil,
         missingJobMessage: String? = nil
     ) {

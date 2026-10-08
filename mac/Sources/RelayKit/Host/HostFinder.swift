@@ -1,5 +1,5 @@
 /// The app that runs an agent, for example Terminal.
-public struct Host: Equatable, Sendable {
+public struct AgentHost: Equatable, Sendable {
     public let pid: Int32
     public let name: String
 
@@ -25,12 +25,12 @@ public struct HostFinder {
 
     /// The first regular app among `pid` and its ancestors, at most 32 steps and stopping at
     /// process 1. `nil` for a headless worker, an agent inside `tmux`, or a host that quit.
-    public func host(of pid: Int32) -> Host? {
+    public func host(of pid: Int32) -> AgentHost? {
         var current = pid
         for _ in 0..<Self.maxSteps {
             guard current > 1 else { return nil }
             if let name = workspace.regularAppName(pid: current) {
-                return Host(pid: current, name: name)
+                return AgentHost(pid: current, name: name)
             }
             guard let parent = table.parent(of: current), parent != current else { return nil }
             current = parent

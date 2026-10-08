@@ -35,7 +35,7 @@ public struct StoreCard: View {
     let store: RelayStore
     let jobID: String?
     let actions: CardActions
-    @State private var host: Host?
+    @State private var host: AgentHost?
 
     public init(store: RelayStore, jobID: String? = nil, actions: CardActions) {
         self.store = store

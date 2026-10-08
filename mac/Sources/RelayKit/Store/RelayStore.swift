@@ -76,7 +76,7 @@ public final class RelayStore {
 
     /// The data the card is built from: the menu-bar card when `jobID` is `nil`, otherwise the
     /// card of a `relay://` window.
-    public func cardInput(jobID: String? = nil, host: Host? = nil) -> CardInput {
+    public func cardInput(jobID: String? = nil, host: AgentHost? = nil) -> CardInput {
         CardInput(
             connection: connection,
             jobs: Array(jobsByID.values),

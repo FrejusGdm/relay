@@ -44,7 +44,7 @@ struct HostFinderTests {
         workspace.apps = [400: "Terminal"]
         let table = FakeProcessTable([5120: 5000, 5000: 4990, 4990: 400, 400: 1])
         let host = HostFinder(table: table, workspace: workspace).host(of: 5120)
-        #expect(host == Host(pid: 400, name: "Terminal"))
+        #expect(host == AgentHost(pid: 400, name: "Terminal"))
 
         var input = try Sample.handoff(host: nil)
         input.host = host
