@@ -109,7 +109,7 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
     log.info("command started", started);
     log.warn("settings invalid", { path: join(relayHome, "config.toml"), problems: error.problems });
     const code = def.withoutSettings === undefined ? await settingsFailure(error, def, io)
-      : await def.withoutSettings({ def, positionals, values, io, log, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome });
+      : await def.withoutSettings({ def, positionals, values, io, log, logLevel: level, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome });
     finish(state, code);
     return code;
   }
