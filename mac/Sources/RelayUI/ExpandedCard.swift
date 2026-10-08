@@ -4,7 +4,7 @@ import SwiftUI
 /// The expanded card, 376 points wide (`.rc-card` in `docs/design/preview.html`), in the order
 /// `DESIGN.md` fixes: head, job, status line, workers, facts, actions.
 public struct ExpandedCard: View {
-    public static let width: CGFloat = 376
+    public nonisolated static let width: CGFloat = 376
 
     let model: CardModel
     let actions: CardActions

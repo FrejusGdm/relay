@@ -4,7 +4,7 @@ import SwiftUI
 /// The menu-bar card, 280 points wide (`.rc-tiny` in `docs/design/preview.html`). Clicking it
 /// anywhere except the action expands it.
 public struct TinyCard: View {
-    public static let width: CGFloat = 280
+    public nonisolated static let width: CGFloat = 280
 
     let model: CardModel
     let actions: CardActions
