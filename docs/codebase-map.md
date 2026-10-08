@@ -2,7 +2,7 @@
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, `add-relay-switch`
-(see `docs/handoff.md`), task groups 1 to 7 of `add-handoff-evaluation`, task groups 1 to 7 of
+(see `docs/handoff.md`), task groups 1 to 8 of `add-handoff-evaluation`, task groups 1 to 7 of
 `add-website`, task groups 1 to 6 and 8 to 10 of `add-daemon-api-and-status`, task groups 1 to 5
 of `add-mac-menu-bar-app`, and task groups 1 to 7 of `add-lifetime-license`.
 
@@ -396,8 +396,11 @@ messages.
 program, run with `bun run eval:handoff <command>`, and is never compiled into the `relay` binary.
 It has its command line, the four fixture tasks, the plan files, the checks that `run` makes
 before it starts, the runner that performs baseline and handoff runs through `relay`, and the
-summary with its decision rules. Its own tests use a stub `relay` instead of the real program, so
-they start no agent.
+summary with its decision rules. `eval/handoff/README.md` is the guide for the person who runs it.
+Its own tests use a stub `relay` instead of the real program, so they start no agent; one
+end-to-end test, `test/e2e-fake-agents.test.ts`, runs the smoke plan against a real `relay` program
+named by `RELAY_BIN` with relay's fake agents, and CI runs it on Linux against the program it
+builds.
 
 ```mermaid
 flowchart TD
@@ -483,7 +486,7 @@ sequenceDiagram
   participant R as relay run
   participant W as relay switch
   H->>S: git archive of .start/, one commit, the person's note in NOTES.md
-  H->>S: relay init, .relay/task.md, record the four safety values, snapshot 0
+  H->>S: relay init, relay status --json, .relay/task.md, record the four safety values, snapshot 0
   H->>R: relay run with the first target, --headless --json
   loop every 500 ms
     H->>S: read new lines of .relay/events.jsonl

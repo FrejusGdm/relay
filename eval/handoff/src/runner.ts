@@ -143,30 +143,30 @@ export async function runOne(ctx: RunContext, run: PlannedRun): Promise<RunRepor
   let running = null as RunningRelay | null;
   let exitCode = null as number | null;
 
-  const usedPercent = async (target: string): Promise<number | null> => {
-    try {
-      return (await ctx.relay.status(ctx.home, runLog)).find((account) => account.target === target)?.used_percent ?? null;
-    } catch {
-      return null;
-    }
-  };
-
   try {
     rmSync(workDir, { recursive: true, force: true });
     rmSync(indexPath, { force: true });
     result.tools = await toolVersions(ctx.relay.bin, ctx.home);
-    const accounts = await ctx.relay.status(ctx.home, runLog);
+    const { repo, baseSha } = await createScratchRepo({
+      repoRoot: ctx.repoRoot, task: run.task, taskVersion, workDir, allowDirty: ctx.allowDirtyFixtures,
+    });
+    result.base_sha = baseSha;
+    await ctx.relay.init(repo, `eval ${run.id}`, runLog);
+    // relay status answers only inside a relay project, so it runs in the scratch repository.
+    const accounts = await ctx.relay.status(repo, runLog);
     for (const target of to === null ? [from] : [from, to]) {
       const account = accounts.find((item) => item.target === target);
       if (account !== undefined && LIMITED_STATUSES.includes(account.status)) {
         throw new EvalError(`${target} is not available (${account.status}). It resets at ${account.retry_at ?? "an unknown time"}.`, 5);
       }
     }
-    const { repo, baseSha } = await createScratchRepo({
-      repoRoot: ctx.repoRoot, task: run.task, taskVersion, workDir, allowDirty: ctx.allowDirtyFixtures,
-    });
-    result.base_sha = baseSha;
-    await ctx.relay.init(repo, `eval ${run.id}`, runLog);
+    const usedPercent = async (target: string): Promise<number | null> => {
+      try {
+        return (await ctx.relay.status(repo, runLog)).find((account) => account.target === target)?.used_percent ?? null;
+      } catch {
+        return null;
+      }
+    };
     writeFileSync(join(repo, ".relay", "task.md"), readFileSync(join(fixture.dir, "task.md")));
     await checkTopLevel(repo);
     const before = await recordSafety(repo);

@@ -89,7 +89,7 @@ it; none of them needs a new relay command.
 | relay's own claim check | the `handoff` event's `data.claims_count` and `data.mismatches` (a list of `{claim, found}`) | `add-relay-switch`, design decision 20 |
 | The next agent's verification | `<workdir>/.relay/verify.md`, a Markdown table with the columns Claim, Holds (`yes`, `no` or `unclear`) and Evidence | `add-relay-switch`, `handoff-content` "Verification file" |
 | Stop a worker | send `SIGINT` to the `relay run` process the harness started: relay interrupts the turn through the adapter and exits with code 130; a second `SIGINT` stops the agent at once | `add-provider-adapters`, `agent-runs` "Interrupting a headless run with Ctrl+C" |
-| Account state | `relay status --json` with `accounts[]`: `target`, `availability.status`, `availability.retry_at` and `usage[].used_percent` | `add-daemon-api-and-status`, `status-command` "JSON mode" |
+| Account state | `relay status --json`, run in the scratch repository because it answers only inside a relay project, with `accounts[]`: `target`, `availability.status`, `availability.retry_at` and `usage[].used_percent` | `add-daemon-api-and-status`, `status-command` "JSON mode" |
 
 The `handoff` event and `verify.md` come from `architecture.md`, section 5, "Making the next agent
 check the previous agent's claims" (layers 2 and 3).
