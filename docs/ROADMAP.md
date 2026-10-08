@@ -64,14 +64,15 @@ end without waiting for him. Specifically:
 | 2026-10-07 | The website: deployed to Azure Static Web Apps in Josué's Azure subscription (signed in on Omarchy). |
 | 2026-10-07 | One small real handoff (Claude Code to Codex on a scratch repository) may run on Omarchy with the accounts already signed in there; everything else uses fake providers. |
 | 2026-10-07 | Design: `DESIGN.md` and `docs/design/preview.html` (current direction; may still change). |
-| 2026-10-07 | Business model: a one-time payment (a lifetime license for the paid features); the core stays free. |
-| 2026-10-07 | Payment provider: Stripe, following Stripe's own implementation guides and best practices. Build in Stripe test mode until Josué adds live keys. |
+| 2026-10-07 | Business model: a one-time payment (a lifetime license for the paid features); the core stays free. Replaced on 2026-10-09: relay is free. |
+| 2026-10-07 | Payment provider: Stripe, following Stripe's own implementation guides and best practices. Build in Stripe test mode until Josué adds live keys. Replaced on 2026-10-09: relay takes no payments. |
 | 2026-10-07 | No Apple Developer account for now: the CLI never needs one, and the Mac app works unsigned (first launch: right-click, Open). Only a smooth public download of the Mac app would need it later. |
 | 2026-10-08 | Approved `add-t3-limit-rules`: limit rules per account and window (use all of the 5-hour window; keep 10 percent of the weekly window by default, then move work to another provider), applied to T3 Code threads. |
 | 2026-10-08 | relay drives T3 Code through T3's MCP server, the documented door for outside programs. This settles the adapter part of the T3 relationship; a relay view inside T3 is still open. |
 | 2026-10-08 | One exception to "relay never stores tokens": relay keeps the access token T3 Code issues to it, in the operating system's credential store only. It is not a login to Anthropic or OpenAI, and the person can revoke it in T3. |
 | 2026-10-08 | relay asks T3 for the `full-access` level, because T3 only lets outside programs act on threads whose permission mode is not broader than theirs. relay never changes a thread's permission mode. |
 | 2026-10-08 | Claude usage readings come from `claude -p "/usage"`, once a check confirms it spends no usage. T3's experimental usage call is never used. |
+| 2026-10-09 | relay is free: no paid features and no license. The add-lifetime-license change is withdrawn. |
 
 ## Decisions still open
 
@@ -126,5 +127,5 @@ first version; each has a detailed OpenSpec proposal.
 
 A relay view inside T3; Cursor and OpenCode adapters; the job
 lineage view; a public release with security review items from
-`docs/research/security.md`; and, if wanted, the paid tier and cloud features. The website
+`docs/research/security.md`; and, if wanted, cloud features. The website
 (the landing page) is proposed in `openspec/changes/add-website/`.

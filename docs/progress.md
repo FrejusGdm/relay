@@ -21,17 +21,15 @@ flowchart LR
   p7["7. Limit rules for T3 Code<br/>add-t3-limit-rules"]:::building
   mac["The Mac app<br/>add-mac-menu-bar-app"]:::review
   site["The website<br/>add-website"]:::building
-  pay["Payments<br/>add-lifetime-license"]:::notstarted
 
   p1 --> p2 --> p3 --> p4 --> p5 --> p6
   p5 --> mac
-  p1 --> site --> pay
+  p1 --> site
   p5 --> p7
 
   classDef done fill:#d3f0d8,stroke:#2e7d32,color:#1b3d20
   classDef review fill:#d6e6fa,stroke:#1f5fa8,color:#12345c
   classDef building fill:#fbe8c8,stroke:#b26a00,color:#4a2e00
-  classDef notstarted fill:#eeeeee,stroke:#8a8a8a,color:#333333,stroke-dasharray: 5 5
 ```
 
 The colours show the state of each change:
@@ -41,12 +39,12 @@ The colours show the state of each change:
   request.
 - **Orange, being built:** some task groups are on `main`, and the rest are not in a pull request
   yet, or wait for something outside the code.
-- **Grey with a dashed border, not started:** no task is ticked.
 
 The arrows show which change needs which. Phases 1 to 6 are the first version of
 `docs/ROADMAP.md`. Phase 7, automatic failover, starts with `add-t3-limit-rules`. That change also
-needs phases 1, 3 and 4; the diagram shows only its link to phase 5 to stay readable. Payments come
-after the website because the license page is part of the website.
+needs phases 1, 3 and 4; the diagram shows only its link to phase 5 to stay readable.
+`add-lifetime-license` was withdrawn on 2026-10-09, because relay is free; it is archived in
+`openspec/changes/archive/`.
 
 ## Task groups per change
 
@@ -206,23 +204,6 @@ crossings, the T3 Code client with a fake T3 server, and the sign-in to T3 Code.
 `main` in `src/limits/` and `src/t3/`, but group 2's boxes are still open in `tasks.md`, so the
 boxes lag behind the code here. I did not check which task each pull request completes.
 
-### add-lifetime-license (payments): not started
-
-| Task group | Ticked | Open |
-|---|---|---|
-| 1. License server project and signing | 0 | 2 |
-| 2. The offline check in relay | 0 | 2 |
-| 3. The relay license command | 0 | 3 |
-| 4. Fulfillment | 0 | 3 |
-| 5. The HTTP functions and the bundle | 0 | 3 |
-| 6. Continuous integration | 0 | 1 |
-| 7. Website integration (after `add-website` is merged) | 0 | 3 |
-| 8. Test-mode run (waits for a Stripe sandbox) | 0 | 3 |
-| 9. Documentation | 0 | 1 |
-
-I found no record in `docs/ROADMAP.md` that this proposal was approved, so it may still be waiting
-for approval.
-
 ## Pull requests
 
 These three pull requests are open. Each one targets `main`.
@@ -259,11 +240,6 @@ These items need a person with the real tools, an account or a decision. An agen
   read both result files, then run the standard plan over several days, summarize it, copy
   `summary.md` to `docs/evaluations/handoff-<date>.md`, and decide on phase 7 from the verdicts.
   `eval/handoff/README.md` explains each step and the cost.
-- **Payments** (`add-lifetime-license`): approve the proposal, create a Stripe sandbox for the
-  test-mode run (task group 8), and answer the proposal's open questions: which features are paid;
-  the price and currency; what "lifetime" covers (all future updates, or one year of updates);
-  sales tax and VAT; refunds; whether the key is also sent by email; and the product's name. Live
-  mode stays a step that Josué does himself.
 - **The open decisions in `docs/ROADMAP.md`:** whether to ask Anthropic and OpenAI directly before a
   public release, whether relay gets a view inside T3 Code, and whether the name "relay" is clear
   enough for search, a domain and a Homebrew name.

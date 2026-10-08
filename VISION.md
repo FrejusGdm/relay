@@ -212,20 +212,13 @@ should be disposable. Your work shouldn't be." "One pool. Every agent." "Same re
 Same decisions. Same task. Different worker." "relay is free. You already paid for
 the agents."
 
-## Business (open)
+## Business
 
-The founder's instinct: free. Options from the notes:
-
-- relay core free and open source forever;
-- relay Pro as a one-time lifetime license for the polished local experience
-  (founding price tiers such as $79, $119, $149), never a usage tax and never a cut of
-  agent spend;
-- an optional "support relay" donation kept separate from the license;
-- relay Cloud or Teams later, as a subscription, only for things with real ongoing
-  cost (sync across machines, phone control, shared pools, team policy, audit).
-
-Rule from the notes: if it unlocks software, it is a license; if it unlocks nothing,
-it is a donation. Never call a license a donation.
+relay is free and open source (Apache 2.0). Nothing is paid and nothing is locked:
+there are no paid features and no license key. Josué decided this on 2026-10-09, in
+his words: "let's make it all free and not gatekeep something". It replaces the
+earlier plan of a one-time lifetime license for paid features. relay never takes a
+share of what people spend on agents.
 
 ## Open questions
 
@@ -236,5 +229,4 @@ it is a donation. Never call a license a donation.
 - How the local API is secured against other software on the machine.
 - How relay notices an agent stopped, when the agent runs inside an app relay did not
   start.
-- License (MIT or Apache 2.0) and whether there is a paid tier at launch.
 - The landing page and brand (`DESIGN.md`).

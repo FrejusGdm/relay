@@ -1,4 +1,0 @@
-env = false
-
-[test]
-root = "test"

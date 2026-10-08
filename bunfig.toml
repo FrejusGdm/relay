@@ -3,6 +3,4 @@ env = false
 [test]
 # The whole repository, so that `bun test` also runs the website's file tests in site/test.
 root = "."
-# license-server/ is its own project with its own dependencies; its tests run there.
-pathIgnorePatterns = ["license-server/**"]
 preload = ["./test/setup.ts"]

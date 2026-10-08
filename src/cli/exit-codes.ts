@@ -20,8 +20,6 @@ export const ExitCode = Object.freeze({
   StartFailed: 31,
   WouldRaisePermission: 32,
   CannotStop: 33,
-  LicenseInvalid: 50,
-  LicenseMissing: 51,
   NotAvailable: 69,
   Internal: 70,
   Settings: 78,

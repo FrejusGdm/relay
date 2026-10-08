@@ -307,3 +307,28 @@ test("unknown address shows the 404 page", async ({ page, problems }) => {
   const own = problems.findIndex((p) => p.url === page.url() && p.text.includes("status of 404"));
   if (own >= 0) problems.splice(own, 1);
 });
+
+for (const width of [1440, 390]) {
+  test.describe(`pricing at ${width} pixels`, () => {
+    test.use({ viewport: { width, height: 900 }, reducedMotion: "reduce", colorScheme: "light" });
+
+    test(`the joke price, then the free note, in both themes at ${width} pixels`, async ({ page }) => {
+      await page.goto("/");
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      const pricing = page.locator("#pricing");
+      await expect(pricing.locator(".price-big")).toHaveText("$19.99");
+      await expect(pricing.locator(".price-joke")).toHaveText("I’m joking.");
+      await expect(pricing.locator(".price-joke")).toHaveCSS("text-decoration-line", "underline");
+      await expect(pricing.locator(".price-free")).toHaveText("relay is free and open source.");
+      await expect(page.locator('form:not([method="dialog"]), [action*="checkout"], a[href*="license"]:not([href*="apache.org"])')).toHaveCount(0);
+      await pricing.scrollIntoViewIfNeeded();
+      await pricing.screenshot({ path: path.join(import.meta.dirname, "out", `${target}-pricing-light-${width}.png`) });
+
+      await themeToggle(page).click();
+      await page.mouse.move(0, 0);
+      await expectBackground(page, darkBackground);
+      await expect(pricing.locator(".price-big")).toHaveCSS("color", "rgb(237, 235, 228)");
+      await pricing.screenshot({ path: path.join(import.meta.dirname, "out", `${target}-pricing-dark-${width}.png`) });
+    });
+  });
+}

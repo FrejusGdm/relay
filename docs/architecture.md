@@ -185,8 +185,7 @@ login command, and relay only points the agent at the folder.
 
 All of this is on `main`, with three exceptions. The `handoffs/<n>` refs and `verify.md` come with
 the switch engine of `add-relay-switch`. The worker lock comes with `relay run` (pull request #19).
-`add-t3-limit-rules` adds `RELAY_HOME/t3/`, and `add-lifetime-license` would add
-`RELAY_HOME/license.key`; neither folder nor file is on `main` yet. `docs/checkpoints.md`,
+`add-t3-limit-rules` adds `RELAY_HOME/t3/`, which is not on `main` yet. `docs/checkpoints.md`,
 `docs/daemon.md` and `docs/accounts.md` describe the files one by one.
 
 ## The daemon and its clients

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 const pub = join(import.meta.dir, "..", "public");
 const read = (name: string) => Bun.file(join(pub, name)).text();
-const htmlFiles = readdirSync(pub, { recursive: true, encoding: "utf8" }).filter((name) => name.endsWith(".html") && !name.startsWith("fonts/"));
+const htmlFiles = readdirSync(pub).filter((name) => name.endsWith(".html"));
 const allowedLinks = ["#top", "#how", "#pricing", "/", "https://www.apache.org/licenses/LICENSE-2.0", "https://github.com/FrejusGdm/relay"];
 
 describe.each(htmlFiles)("%s", (name) => {
@@ -37,16 +37,21 @@ describe("index.html", () => {
     expect(html).toContain("<title>relay: never run out of limits again</title>");
   });
 
-  test("says that paid features will be a one-time payment for a lifetime license", async () => {
+  test("shows the joke price, says it is a joke, then says relay is free and open source", async () => {
     const pricing = (await read("index.html")).match(/<section id="pricing">[\s\S]*?<\/section>/)?.[0] ?? "";
-    expect(pricing).toContain("one-time payment");
-    expect(pricing).toContain("lifetime license");
+    const texts = [...pricing.matchAll(/<p class="([^"]*)">([^<]*)<\/p>/g)].map((m) => [m[1], m[2]]);
+    expect(texts).toEqual([
+      ["price-big", "$19.99"],
+      ["price-joke", "I’m joking."],
+      ["price-free", "relay is free and open source."],
+    ]);
   });
 
-  test("names no price and has no checkout: buying is off unless site/scripts/build.sh turns it on", async () => {
+  test("has no buy form, no checkout and no license page, and $19.99 is the only price", async () => {
     const html = await read("index.html");
-    expect(html).not.toMatch(/\$\d/);
-    expect(html).not.toMatch(/checkout|stripe|buy now|donat/i);
+    expect(html.match(/\$\d[\d.]*/g)).toEqual(["$19.99"]);
+    expect(html).not.toMatch(/checkout|stripe|buy|lifetime|license key|paid feature|donat/i);
+    expect(html).not.toMatch(/href="\/license|\/api\//);
   });
 
   test("has one theme button in the navigation, with a moon and a sun icon, that offers the dark theme", async () => {
@@ -85,30 +90,6 @@ describe("index.html", () => {
     const forms = (await read("index.html")).match(/<form\b[^>]*>/gi) ?? [];
     expect(forms.length).toBeGreaterThan(0);
     for (const form of forms) expect(form).toContain('method="dialog"');
-  });
-});
-
-describe("license/index.html", () => {
-  test("has the texts of every state and loads only its own script", async () => {
-    const html = await read("license/index.html");
-    expect(html).toContain("<noscript><p>This page needs JavaScript to show your key.</p></noscript>");
-    expect(html).toContain('<h1 class="display">Your relay license</h1>');
-    expect(html).toContain(">Copy key</button>");
-    expect(html).toContain(">Copy command</button>");
-    expect(html).toContain("Activate it in a terminal:");
-    expect(html).toContain(
-      "Save this key somewhere safe. relay checks it on your computer and never sends it anywhere. This page shows the same key again if you open it later.",
-    );
-    expect(html).toContain('<script src="/license/license.js" defer></script>');
-    const js = await read("license/license.js");
-    for (const text of [
-      "Getting your license key…",
-      "Your payment is still processing. Your key appears on this page when the payment completes. Reload it later.",
-      "This link does not lead to a paid order. If you paid, write to the support address on your Stripe receipt.",
-      "Something went wrong on our side. Nothing was charged twice. Reload this page in a minute.",
-    ]) {
-      expect(js).toContain(text);
-    }
   });
 });
 

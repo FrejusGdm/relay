@@ -464,20 +464,13 @@ section { padding: 128px 0; border-top: 1px solid var(--rule); }
 .lg-da { width: 18px; height: 10px; border: 1px dashed var(--warning); border-radius: 3px; }
 @media (max-width: 760px) { .tg-stage { padding: 28px 14px; } .tg-status { padding: 10px 14px; font-size: 13px; } }
 
-/* Pricing */
-.price { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); overflow: hidden; }
-.price-col { padding: 32px 36px 30px; min-width: 0; }
-.price-col + .price-col { border-left: 1px solid var(--rule); }
-.price-col h3 { margin: 0; font: 600 17px var(--font-text); letter-spacing: -0.005em; }
-.price-col p { margin: 12px 0 0; color: var(--muted); max-width: 44ch; }
-.price-col .price-big { margin: 20px 0 0; color: var(--text); font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(44px * var(--display-scale) / 0.86); line-height: 1; }
-.buy-form { margin: 24px 0 0; }
-.price-col .buy-note { font-size: 14px; margin-top: 14px; }
-@media (max-width: 700px) {
-  .price { grid-template-columns: minmax(0, 1fr); }
-  .price-col { padding: 26px 20px 24px; }
-  .price-col + .price-col { border-left: 0; border-top: 1px solid var(--rule); }
-}
+/* Pricing: a joke price, then the real one */
+.price { max-width: 520px; padding: 32px 36px 30px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); }
+.price p { margin: 12px 0 0; color: var(--muted); }
+.price .price-big { margin: 0; color: var(--text); font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(64px * var(--display-scale) / 0.86); line-height: 1; font-variant-numeric: tabular-nums; }
+.price .price-joke { margin-top: 16px; color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 5px; }
+.price .price-free { margin-top: 24px; color: var(--text); font-size: 18px; }
+@media (max-width: 700px) { .price { padding: 26px 20px 24px; } }
 
 /* Closing panel */
 .closing { padding: 120px 0; }
@@ -529,16 +522,6 @@ section { padding: 128px 0; border-top: 1px solid var(--rule); }
 main.wrap { padding-top: 128px; padding-bottom: 128px; }
 main.wrap h1 { font-size: calc(clamp(32px, 3.6vw, 48px) * var(--display-scale) / 0.86); margin: 0 0 16px; }
 main.wrap p { margin: 0; color: var(--muted); font-size: 18px; }
-
-/* License page: the key and the activation command after a purchase */
-main.license > * { max-width: 880px; }
-main.license .license-issued { margin-top: 8px; }
-.license-block { margin-top: 28px; }
-.license-block-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.license-block-head h2 { margin: 0; font: 600 15px var(--font-text); }
-.license-text { margin: 10px 0 0; padding: 14px 16px; font: 13px/1.6 var(--font-mono); background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
-main.wrap .license-note { margin-top: 24px; font-size: 15px; max-width: 64ch; }
-@media (max-width: 480px) { .license-text { padding: 12px; font-size: 12px; } .license-block .btn-sm { min-height: 36px; } }
 
 @media (max-width: 640px) { .wrap { padding: 0 16px; } }
 

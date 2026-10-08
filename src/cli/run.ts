@@ -13,7 +13,6 @@ import { resolveRelayHome } from "../core/paths";
 import { printable } from "../core/quote";
 import { ensureRelayHome } from "../core/relay-home";
 import { VERSION } from "../core/version";
-import { LICENSE_PUBLIC_KEYS } from "../license/public-keys";
 
 export interface CliContext {
   argv: string[];
@@ -24,8 +23,6 @@ export interface CliContext {
   uid: number;
   io: Io;
   commands?: CommandDef[];
-  // Only tests pass a table; relay always uses LICENSE_PUBLIC_KEYS (add-lifetime-license).
-  licensePublicKeys?: Readonly<Record<string, string>>;
   onLogOpened?: (log: Logger) => void;   // main.ts uses it to log a signal
 }
 
@@ -87,7 +84,6 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
   }
 
   const { def, positionals, optionNames, values, logLevelFlag } = result;
-  const licensePublicKeys = ctx.licensePublicKeys ?? LICENSE_PUBLIC_KEYS;
   let relayHome: string;
   try {
     relayHome = useRelayHome(ctx);
@@ -113,7 +109,7 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
     log.info("command started", started);
     log.warn("settings invalid", { path: join(relayHome, "config.toml"), problems: error.problems });
     const code = def.withoutSettings === undefined ? await settingsFailure(error, def, io)
-      : await def.withoutSettings({ def, positionals, values, io, log, logLevel: level, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, licensePublicKeys });
+      : await def.withoutSettings({ def, positionals, values, io, log, logLevel: level, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome });
     finish(state, code);
     return code;
   }
@@ -126,7 +122,7 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
   });
 
   const code = await def.handler({
-    def, positionals, values, io, log, logLevel, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, config, licensePublicKeys,
+    def, positionals, values, io, log, logLevel, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, config,
   });
   finish(state, code);
   return code;
