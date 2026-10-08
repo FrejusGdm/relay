@@ -3,6 +3,7 @@ import type { Logger } from "../../core/log";
 import type { Io } from "../io";
 import { buildAgentEnv } from "../../accounts/environment";
 import { readCodexHookTrust } from "../../adapters/codex/hooks";
+import { PAID_FEATURES } from "../../license/features";
 import { acceptGitChanges } from "./accept-git-changes";
 import { account } from "./account";
 import { checkpoint } from "./checkpoint";
@@ -12,6 +13,7 @@ import { doctor } from "./doctor";
 import { hook } from "./hook";
 import { hooksCommand } from "./hooks";
 import { init } from "./init";
+import { licenseCommand } from "./license";
 import { notBuilt } from "./not-built";
 import { policy } from "./policy";
 import { providers } from "./providers";
@@ -22,7 +24,7 @@ import { statusline, statuslineWithoutSettings } from "./statusline";
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
-  | "hooks" | "hook" | "statusline" | "daemon" | "doctor";
+  | "hooks" | "hook" | "statusline" | "daemon" | "doctor" | "license";
 
 export interface OptionDef {
   name: string;          // long name without dashes, for example "message"
@@ -45,6 +47,8 @@ export interface CommandContext {
   homedir: string;
   relayHome: string;
   config: RelayConfig;
+  // The license public key table: LICENSE_PUBLIC_KEYS, which only tests replace (add-lifetime-license).
+  licensePublicKeys: Readonly<Record<string, string>>;
 }
 
 export interface CommandDef {
@@ -361,5 +365,23 @@ export const COMMANDS: CommandDef[] = [
     quiet: false,
     built: true,
     handler: doctor,
+  },
+  {
+    name: "license",
+    usage: "relay license <activate|status|remove> [<key>]",
+    argsUsage: "<activate|status|remove> [<key>]",
+    summary: "Add, check or remove your relay license",
+    details: ["relay checks the key on this computer. It never sends it anywhere."],
+    examples: [
+      "relay license activate relay1.eyJ2IjoxLCJraWQiOiJsaXZlLTEi...",
+      "relay license status",
+      "relay license remove",
+    ],
+    options: [],
+    minArgs: 1,
+    maxArgs: 2,
+    quiet: false,
+    built: true,
+    handler: licenseCommand(PAID_FEATURES),
   },
 ];

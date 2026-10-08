@@ -4,7 +4,8 @@ Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task gr
 `add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, task groups 1 to 4 of
 `add-relay-switch` (except tasks 1.5, 2.3 and 3.5), task groups 1 to 7 of
 `add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 6, 9 and 10 of
-`add-daemon-api-and-status`, and task groups 1 to 4 of `add-mac-menu-bar-app`.
+`add-daemon-api-and-status`, task groups 1 to 4 of `add-mac-menu-bar-app`, and task groups 1 to 7
+of `add-lifetime-license`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
 `docs/first-version-index.md` lists every file that the six first-version changes will add, and
@@ -16,7 +17,7 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the seventeen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>license.ts, not-built.ts: their handlers"]
     hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
@@ -525,6 +526,49 @@ checks that Playwright runs. `site/scripts/` holds the font download script, the
 of a running copy of the site, and the deployment script. `bunfig.toml` sets the test root to the whole repository so that
 `bun test` finds `site/test/`. `docs/website.md` describes the files with a diagram and says how to
 get the fonts and run the checks.
+
+## The license
+
+The OpenSpec change `add-lifetime-license` adds two parts: the offline key check inside `relay`,
+and a small server that sells and delivers keys. `docs/licensing.md` explains the whole flow.
+
+```mermaid
+flowchart TD
+  subgraph relayside["relay program"]
+    command["src/cli/commands/license.ts<br/>relay license activate, status, remove"]
+    key["src/license/key.ts: verifyLicenseKey"]
+    keys["src/license/public-keys.ts: LICENSE_PUBLIC_KEYS"]
+    store["src/license/store.ts: RELAY_HOME/license.key"]
+    features["src/license/features.ts: PAID_FEATURES, featureUnlocked"]
+  end
+  subgraph server["license-server/ (its own Bun project)"]
+    index["src/index.ts: registers the three Azure functions"]
+    handlers["src/handlers/<br/>checkout.ts, webhook.ts, license.ts"]
+    corefiles["src/core/<br/>settings.ts, stripe-client.ts, fulfill.ts,<br/>sign.ts, http.ts"]
+    scripts2["scripts/<br/>build.ts, keygen.ts, verify-key.ts,<br/>smoke.sh, page-preview.ts"]
+    fakestripe["test/fakes/stripe.ts: FakeStripeApi"]
+  end
+  site2["site/public/<br/>index.html: the buy form<br/>license/: the license page"]
+  command --> key
+  command --> store
+  command --> features
+  key --> keys
+  index --> handlers
+  handlers --> corefiles
+  fakestripe -->|"stands in for Stripe in the tests of"| handlers
+  site2 -->|"posts to /api/checkout,<br/>reads /api/license"| index
+  crosscheck["test/license/cross-check.test.ts"] -->|"signs with sign.ts, checks with"| key
+```
+
+The diagram shows the two parts and how they meet. In the `relay` program, the `license` command
+checks a key with `verifyLicenseKey`, which uses only the built-in public keys, and saves the key
+in `RELAY_HOME/license.key`. The license server is a separate Bun project: `src/index.ts` is the
+only file that imports `@azure/functions`, and the handlers take plain requests, so the tests
+call them with a fake Stripe client. The website's buy form and license page talk only to the
+server's `/api/` routes on the same site. A test in the `relay` project signs keys with the
+server's `sign.ts` and checks them with relay's `key.ts`, so the two sides cannot drift apart.
+The root `bunfig.toml` keeps `license-server/` out of the root `bun test`, because that project has
+its own dependencies; CI tests it in its own job.
 
 ## The Mac app
 

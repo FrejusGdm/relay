@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Deploys site/public to the Azure Static Web App relay-site, then runs the smoke test.
-# Run it on the Omarchy machine: bash site/scripts/deploy.sh
+# Deploys site/public, with the license server in license-server/dist as its API, to the Azure
+# Static Web App relay-site, then runs the smoke test.
+# Run it on the Omarchy machine: bash site/scripts/deploy.sh [environment]
+# Without an environment it deploys to production; with one, for example license-test, it deploys
+# to that preview environment and leaves production alone.
 set -euo pipefail
 set +x # tracing would print the deployment token
 
@@ -8,6 +11,7 @@ app=relay-site
 group=relay-rg
 subscription="Azure subscription 1"
 swa_cli=@azure/static-web-apps-cli@2.0.10
+environment=${1:-production}
 export AZURE_CORE_COLLECT_TELEMETRY=false
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -29,6 +33,8 @@ done
 
 sh site/scripts/fetch-fonts.sh
 bun test site/test
+# The API is built here and deployed as it is (add-lifetime-license, design decision 12).
+(cd license-server && bun install --frozen-lockfile && bun test && bun run build)
 
 host=$(az staticwebapp show --subscription "$subscription" --name "$app" --resource-group "$group" --query defaultHostname --output tsv)
 
@@ -38,7 +44,8 @@ if [ -z "$token" ]; then
   exit 1
 fi
 status=0
-output=$(SWA_CLI_DEPLOYMENT_TOKEN="$token" npx --yes "$swa_cli" deploy site/public --env production </dev/null 2>&1) || status=$?
+output=$(SWA_CLI_DEPLOYMENT_TOKEN="$token" npx --yes "$swa_cli" deploy site/public --env "$environment" \
+  --api-location license-server/dist --api-language node --api-version 22 </dev/null 2>&1) || status=$?
 case "$output" in
   *"$token"*)
     unset token output
@@ -53,5 +60,12 @@ if [ "$status" -ne 0 ]; then
   exit "$status"
 fi
 
+if [ "$environment" != production ]; then
+  # Azure keeps only the letters and digits of a preview environment's name: license-test becomes licensetest.
+  name=$(printf '%s' "$environment" | tr -cd 'A-Za-z0-9')
+  host=$(az staticwebapp environment list --subscription "$subscription" --name "$app" --resource-group "$group" \
+    --query "[?name=='$name'].hostname | [0]" --output tsv)
+  [ -n "$host" ] || { echo "deploy: Azure lists no environment named $name." >&2; exit 1; }
+fi
 sh site/scripts/smoke-test.sh "https://$host"
 echo "Deployed: https://$host"

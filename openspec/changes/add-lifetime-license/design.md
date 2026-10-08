@@ -114,7 +114,7 @@ Why two price settings: the checkout sells only the current price, but fulfillme
 
 When the settings are wrong, every function answers status 503 with `{"error":"not_configured"}` and logs `settings invalid` with the setting names only. No function ever logs, returns or echoes a setting's value.
 
-Environments: test values (`rk_test_`, `test-1`) are set only on the preview environment used for the test-mode run (`--environment-name license-test`); live values only on the production environment. A check command in "What Josué must do" confirms that no preview environment holds an `rk_live_` value.
+Environments: test values (`rk_test_`, `test-1`) are set only on the preview environment used for the test-mode run (`--environment-name licensetest`); live values only on the production environment. A check command in "What Josué must do" confirms that no preview environment holds an `rk_live_` value.
 
 The restricted key gets exactly two permissions: **Checkout Sessions: Write** (create, and retrieve with expanded line items) and **PaymentIntents: Write** (read the expanded PaymentIntent and update its metadata). Everything else is **None**. If the test-mode run gets a 403 that names another resource, add only that resource as **Read**, and record it in `docs/licensing.md`; this follows Stripe's own advice for building a restricted key from test-mode errors (`stripe-best-practices` skill, security reference, "Restricted API keys").
 
@@ -324,7 +324,7 @@ export function featureUnlocked(feature: PaidFeature, license: License | null): 
 
 A lifetime license unlocks every paid feature, so `featureUnlocked` only checks that a valid license exists; it is one function so that a later "updates until" rule changes one place. `relay license status` calls it for each paid feature.
 
-The gate for a paid command, added by the first change that puts a feature in `PAID_FEATURES` (not built here, because no command is paid yet): that command calls `requirePaidFeature(ctx, feature)` in `src/license/gate.ts`, which reads the saved key, verifies it, and, when `featureUnlocked` is false, prints `relay: <feature name> needs a relay license. Run "relay license status" to see yours.` and returns exit code 41.
+The gate for a paid command, added by the first change that puts a feature in `PAID_FEATURES` (not built here, because no command is paid yet): that command calls `requirePaidFeature(ctx, feature)` in `src/license/gate.ts`, which reads the saved key, verifies it, and, when `featureUnlocked` is false, prints `relay: <feature name> needs a relay license. Run "relay license status" to see yours.` and returns exit code 51.
 
 ### 10. The `relay license` command
 
@@ -378,12 +378,12 @@ Outputs. `<file>` is the absolute path of `license.key`.
 | `activate`, valid key | out | `License activated.` / `License ID: <id>` / `Issued: <date>` / `relay keeps the key in <file> and checks it on this computer only.` | 0 |
 | `activate`, valid key replacing a different saved one | out | first line becomes `License activated. It replaces license <old id>.` | 0 |
 | `status`, valid saved key | out | `License: active` / `License ID: <id>` / `Issued: <date>` / `Paid features: <list>` | 0 |
-| `status`, no saved key | out | `License: none` / `relay's core is free and stays free. A license unlocks the paid features.` / `Paid features: <list>` | 41 |
-| `status`, saved key not valid | err | `relay: the saved license in <file> is not valid: <reason>` / `Run "relay license remove", then activate your key again.` | 40 |
+| `status`, no saved key | out | `License: none` / `relay's core is free and stays free. A license unlocks the paid features.` / `Paid features: <list>` | 51 |
+| `status`, saved key not valid | err | `relay: the saved license in <file> is not valid: <reason>` / `Run "relay license remove", then activate your key again.` | 50 |
 | `remove`, saved key | out | `License removed.` | 0 |
 | `remove`, no saved key | out | `No license was saved. Nothing changed.` | 0 |
 | `activate` or `status` while `LICENSE_PUBLIC_KEYS` is empty | err | `relay: this version of relay cannot check license keys yet.` | 69 |
-| `activate`, key not valid | err | `relay: <reason>` | 40 |
+| `activate`, key not valid | err | `relay: <reason>` | 50 |
 
 `<list>` is the paid feature names joined by `, `, or `none yet` while `PAID_FEATURES` is empty. A `/` in the table separates printed lines. The `<reason>` texts:
 
@@ -395,12 +395,12 @@ Outputs. `<file>` is the absolute path of `license.key`.
 | `signature` | `this license key failed its signature check. Copy it again from your license page.` |
 | `product` | `this license key is for another product.` |
 
-Exit codes added to `src/cli/exit-codes.ts`, `docs/cli.md` and `docs/first-version-index.md`:
+Exit codes added to `src/cli/exit-codes.ts`, `docs/cli.md` and `docs/first-version-index.md`. This design first used 40 and 41; on 2026-10-08 they became 50 and 51, because `add-t3-limit-rules` already uses 40 to 42:
 
 | Code | Constant | Meaning |
 |---|---|---|
-| 40 | `LicenseInvalid` | The license key is not valid: wrong format, a test key, an unknown signing key, a failed signature check, or another product. |
-| 41 | `LicenseMissing` | No license is active (from `relay license status`, and later from a paid feature). |
+| 50 | `LicenseInvalid` | The license key is not valid: wrong format, a test key, an unknown signing key, a failed signature check, or another product. |
+| 51 | `LicenseMissing` | No license is active (from `relay license status`, and later from a paid feature). |
 
 The command reads the public key table from its command context, `ctx.licensePublicKeys`, which `src/cli/run.ts` fills with `LICENSE_PUBLIC_KEYS`. Only tests replace it, through the `licensePublicKeys` option of `runRelayInProcess` (`test/helpers/cli.ts`); no flag, setting or environment variable can change it in a built `relay`. This lets tests run the real command against key pairs made at run time, and lets the test-mode run check a real test-mode key (task 8.2) while the built-in table is still empty.
 
@@ -498,7 +498,7 @@ Source: https://docs.stripe.com/automated-testing ("simulate the output of our i
 ### 15. Documents
 
 - `docs/licensing.md`: the flow diagram from this file with its explanation; the key format; what `relay` checks and that it never connects; the settings table; the restricted key's permissions; key generation and rotation; how Josué finds a buyer's key again; and the test-mode run.
-- `docs/cli.md`: the `license` command and the exit codes 40 and 41.
+- `docs/cli.md`: the `license` command and the exit codes 50 and 51.
 - `docs/first-version-index.md`: the new command, exit codes, source folders and capabilities.
 - `README.md`: one sentence that the core is free and a one-time license unlocks the paid features, linking to `docs/licensing.md`.
 - `docs/codebase-map.md`, if it exists by then: `src/license/` and `license-server/`.
@@ -517,7 +517,7 @@ No agent does these steps. Values never go into chat, the repository or a pull r
 
    ```sh
    read -rs RK && read -rs WH && read -r PRICE
-   az staticwebapp appsettings set --name <app> --environment-name license-test \
+   az staticwebapp appsettings set --name <app> --environment-name licensetest \
      --setting-names STRIPE_API_KEY="$RK" STRIPE_WEBHOOK_SECRET="$WH" RELAY_STRIPE_PRICE_ID="$PRICE" \
      RELAY_LICENSE_PRICE_IDS="$PRICE" -o none
    unset RK WH PRICE
@@ -541,7 +541,7 @@ No agent does these steps. Values never go into chat, the repository or a pull r
    unset RK WH PRICE && rm live-1.signing-key
    ```
 
-6. Check that only names are visible and that no preview environment holds a live key: `az staticwebapp appsettings list --name <app> --query "keys(properties)"`, and `az staticwebapp appsettings list --name <app> --environment-name license-test -o json | grep -c rk_live_` must print `0`.
+6. Check that only names are visible and that no preview environment holds a live key: `az staticwebapp appsettings list --name <app> --query "keys(properties)"`, and `az staticwebapp appsettings list --name <app> --environment-name licensetest -o json | grep -c rk_live_` must print `0`.
 7. In the Dashboard, set the public support email (it appears on receipts, and the license page points buyers to it), and turn on email receipts for successful payments if you want them.
 8. Walk through Stripe's go-live checklist (https://docs.stripe.com/get-started/checklist/go-live), make one real purchase with your own card, activate the key with the released `relay`, and refund the purchase in the Dashboard.
 
@@ -562,3 +562,39 @@ Nothing to migrate. Rolling back means reverting the pull requests and removing 
 ## Open Questions
 
 See proposal.md, "Open questions for Josué". None of them blocks building this change in test mode.
+
+## Changes made while building (2026-10-08)
+
+Building task groups 1 to 7 found these points where the design above was out of date or
+incomplete. The code and `docs/licensing.md` follow this list.
+
+- **Exit codes.** 50 and 51 instead of 40 and 41, which `add-t3-limit-rules` already uses (decision 10).
+- **Verifying webhook signatures.** `StripeApi.parseEventNotification` returns a promise and wraps
+  the library's `parseEventNotificationAsync`; the tests sign bodies with
+  `generateTestHeaderStringAsync`. Under Bun, stripe 23.0.0 loads its worker build, whose Web
+  Crypto provider cannot sign or verify synchronously, so the synchronous calls of decisions 3 and
+  14 throw in the tests. The asynchronous calls work with every provider, also on Node.js in Azure.
+- **Reading the saved key.** The scaffold's function is `readPrivateFile(path, uid, maxBytes)`;
+  there is no `checkPrivateFile` (decision 10).
+- **The license page's headers.** The route is `/license*`, not `/license/*`: Static Web Apps does
+  not match `/license` (without the final slash) to `/license/*`. The add-website
+  Content-Security-Policy had `form-action 'none'` and no `connect-src`, which would block the buy
+  form and the license page's call to `/api/license`. The site-wide policy now has
+  `form-action 'self' https://checkout.stripe.com` (browsers also check the redirect that follows a
+  form), and the `/license*` route adds `connect-src 'self'` (decision 12).
+- **The preview environment's name.** Azure keeps only the letters and digits of a preview
+  environment's name: `swa deploy --env license-test` creates the environment `licensetest`, and
+  every `az staticwebapp ... --environment-name` command uses `licensetest` (tasks 7.2 and 8.1, and
+  "What Josué must do", test step 5). `site/scripts/deploy.sh` takes the environment as an optional
+  argument and deploys `license-server/dist` as the API.
+- **The local smoke test.** On the build machine `mise exec node@22` leaves the system Node.js 26
+  first in `PATH`, and Core Tools then fails its first-time setup, so `scripts/smoke.sh` puts Node.js
+  22 first in `PATH` itself (task 5.3).
+- **Root tests.** The root `bunfig.toml` sets `pathIgnorePatterns = ["license-server/**"]`, because
+  its test root is the whole repository and `license-server/` has its own dependencies.
+- **Paid features in tests.** The command is built by `licenseCommand(features)`, and the registry
+  passes `PAID_FEATURES`, so a test can pass a list with one feature (license-command, "A feature
+  added later") without changing the constant.
+- **Preview server for the page.** The license page sends only `session_id`, so
+  `scripts/page-preview.ts` takes the state from the request's `state` value or else from its
+  `session_id` value (task 7.1).

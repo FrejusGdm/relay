@@ -8,7 +8,7 @@ On 2026-10-07 Josué decided the business model: relay's core stays free, and a 
 
 - Add a **license key**: a short text that holds a license ID, the product name and the issue date, signed with an Ed25519 private key. The key holds no email address, no name and no other personal data. The `relay` program checks the signature with a public key built into the program, without any network access. Source: `docs/research/prior-art-and-pricing.md` section 3.2 ("A design that fits relay").
 - Add the command `relay license <activate|status|remove>`. `activate` checks a key and saves it in `RELAY_HOME/license.key`; `status` shows the saved license and the paid features; `remove` deletes the saved key. The list of paid features is one constant, `PAID_FEATURES` in `src/license/features.ts`. It is empty in this change, because which features are paid is still Josué's decision (see "Open questions for Josué").
-- Add two exit codes: 40 (the license key is not valid) and 41 (no license is active).
+- Add two exit codes: 50 (the license key is not valid) and 51 (no license is active). This proposal first named 40 and 41; they were renumbered on 2026-10-08 because `add-t3-limit-rules` already uses 40 to 42.
 - Add a small server, `license-server/`, that runs as the managed Azure Functions API of the website's Azure Static Web App (the website is proposed in `add-website`). It has three HTTP functions:
   - `POST /api/checkout` creates a Stripe Checkout Session in `payment` mode for one unit of one one-time price, and redirects the buyer to Stripe's hosted payment page.
   - `POST /api/stripe-webhook` receives Stripe's `v1.checkout.session.completed` and `v1.checkout.session.async_payment_succeeded` events, verifies their signature, and runs the fulfillment function.
@@ -23,7 +23,7 @@ On 2026-10-07 Josué decided the business model: relay's core stays free, and a 
 ### New Capabilities
 
 - `license-keys`: the license key format, how the server signs a key, how `relay` verifies it offline, the built-in public key table and signing key IDs.
-- `license-command`: the `relay license` command, the saved key file, the `PAID_FEATURES` constant, the messages and the exit codes 40 and 41.
+- `license-command`: the `relay license` command, the saved key file, the `PAID_FEATURES` constant, the messages and the exit codes 50 and 51.
 - `license-checkout`: the `POST /api/checkout` function and the exact Checkout Session it creates.
 - `license-fulfillment`: the webhook function, the fulfillment function, the `GET /api/license` function, idempotency, and the server settings.
 - `license-page`: the website's license page and the buy button.
@@ -71,7 +71,7 @@ This change handles payment provider keys, a private signing key and a webhook t
 ## Impact
 
 - New files in the `relay` program: `src/license/key.ts`, `src/license/public-keys.ts`, `src/license/features.ts`, `src/license/store.ts`, `src/cli/commands/license.ts`, `test/license/*.test.ts` and `test/cli/golden/license.txt`.
-- Changed files from `add-cli-scaffold`, all updated in the same pull request (task 3.2): `src/cli/commands/registry.ts` (the `CommandName` type and a seventeenth entry), `src/cli/exit-codes.ts` (codes 40 and 41), `test/cli/golden/top-help.txt` (one new command row), `test/cli/router.test.ts` (the argument count table), `docs/cli.md` (the command table and the exit-code table) and `docs/first-version-index.md` (the "Commands", "Exit codes", "Source code map" and "Capabilities by change" sections). The `cli-commands` spec of `add-cli-scaffold` lists exactly sixteen commands; when both changes are archived, its requirements "Command set", "Top-level help" and "Argument count checking" gain `license`, with one or two arguments.
+- Changed files from `add-cli-scaffold`, all updated in the same pull request (task 3.2): `src/cli/commands/registry.ts` (the `CommandName` type and a seventeenth entry), `src/cli/exit-codes.ts` (codes 50 and 51), `test/cli/golden/top-help.txt` (one new command row), `test/cli/router.test.ts` (the argument count table), `docs/cli.md` (the command table and the exit-code table) and `docs/first-version-index.md` (the "Commands", "Exit codes", "Source code map" and "Capabilities by change" sections). The `cli-commands` spec of `add-cli-scaffold` lists exactly sixteen commands; when both changes are archived, its requirements "Command set", "Top-level help" and "Argument count checking" gain `license`, with one or two arguments.
 - New folder `license-server/`, a separate Bun project that is bundled for Node.js 22 and never compiled into the `relay` binary.
 - Changed files from `add-website`: the license page, the buy button, `staticwebapp.config.json` (API runtime and headers) and the deployment step that names the API folder. These tasks start only after `add-website` is merged.
 - `.github/workflows/ci.yml` gains one job for `license-server/` (a protected path in the private task board).

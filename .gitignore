@@ -9,3 +9,5 @@ site/public/fonts/
 site/e2e/out/
 site/e2e/results/
 playwright-report/
+*.signing-key
+license-server/dist/

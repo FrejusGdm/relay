@@ -18,6 +18,8 @@ export const ExitCode = Object.freeze({
   AgentFailed: 24,
   Refused: 25,
   WouldRaisePermission: 32,
+  LicenseInvalid: 50,
+  LicenseMissing: 51,
   NotAvailable: 69,
   Internal: 70,
   Settings: 78,

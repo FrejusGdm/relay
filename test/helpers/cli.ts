@@ -44,6 +44,8 @@ export async function runRelayInProcess(
     // With answers, standard input acts as a terminal that gives these lines one by one.
     answers?: string[];
     commands?: CommandDef[];
+    // The license public key table, in place of LICENSE_PUBLIC_KEYS (add-lifetime-license).
+    licensePublicKeys?: Readonly<Record<string, string>>;
     uid?: number;
     cwd?: string;
     // Simulates a terminal in which the person types `answer`. `beforeAnswer` runs while relay
@@ -75,6 +77,7 @@ export async function runRelayInProcess(
       },
     },
     commands: options.commands,
+    licensePublicKeys: options.licensePublicKeys,
   });
   return { code, stdout, stderr };
 }

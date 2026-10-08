@@ -3,7 +3,7 @@
 set -eu
 url=${1:?usage: smoke-test.sh <base address, for example https://example.azurestaticapps.net>}
 url=${url%/}
-csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fail() { echo "Smoke test failed: $1" >&2; exit 1; }
@@ -28,4 +28,8 @@ auth=$(curl -sS -o /dev/null -w '%{http_code}' "$url/.auth/login/github") || fai
 missing=$(curl -sS -o "$work/404.html" -w '%{http_code}' "$url/no-such-page") || fail "the /no-such-page request failed"
 [ "$missing" = 404 ] || fail "/no-such-page returned $missing, expected 404"
 grep -qF 'Page not found' "$work/404.html" || fail "the 404 page text is missing"
+# The license page carries the session ID in its address, so it is never cached or sent as a referrer.
+curl -sS -o /dev/null -D "$work/headers" "$url/license/" || fail "the /license/ request failed"
+[ "$(header cache-control)" = "no-store" ] || fail "/license/ is missing Cache-Control: no-store"
+[ "$(header referrer-policy)" = "no-referrer" ] || fail "/license/ is missing Referrer-Policy: no-referrer"
 echo "Smoke test passed: $url"

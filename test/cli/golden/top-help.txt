@@ -20,6 +20,7 @@ Commands
   statusline          Record usage from Claude Code's status line
   daemon              Start, stop or check relay's background service
   doctor              Rebuild relay's index of jobs
+  license             Add, check or remove your relay license
 
 Options
   -h, --help               Show help

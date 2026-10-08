@@ -15,12 +15,12 @@ describe("Command set", () => {
     expect(result).toEqual({ code: 69, stdout: "", stderr: notBuilt(UNBUILT) });
   });
 
-  test("the sixteen commands and help are recognized", () => {
+  test("the seventeen commands and help are recognized", () => {
     for (const name of [...COMMANDS.map((def) => def.name), "help"]) {
       const result = route([name], COMMANDS);
       expect(result.kind === "usage-error" && result.lines[0]!.includes("is not a relay command")).toBe(false);
     }
-    expect(COMMANDS).toHaveLength(16);
+    expect(COMMANDS).toHaveLength(17);
   });
 
   test("an unknown command is a usage error", async () => {
@@ -156,6 +156,7 @@ describe("Argument count checking", () => {
     init: [0, 0], run: [0, 1], checkpoint: [0, 0], checkpoints: [0, 0], rollback: [0, 1],
     "accept-git-changes": [0, 0], switch: [1, 1], status: [0, 0], account: [1, 3], providers: [0, 0],
     policy: [2, 2], hooks: [2, 2], hook: [2, 2], statusline: [1, 1], daemon: [1, 1], doctor: [0, 0],
+    license: [1, 2],
   };
   const args = (count: number) => Array.from({ length: count }, (_, i) => `arg${i + 1}`);
 

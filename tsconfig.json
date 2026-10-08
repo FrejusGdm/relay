@@ -29,5 +29,6 @@
     "noPropertyAccessFromIndexSignature": false
   },
   // The browser tests need the DOM types, which clash with Bun's; site/e2e/tsconfig.json checks them.
-  "exclude": ["node_modules", "site/e2e"]
+  // license-server/ is its own project with its own tsconfig.json.
+  "exclude": ["node_modules", "site/e2e", "license-server"]
 }

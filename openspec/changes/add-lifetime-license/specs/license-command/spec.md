@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the `relay license` command: activating, showing and removing the license on one computer, the saved key file, the list of paid features, and the exit codes 40 and 41.
+Defines the `relay license` command: activating, showing and removing the license on one computer, the saved key file, the list of paid features, and the exit codes 50 and 51 (first proposed as 40 and 41, which `add-t3-limit-rules` already uses).
 
 ## ADDED Requirements
 
@@ -45,14 +45,14 @@ Defines the `relay license` command: activating, showing and removing the licens
 #### Scenario: Invalid key
 - **WHEN** the person runs `relay license activate hello`
 - **THEN** standard error shows `relay: this is not a relay license key. Copy the whole key; it starts with "relay1.".`
-- **AND** nothing is saved and relay exits with code 40
+- **AND** nothing is saved and relay exits with code 50
 
 #### Scenario: Test key
 - **WHEN** the person activates a correctly signed key with key ID `test-1`
-- **THEN** standard error shows `relay: this license key comes from Stripe test mode and does not unlock relay.` and relay exits with code 40
+- **THEN** standard error shows `relay: this license key comes from Stripe test mode and does not unlock relay.` and relay exits with code 50
 
 ### Requirement: License status
-`relay license status` SHALL report the saved license and every paid feature. It SHALL exit 0 when a valid license is saved, 41 when none is saved, and 40 when the saved key is not valid.
+`relay license status` SHALL report the saved license and every paid feature. It SHALL exit 0 when a valid license is saved, 51 when none is saved, and 50 when the saved key is not valid.
 
 #### Scenario: Active license
 - **WHEN** a valid key is saved and `PAID_FEATURES` is empty
@@ -61,12 +61,12 @@ Defines the `relay license` command: activating, showing and removing the licens
 #### Scenario: No license
 - **WHEN** no key is saved
 - **THEN** standard output is `License: none`, `relay's core is free and stays free. A license unlocks the paid features.` and `Paid features: none yet`
-- **AND** relay exits with code 41
+- **AND** relay exits with code 51
 
 #### Scenario: Damaged saved key
 - **WHEN** `license.key` holds a key whose signature check fails
 - **THEN** standard error shows `relay: the saved license in <file> is not valid: this license key failed its signature check. Copy it again from your license page.` and `Run "relay license remove", then activate your key again.`
-- **AND** relay exits with code 40
+- **AND** relay exits with code 50
 
 #### Scenario: Unsafe saved key file
 - **WHEN** `license.key` has mode 0666
@@ -88,7 +88,7 @@ The `license` command SHALL read the public key table from its command context, 
 
 #### Scenario: Real test-mode key in a test
 - **WHEN** `RELAY_TEST_LICENSE_KEY` holds a key signed with `test-1` and `RELAY_TEST_LICENSE_PUBLIC_KEY` holds its public key, and `test/license/test-mode-key.test.ts` runs `relay license activate` in process with the table `{"test-1": <that public key>}`
-- **THEN** relay exits with code 40 and prints the test-mode message, not code 69
+- **THEN** relay exits with code 50 and prints the test-mode message, not code 69
 
 #### Scenario: Environment cannot add a key
 - **WHEN** the built `relay` runs with `RELAY_TEST_LICENSE_PUBLIC_KEY` set
@@ -123,9 +123,9 @@ The paid features SHALL be defined only by the constant `PAID_FEATURES` in `src/
 - **WHEN** the person runs `relay license activate <valid key>`
 - **THEN** `cli.log` contains `license activated` with the license ID and does not contain the key text
 
-### Requirement: Exit codes 40 and 41
-`src/cli/exit-codes.ts` SHALL define `LicenseInvalid` as 40 and `LicenseMissing` as 41, and `docs/cli.md` and `docs/first-version-index.md` SHALL list them.
+### Requirement: Exit codes 50 and 51
+`src/cli/exit-codes.ts` SHALL define `LicenseInvalid` as 50 and `LicenseMissing` as 51, and `docs/cli.md` and `docs/first-version-index.md` SHALL list them.
 
 #### Scenario: Table matches
 - **WHEN** the exit-code test of `add-cli-scaffold` parses `docs/cli.md`
-- **THEN** it finds 40 and 41 with the same names as the constants
+- **THEN** it finds 50 and 51 with the same names as the constants
