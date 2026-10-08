@@ -44,6 +44,7 @@ export async function runRelayInProcess(
       err: (text) => (stderr += text),
       stdinIsTTY: options.answers !== undefined,
       readStdinToEnd: async () => options.stdin ?? "",
+      readStdin: async (maxBytes) => Buffer.from(options.stdin ?? "").subarray(0, maxBytes),
       isTerminal: options.terminal !== undefined,
       readLine: async () => {
         if (options.answers !== undefined) return options.answers.shift() ?? null;

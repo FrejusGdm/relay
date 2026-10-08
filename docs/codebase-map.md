@@ -1,7 +1,7 @@
 # Codebase map
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
-`add-checkpoint-engine`, task groups 1 to 5 of `add-provider-adapters`, task groups 1 to 4 of
+`add-checkpoint-engine`, task groups 1 to 8 of `add-provider-adapters`, task groups 1 to 4 of
 `add-handoff-evaluation`, and task groups 1 to 7 of `add-website`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
@@ -14,12 +14,13 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>hooks.ts, statusline.ts, account.ts,<br/>providers.ts, policy.ts, not-built.ts: their handlers"]
+    hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml<br/>edit.ts: the one writer of config.toml"]
     platform["src/platform/<br/>toml.ts: the only Bun-specific call<br/>clock.ts: now() and, for tests, setClock()"]
-    adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>claude/, codex/: adapter.ts, policy.toml,<br/>tested-versions.json; codex/protocol-used.json"]
+    adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>mapper.ts, worker.ts: shared parts of the workers<br/>claude/: adapter, stream mapper, headless and<br/>interactive workers, hook mapper<br/>codex/: adapter, rpc, protocol, app-server and<br/>exec mappers and workers, interactive worker<br/>each: policy.toml, tested-versions.json"]
     policies["src/policies/<br/>schema.ts, load.ts: the policy files<br/>switching.ts: mayAutoSwitch"]
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
     daemon["src/daemon/<br/>empty until add-daemon-api-and-status"]
@@ -86,6 +87,9 @@ flowchart TD
   commands -->|"policy.ts shows"| policies
   adapters -->|"carry their policy from"| policies
   adaptertests -->|"check"| policies
+  commands -->|"hook.ts, hooks.ts, statusline.ts use"| hooks
+  hooks -->|"writes availability.json through"| accounts
+  adapters -->|"interactive workers read the spool of"| hooks
 ```
 
 The diagram shows how the pieces connect. `bun run relay` starts `src/cli/main.ts`, which passes
@@ -121,8 +125,7 @@ file's age reads. `src/adapters/providers.ts` names the two supported providers,
 `codex`. `src/daemon/` only holds a README until the change named in the diagram fills it.
 
 `src/adapters/` holds the adapter interface of `add-provider-adapters` in `types.ts` and the
-registry that gives each provider's adapter in `registry.ts`; the Claude Code and Codex adapters
-themselves come in later task groups. `process.ts` is the only code that starts an agent process:
+registry that gives each provider's adapter in `registry.ts`. `process.ts` is the only code that starts an agent process:
 headless agents in their own process group with their output drained into a worker log of mode
 0600, interactive agents in the person's terminal, and signals only through the child relay holds.
 `test/adapters/no-other-spawn.test.ts` fails if another file under `src/adapters/` starts a process.
@@ -132,10 +135,17 @@ agent's environment without credential variables, and `src/accounts/profile.ts` 
 providers' own folders. `src/secrets/redact.ts` replaces secret-looking values in the facts relay
 records. `docs/adapters.md` describes all of these with diagrams.
 
-`src/adapters/claude/adapter.ts` and `src/adapters/codex/adapter.ts` are the two adapters. So far
-they find their program through `src/adapters/program.ts`, read its version and compare it with
-their `tested-versions.json`, read the sign-in state, name the login command, and declare their
-capabilities and hooks; starting workers comes in later task groups. Each folder also holds the
+`src/adapters/claude/adapter.ts` and `src/adapters/codex/adapter.ts` are the two adapters. They
+find their program through `src/adapters/program.ts`, read its version and compare it with their
+`tested-versions.json`, read the sign-in state and name the login command. Each one has pure
+mappers that turn the program's output into worker events (`claude/stream.ts`,
+`codex/app-server.ts`, `codex/exec-stream.ts`, with the shared parts in `mapper.ts`), and workers
+that start and supervise the program: `claude/headless.ts` and `claude/interactive.ts`;
+`codex/app-server-worker.ts` (JSON-RPC through `codex/rpc.ts`), `codex/exec.ts` and
+`codex/interactive.ts`. `codex/session.ts` starts a short app server to read rate limits or hook
+trust. `src/adapters/worker.ts` holds what the workers share, such as the event queue and the
+recording of readings in `availability.json`. Interactive workers learn what happens from the hook
+spool, through `claude/hooks.ts` and `codex/hooks.ts`. Each folder also holds the
 provider's `policy.toml`, which `src/policies/load.ts` imports and `schema.ts` checks, and
 `src/policies/switching.ts` answers whether relay may move a job between two accounts on its own.
 `src/cli/commands/account.ts` is `relay account list | add | status | login | remove`: it checks and
@@ -143,6 +153,14 @@ creates profile folders with `src/accounts/profile.ts`, writes `config.toml` onl
 `src/core/config/edit.ts`, keeps `account.json` with `src/accounts/record.ts` and reads
 `availability.json` with `src/accounts/availability.ts`. `providers.ts` is `relay providers` and
 `policy.ts` is `relay policy show`. `docs/accounts.md` describes the accounts with diagrams.
+
+`src/hooks/` holds relay's side of the providers' hooks. `hook-command.ts` is `relay hook`: it keeps
+the fields that `fields.ts` allows and appends one line to the spool with `spool.ts`.
+`install.ts` adds and removes relay's entries in an account's `settings.json` or `hooks.json`,
+with a backup, and `src/cli/commands/hooks.ts` is `relay hooks install | remove | status`.
+`statusline.ts` is `relay statusline claude`, which records the usage windows of Claude Code's
+status line and then runs the person's own. `fold.ts` turns spool lines into availability readings
+for `relay account status`. `docs/hooks.md` describes these with a diagram.
 
 `test/adapters/contract.ts` declares the contract suite that every adapter registered in
 `test/adapters/registry.ts` must pass, and `test/adapters/fixtures.ts` loads and replays the

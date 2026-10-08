@@ -28,6 +28,8 @@ export interface HeadlessProcess extends AgentProcess {
   // Writes to the child's standard input. Only for input "pipe".
   write(text: string): Promise<void>;
   closeInput(): void;
+  // Adds a line "relay <text>" to the worker log, while it is open.
+  note(text: string): void;
 }
 
 export interface HeadlessOptions {
@@ -41,6 +43,8 @@ export interface HeadlessOptions {
   logPath: string;
   // Called with every complete line, in order, after it was written to the worker log.
   onLine(stream: "out" | "err", line: string): void;
+  // Called once all output has been read, for the last notes of the worker log.
+  closingNotes?(): string[];
 }
 
 export interface InteractiveOptions {
@@ -171,6 +175,7 @@ export function startHeadless(options: HeadlessOptions): Promise<HeadlessProcess
         }, OUTPUT_GRACE_MS);
         void Promise.all(drained).then(() => {
           clearTimeout(grace);
+          for (const text of options.closingNotes?.() ?? []) writeLog(`relay ${text}\n`);
           closeLog();
           resolveExit({ code, signal });
         });
@@ -195,6 +200,9 @@ export function startHeadless(options: HeadlessOptions): Promise<HeadlessProcess
         return Promise.reject(new Error("The agent's input is closed."));
       }
       return new Promise((done, fail) => input.write(text, (error) => (error ? fail(error) : done())));
+    },
+    note(text) {
+      writeLog(`relay ${text}\n`);
     },
     closeInput() {
       child.stdin?.end();

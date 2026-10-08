@@ -9,6 +9,8 @@ import {
   ACCOUNT_NAME, accountReferences, defaultProfileDir, findAccount, isProvider, splitAccountArgs,
 } from "../../accounts/registry";
 import { findProgram } from "../../adapters/program";
+import { foldSpool } from "../../hooks/fold";
+import { relayProgram } from "../../hooks/install";
 import { runInTerminal } from "../../adapters/process";
 import { createAdapterRegistry } from "../../adapters/registry";
 import { tomlString } from "../../adapters/text";
@@ -21,6 +23,7 @@ import { now } from "../../platform/clock";
 import { policyOf } from "../../policies/load";
 import { CommandError } from "../errors";
 import { ExitCode } from "../exit-codes";
+import { install as installHooks } from "./hooks";
 import { termLines } from "./policy";
 import type { CommandContext } from "./registry";
 
@@ -180,7 +183,7 @@ async function add(ctx: CommandContext, args: string[]): Promise<number> {
   if (keys.length > 0) {
     lines(ctx, [...summary, ...keys.map((key) =>
       `${id} uses the key in $${key}. relay passes that variable to ${adapter.displayName} and never stores its value.`)]);
-    return ExitCode.Ok;
+    return offerHooks(ctx, added, givenDir === undefined);
   }
   let signedIn = await checkSignIn(ctx, adapter, added);
   if (!signedIn.signedIn && ctx.values["no-login"] !== true) {
@@ -193,7 +196,24 @@ async function add(ctx: CommandContext, args: string[]): Promise<number> {
   }
   lines(ctx, [...summary, `  Signed in  ${signedInText(signedIn)}`]);
   if (!signedIn.signedIn) lines(ctx, [`Sign in later with relay account login ${id}.`]);
-  return ExitCode.Ok;
+  return offerHooks(ctx, added, givenDir === undefined);
+}
+
+// relay offers its hooks only for a profile folder it created, and only when it can ask. For any
+// other folder they are installed only by relay hooks install (the provider-hook-setup spec).
+async function offerHooks(ctx: CommandContext, added: Account, relayFolder: boolean): Promise<number> {
+  const hint = `To let relay see sessions you start yourself, run relay hooks install ${added.id}.`;
+  if (!relayFolder || ctx.values.yes === true || !ctx.io.stdinIsTTY || relayProgram(ctx.env) === null) {
+    lines(ctx, [hint]);
+    return ExitCode.Ok;
+  }
+  ctx.io.out("Install relay's hooks, so relay can see sessions you start yourself? [y/N] ");
+  const answer = (await ctx.io.readLine())?.trim().toLowerCase();
+  if (answer !== "y" && answer !== "yes") {
+    lines(ctx, [hint]);
+    return ExitCode.Ok;
+  }
+  return installHooks({ ...ctx, values: { ...ctx.values, yes: true } }, added, { statusLine: false });
 }
 
 function signedInText(status: { signedIn: boolean; method?: string | null }): string {
@@ -296,6 +316,9 @@ async function status(ctx: CommandContext, target: Account): Promise<number> {
   const adapter = adapters(ctx).get(target.provider);
   const installed = findProgram(target.provider, ctx.env) !== null;
   const auth = target.credentialEnv.length > 0 || !installed ? null : await checkSignIn(ctx, adapter, target);
+  foldSpool(ctx.relayHome, ctx.config, target, ctx.homedir);
+  // Codex gives a live reading through its app server (design decision 9); it is recorded first.
+  if (target.provider === "codex" && installed) await adapter.availability(target, buildAgentEnv(target, ctx.env));
   const record = readAccountRecord(ctx.relayHome, target);
   const availability = readAvailability(ctx.relayHome, target);
   if (ctx.values.json === true) {

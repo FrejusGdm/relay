@@ -164,9 +164,9 @@ describe("Argument count checking", () => {
     expect([def.minArgs, def.maxArgs]).toEqual([min, max]);
     expect(route([name, ...args(min)], COMMANDS).kind).toBe("run");
     expect(route([name, ...args(max)], COMMANDS).kind).toBe("run");
-    expect(route([name, ...args(max + 1)], COMMANDS)).toMatchObject({ kind: "usage-error", quiet: name === "hook" });
+    expect(route([name, ...args(max + 1)], COMMANDS)).toMatchObject({ kind: "usage-error", quiet: name === "hook" || name === "statusline" });
     if (min > 0) {
-      expect(route([name, ...args(min - 1)], COMMANDS)).toMatchObject({ kind: "usage-error", quiet: name === "hook" });
+      expect(route([name, ...args(min - 1)], COMMANDS)).toMatchObject({ kind: "usage-error", quiet: name === "hook" || name === "statusline" });
     }
   });
 });

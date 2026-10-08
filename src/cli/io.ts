@@ -7,6 +7,9 @@ export interface Io {
   readStdinToEnd(): Promise<string>;
   // Whether a person can answer a question: standard input and standard output are both terminals.
   isTerminal: boolean;
+  // Reads standard input until its end, maxBytes or timeoutMs, whichever comes first, and then
+  // stops reading. Returns at most maxBytes.
+  readStdin(maxBytes: number, timeoutMs: number): Promise<Buffer>;
   // One line of standard input without its line ending, or null at the end of the input. It reads
   // byte by byte, so nothing after the answer is taken from a program relay starts next.
   readLine(): Promise<string | null>;
@@ -23,6 +26,7 @@ export function processIo(): Io {
       return Buffer.concat(chunks).toString("utf8");
     },
     isTerminal: process.stdin.isTTY === true && process.stdout.isTTY === true,
+    readStdin: (maxBytes, timeoutMs) => readBounded(maxBytes, timeoutMs),
     readLine: async () => readLineSync(),
   };
 }
@@ -57,4 +61,32 @@ function readLineSync(): string | null {
     if (one[0] === 0x0a) return Buffer.from(bytes).toString("utf8").replace(/\r$/, "");
     bytes.push(one[0]!);
   }
+}
+
+function readBounded(maxBytes: number, timeoutMs: number): Promise<Buffer> {
+  const stdin = process.stdin;
+  return new Promise((done) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      stdin.off("data", onData);
+      stdin.off("end", finish);
+      stdin.off("error", finish);
+      stdin.pause();
+      done(Buffer.concat(chunks).subarray(0, maxBytes));
+    };
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+      size += chunk.length;
+      if (size >= maxBytes) finish();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    stdin.on("data", onData);
+    stdin.once("end", finish);
+    stdin.once("error", finish);
+  });
 }

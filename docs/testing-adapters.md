@@ -317,8 +317,9 @@ provider, its fake program, a factory for the adapter, and for each transport it
 its event mapper, and declares the same checks for each: the session ID comes first, failures carry
 the right reason and reset time, unknown and broken lines are tolerated, interrupt, resume and send
 behave as the declared capabilities say, and the agent gets the right standard input, working
-directory and environment without credential variables or invisible characters. The registry is
-empty until the Claude Code and Codex adapters can start workers.
+directory and environment without credential variables or invisible characters. The registry holds
+the Claude Code adapter (`claude-print`, `claude-interactive`) and the Codex adapter
+(`codex-app-server`, `codex-exec`, `codex-interactive`).
 
 A fixture is a folder `test/fixtures/providers/<provider>/<transport>/<name>/` with three files:
 `output.jsonl` (the lines the tool printed; for the app server, each message with its direction,
@@ -333,7 +334,7 @@ Each headless transport needs `normal-turn`, `usage-limit`, `auth-failure`, `int
 repository today are written from the documented shapes and say `"source": "documentation"`.
 `test/adapters/fakes-match-fixtures.test.ts` runs each fake with a scenario that matches a fixture and
 checks that the fake prints the same kinds of messages with the same fields, so the fakes and the
-fixtures cannot drift apart; once a transport has a mapper, it compares the events instead.
+fixtures cannot drift apart, and replays the fake's output through the transport's mapper.
 
 ```mermaid
 flowchart LR
