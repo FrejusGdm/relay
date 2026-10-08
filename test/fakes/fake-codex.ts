@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { startRecord } from "./record";
 import { listCommandHooks, runHooks } from "./run-hooks";
-import { loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
+import { crashWith, loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
 import type { FakeWindow, Scenario } from "./scenario";
 
 const argv = process.argv.slice(2);
@@ -183,7 +183,7 @@ async function runTurn(turn: Turn, index: number, mode: "app" | "exec" | "intera
     if ("finish" in step) break;
     if ("hang" in step) await wait(null, signal);
     else if ("ignore_sigterm" in step) ignoreSigterm = true;
-    else if ("crash" in step) { process.kill(process.pid, step.crash.signal); await wait(null, signal); }
+    else if ("crash" in step) { crashWith(step.crash.signal); await wait(null, signal); }
     else if ("exit" in step) process.exit(step.exit);
     else if ("stderr" in step) writeSync(2, step.stderr + "\n");
     else if ("raw" in step) writeSync(1, step.raw + "\n");
