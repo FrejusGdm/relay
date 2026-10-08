@@ -167,6 +167,8 @@ export function findProblems(root: string, prepared: Prepared): Problems {
     }
   }
   for (const [key, file] of flagged) {
+    // relay never writes .relay/, so a flagged job file there cannot be overwritten.
+    if (key.split("/")[0]!.toLowerCase() === ".relay") continue;
     if (!reported.has(key) && differsFromIndex(root, key, file)) report(problems.flagged[file.flag], key);
   }
   return problems;

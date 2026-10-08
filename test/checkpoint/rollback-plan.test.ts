@@ -220,6 +220,21 @@ test("an edited file marked assume-unchanged is not reported as already matching
   expect(readFileSync(join(scratch.repo, "tracked.txt"), "utf8")).toBe("version 3, saved nowhere\n");
 });
 
+test("a flagged job file in .relay does not stop a rollback, because relay never writes .relay", async () => {
+  scratch = await setUpJob();
+  scratch.write("notes.txt", "notes at checkpoint 2\n");
+  expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+  scratch.git("add", "-f", ".relay/task.md");
+  scratch.git("commit", "-q", "-m", "track the task file");
+  scratch.git("update-index", "--assume-unchanged", ".relay/task.md");
+  writeFileSync(join(scratch.repo, ".relay", "task.md"), "# Changed and flagged\n");
+  scratch.write("notes.txt", "notes after checkpoint 2\n");
+  const result = await relay(scratch, ["rollback", "2", "--yes"]);
+  expect(result.stderr).not.toContain("marked assume-unchanged");
+  expect(result.code).toBe(0);
+  expect(readFileSync(join(scratch.repo, "notes.txt"), "utf8")).toBe("notes at checkpoint 2\n");
+});
+
 test("a file whose bytes git converts when it stores them (line endings) is refused, so undo stays exact", async () => {
   scratch = await setUpJob();
   scratch.write(".gitattributes", "* text=auto\n");

@@ -574,7 +574,15 @@ The last line names the undo checkpoint. Rolling back to it returns every file t
 changed to what it was before, byte for byte, and saves another undo checkpoint on the way. To keep
 that promise, relay refuses (exit code 8) to roll back over a file whose bytes git would change when
 it stores them (line endings, a clean filter or Git LFS), and over a file marked assume-unchanged or
-skip-worktree whose changes git does not show; the message says which, and how to clear a flag:
+skip-worktree whose changes git does not show; the message says which, and how to clear a flag.
+One known limit: if the checkpoint you roll back to brings back a `.gitattributes` that asks for
+converted line endings (for example `eol=crlf`), the restored files get those line endings, and the
+undo command then refuses those files with exit code 8 instead of changing their bytes. Nothing is
+lost; remove the attribute or restore the files by hand. relay does not run git's conversion
+programs itself, because its safe git runner keeps every program a repository can configure turned
+off.
+
+An example of the undo:
 
 ```
 $ relay rollback 3 --yes
