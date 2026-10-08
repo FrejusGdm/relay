@@ -16,7 +16,7 @@ public enum CardMotion {
     }
 
     /// Opacity and a small offset only.
-    static let transition = AnyTransition.opacity.combined(with: .offset(y: -4))
+    static var transition: AnyTransition { .opacity.combined(with: .offset(y: -4)) }
 }
 
 /// A plain button that moves down 1 point while pressed.

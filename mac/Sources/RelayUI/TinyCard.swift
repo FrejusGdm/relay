@@ -27,7 +27,7 @@ public struct TinyCard: View {
                 Text(card.title)
                     .font(RelayFont.text(13, .semibold))
                     .foregroundStyle(palette(.ink))
-                card.message.text(size: 11, color: palette(.muted), palette: palette)
+                card.message.rendered(size: 11, color: palette(.muted), palette: palette)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 4)
@@ -48,7 +48,7 @@ public struct TinyCard: View {
             .font(RelayFont.text(13, .semibold))
             .foregroundStyle(palette(.ink))
             .lineLimit(1)
-        card.repository.text(size: 11, color: palette(card.projectMissing ? .warning : .muted), palette: palette)
+        card.repository.rendered(size: 11, color: palette(card.projectMissing ? .warning : .muted), palette: palette)
             .lineLimit(1)
             .padding(.top, 3)
         HStack(spacing: 5) {

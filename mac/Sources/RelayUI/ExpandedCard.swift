@@ -79,13 +79,13 @@ public struct ExpandedCard: View {
         HStack(spacing: 6) {
             FolderIcon().line(palette(card.projectMissing ? .warning : .muted), width: 0.95)
                 .frame(width: 13, height: 13)
-            card.repository.text(size: 13, color: palette(card.projectMissing ? .warning : .muted), palette: palette)
+            card.repository.rendered(size: 13, color: palette(card.projectMissing ? .warning : .muted), palette: palette)
                 .lineLimit(1)
         }
         .padding(.top, 7)
 
         rule(palette).padding(.top, 21)
-        card.status.text(size: 13, weight: .medium, color: palette(.ink), palette: palette)
+        card.status.rendered(size: 13, weight: .medium, color: palette(.ink), palette: palette)
             .lineSpacing(5)
             .fixedSize(horizontal: false, vertical: true)
             .contentTransition(.opacity)
@@ -110,7 +110,7 @@ public struct ExpandedCard: View {
                         .font(RelayFont.text(12))
                         .foregroundStyle(palette(.muted))
                         .frame(width: 85, alignment: .leading)
-                    fact.value.text(size: 12, color: palette(.ink), palette: palette)
+                    fact.value.rendered(size: 12, color: palette(.ink), palette: palette)
                 }
             }
         }
@@ -137,7 +137,7 @@ public struct ExpandedCard: View {
     @ViewBuilder
     private func state(_ card: StateCard, _ palette: Palette) -> some View {
         title(card.title, palette)
-        card.message.text(size: 13, color: palette(.muted), palette: palette)
+        card.message.rendered(size: 13, color: palette(.muted), palette: palette)
             .lineSpacing(5)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 10)

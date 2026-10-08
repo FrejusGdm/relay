@@ -1,3 +1,5 @@
+import RelayKit
+
 /// What the card's buttons do. The card only opens views, copies text or quits; the actions that
 /// later tasks add (the checkpoint sheet and the switch) show their buttons only when set.
 public struct CardActions {

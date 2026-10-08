@@ -1,3 +1,4 @@
+import RelayKit
 import SwiftUI
 
 /// The typefaces of the card: Public Sans for text and, in bold, for the expanded title (in place of
@@ -38,7 +39,7 @@ struct Palette {
 extension StyledText {
     /// The runs as one `Text`: `.strong` in the accent color and semibold, `.mono` in IBM Plex
     /// Mono, `.muted` in the muted color.
-    func text(size: CGFloat, weight: RelayFont.Weight = .regular, color: Color, palette: Palette) -> Text {
+    func rendered(size: CGFloat, weight: RelayFont.Weight = .regular, color: Color, palette: Palette) -> Text {
         runs.reduce(Text(verbatim: "")) { result, run in
             let piece = Text(verbatim: run.text)
             switch run.style {
