@@ -68,9 +68,10 @@ final class StoreHarness {
         CardModel.make(store.cardInput(), now: clock.now, calendar: Sample.calendar, locale: Sample.locale)
     }
 
-    func finish() {
+    /// Stops the store and checks that it sent no request other than GET, apart from `posts`.
+    func finish(posts: Int = 0) {
         task?.cancel()
-        #expect(fake.requests.allSatisfy { $0.method == "GET" }, "The store sent a request other than GET.")
+        #expect(fake.requests.filter { $0.method != "GET" }.count == posts, "The store sent an unexpected request.")
         fake.stop()
     }
 }

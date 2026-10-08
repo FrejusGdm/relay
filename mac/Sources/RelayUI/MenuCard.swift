@@ -17,7 +17,7 @@ public struct MenuCard: View {
     public var body: some View {
         Group {
             if expanded {
-                ExpandedCard(model: model, actions: actions) { setExpanded(false) }
+                CardHost(model: model, actions: actions) { setExpanded(false) }
                     .transition(CardMotion.transition)
             } else {
                 TinyCard(model: model, actions: actions) { setExpanded(true) }

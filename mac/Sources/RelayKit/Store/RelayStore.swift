@@ -27,6 +27,10 @@ public final class RelayStore {
     /// The workers of each loaded job, newest first.
     public private(set) var workersByJob: [String: [Worker]] = [:]
     public private(set) var now: Date
+    /// The jobs that `relay://` windows show.
+    public private(set) var linkedJobs: Set<String> = []
+    /// The API's message for each linked job the daemon does not know.
+    public private(set) var missingJobs: [String: String] = [:]
 
     let client: DaemonClient
     let clock: any RelayClock
@@ -70,16 +74,68 @@ public final class RelayStore {
         CardModel.selectJob(Array(jobsByID.values))?.id
     }
 
-    /// The data the card is built from.
-    public func cardInput(host: String? = nil) -> CardInput {
+    /// The data the card is built from: the menu-bar card when `jobID` is `nil`, otherwise the
+    /// card of a `relay://` window.
+    public func cardInput(jobID: String? = nil, host: Host? = nil) -> CardInput {
         CardInput(
             connection: connection,
             jobs: Array(jobsByID.values),
             workersByJob: workersByJob,
             accounts: Array(accountsByTarget.values),
             capabilities: capabilities,
-            host: host
+            host: host,
+            jobID: jobID,
+            missingJobMessage: jobID.flatMap { missingJobs[$0] }
         )
+    }
+
+    /// The process ID of the agent the card for `jobID` shows, when it is running or starting.
+    public func agentPID(jobID: String? = nil) -> Int32? {
+        let job = jobID.map { jobsByID[$0] } ?? CardModel.selectJob(Array(jobsByID.values))
+        guard let worker = job?.currentWorker, worker.state == .running || worker.state == .starting else { return nil }
+        return worker.pid
+    }
+
+    /// A switch sheet for the job, which hands the new worker to the store when it succeeds.
+    public func switchFlow(jobID: String) -> SwitchFlow? {
+        guard let job = jobsByID[jobID] else { return nil }
+        return SwitchFlow(job: job, accounts: accounts, client: client, now: clock.now) { [weak self] worker in
+            self?.adopt(worker)
+        }
+    }
+
+    /// A `relay://` window opened for `jobID`: load the job and follow it while the window is open.
+    public func openLink(_ jobID: String) {
+        linkedJobs.insert(jobID)
+        windowOpened()
+        Task { await loadLinkedJob(jobID) }
+    }
+
+    public func closeLink(_ jobID: String) {
+        linkedJobs.remove(jobID)
+        windowClosed()
+    }
+
+    /// The worker that a switch answered with becomes the job's current worker.
+    func adopt(_ worker: Worker) {
+        applyWorker(worker, sequenceNumber: nil, fromSnapshot: false)
+        guard var job = jobsByID[worker.jobId], job.currentWorker?.id != worker.id else { return }
+        job.currentWorker = worker
+        jobsByID[worker.jobId] = job
+    }
+
+    private func loadLinkedJob(_ jobID: String) async {
+        do {
+            let job = try await client.job(jobID)
+            missingJobs.removeValue(forKey: jobID)
+            applyJob(job.value, sequenceNumber: job.streamSeq, fromSnapshot: true)
+            let workers = try await client.workers(jobID: jobID)
+            for worker in workers.value {
+                applyWorker(worker, sequenceNumber: workers.streamSeq, fromSnapshot: true)
+            }
+        } catch let error as APIError where error.code == "job_not_found" {
+            missingJobs[jobID] = error.message
+        } catch {}
     }
 
     /// Follows the daemon until the task is cancelled.
@@ -204,6 +260,9 @@ public final class RelayStore {
             for worker in workers.value {
                 applyWorker(worker, sequenceNumber: workers.streamSeq, fromSnapshot: true)
             }
+        }
+        for jobID in linkedJobs.sorted() where jobID != shownJobID {
+            await loadLinkedJob(jobID)
         }
     }
 

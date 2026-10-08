@@ -164,7 +164,7 @@ struct CardModelTests {
         #expect(card.facts[0].value.plain == "912ec1 · saved 14:35")
         #expect(card.facts[1].value.plain == "Repository, checkpoint & plan")
         #expect(card.tinyNote == "Same checkpoint & plan")
-        #expect(card.primaryAction == .openHost(provider: "Codex", app: "Terminal"))
+        #expect(card.primaryAction == .openHost(provider: "Codex", app: "Terminal", pid: Sample.hostPID))
         #expect(card.primaryAction?.label == "Open Codex in Terminal")
         #expect(card.primaryAction?.tinyLabel == "Open Codex ↗")
         #expect(card.showsViewCheckpoint)

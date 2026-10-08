@@ -3,7 +3,7 @@
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 5 of `add-provider-adapters`, task groups 1 to 7 of
 `add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 3 of
-`add-daemon-api-and-status`, and task groups 1 to 3 of `add-mac-menu-bar-app`.
+`add-daemon-api-and-status`, and task groups 1 to 4 of `add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
 `docs/first-version-index.md` lists every file that the six first-version changes will add, and
@@ -448,9 +448,9 @@ runner, never on a developer's Mac.
 ```mermaid
 flowchart TD
   pkg["mac/Package.swift<br/>no package dependencies"]
-  kit["Sources/RelayKit/<br/>Socket/: finding and checking relay.sock, the peer check<br/>HTTP/: requests and the response reader<br/>API/: models, decoding, DaemonClient<br/>Events/: the server-sent events parser and stream<br/>Store/: RelayStore, the state that follows the daemon<br/>Card/: CardModel, every word the card shows"]
-  ui["Sources/RelayUI/<br/>TinyCard, ExpandedCard, WorkerRow, MenuCard<br/>Theme, Typography, Glyph, Motion, FontLoader"]
-  app["Sources/Relay/<br/>RelayApp.swift: the menu-bar scene and AppDelegate"]
+  kit["Sources/RelayKit/<br/>Socket/: finding and checking relay.sock, the peer check<br/>HTTP/: requests and the response reader<br/>API/: models, decoding, DaemonClient<br/>Events/: the server-sent events parser and stream<br/>Store/: RelayStore, the state that follows the daemon<br/>Card/: CardModel and CheckpointDetails, every word the card shows<br/>Host/: HostFinder, the app that runs an agent<br/>Switch/: SwitchFlow and the switch request<br/>Links/: RelayLink, the relay://job/&lt;id&gt; check"]
+  ui["Sources/RelayUI/<br/>TinyCard, ExpandedCard, WorkerRow, MenuCard, CardHost<br/>CheckpointSheet, SwitchSheet, LinkWindows<br/>Theme, Typography, Glyph, Motion, Controls, FontLoader"]
+  app["Sources/Relay/<br/>RelayApp.swift: the menu-bar scene, AppDelegate, link handling"]
   support["Tests/Support/<br/>FakeDaemon, FixedClock, Fixtures, Sample"]
   fixtures["Tests/Fixtures/api/<br/>JSON answers in the daemon's shapes"]
   tests["Tests/RelayKitTests/, Tests/RelayUITests/"]
@@ -473,7 +473,10 @@ The diagram shows the folders of the Mac app and how they depend on each other. 
 SwiftUI and holds everything that talks to the daemon: it checks that the socket folder is private
 and that the daemon runs as the same user before it sends a byte. Its `RelayStore` keeps the
 app's copy of the daemon's state, and `CardModel` turns that state into every word of the card,
-so the views in `RelayUI` hold no rules. `Relay` is the app itself. The tests run against `FakeDaemon`, a small
+so the views in `RelayUI` hold no rules. `HostFinder` finds the app that runs the current agent by
+walking up its parent processes, `SwitchFlow` sends the one action the app has, a switch, and
+`RelayLink` accepts only `relay://job/<id>` links, which open a window and nothing else. `Relay` is
+the app itself. The tests run against `FakeDaemon`, a small
 Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
 downloads the fonts, runs the tests (which also render the cards to PNG files), builds and signs
 `Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots.

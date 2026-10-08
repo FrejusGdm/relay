@@ -5,6 +5,7 @@ set -eu
 app="$1"
 plutil -lint "$app/Contents/Info.plist"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$app/Contents/Info.plist")" = "true" ]
+[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Contents/Info.plist")" = "relay" ]
 [ "$(lipo -archs "$app/Contents/MacOS/Relay")" = "arm64" ]
 codesign --verify --strict --verbose=2 "$app"
 tmp=$(mktemp -d /tmp/relay-smoke-XXXXXX)

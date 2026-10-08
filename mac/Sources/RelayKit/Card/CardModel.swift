@@ -8,8 +8,12 @@ public struct CardInput: Sendable {
     public var workersByJob: [String: [Worker]]
     public var accounts: [Account]
     public var capabilities: [String]
-    /// The app that runs the current agent, for example "Terminal", when the app found one.
-    public var host: String?
+    /// The app that runs the current agent, for example Terminal, when the app found one.
+    public var host: Host?
+    /// The job a `relay://` window shows; `nil` for the menu-bar card, which chooses its job.
+    public var jobID: String?
+    /// The API's message when the daemon does not know `jobID`.
+    public var missingJobMessage: String?
 
     public init(
         connection: ConnectionState,
@@ -17,7 +21,9 @@ public struct CardInput: Sendable {
         workersByJob: [String: [Worker]],
         accounts: [Account],
         capabilities: [String],
-        host: String? = nil
+        host: Host? = nil,
+        jobID: String? = nil,
+        missingJobMessage: String? = nil
     ) {
         self.connection = connection
         self.jobs = jobs
@@ -25,6 +31,8 @@ public struct CardInput: Sendable {
         self.accounts = accounts
         self.capabilities = capabilities
         self.host = host
+        self.jobID = jobID
+        self.missingJobMessage = missingJobMessage
     }
 }
 
@@ -58,12 +66,12 @@ public struct Fact: Equatable, Sendable {
 
 /// The primary action opens a view and never sends a request (design.md decision 10).
 public enum PrimaryAction: Equatable, Sendable {
-    case openHost(provider: String, app: String)
+    case openHost(provider: String, app: String, pid: Int32)
     case showInFinder(path: String)
 
     public var label: String {
         switch self {
-        case .openHost(let provider, let app): "Open \(provider) in \(app)"
+        case .openHost(let provider, let app, _): "Open \(provider) in \(app)"
         case .showInFinder: "Show project in Finder"
         }
     }
@@ -71,7 +79,7 @@ public enum PrimaryAction: Equatable, Sendable {
     /// The shorter label of the tiny card, as in `docs/design/preview.html`.
     public var tinyLabel: String {
         switch self {
-        case .openHost(let provider, _): "Open \(provider) ↗"
+        case .openHost(let provider, _, _): "Open \(provider) ↗"
         case .showInFinder: "Show in Finder ↗"
         }
     }
@@ -88,6 +96,8 @@ public struct JobCard: Equatable, Sendable {
     public let connector: Connector?
     public let facts: [Fact]
     public let tinyNote: String
+    /// What the checkpoint sheet shows, when the job has a checkpoint.
+    public let checkpoint: CheckpointDetails?
     public let primaryAction: PrimaryAction?
     public let showsViewCheckpoint: Bool
     public let showsSwitchWorker: Bool
@@ -121,6 +131,9 @@ public enum CardModel: Equatable, Sendable {
     }
 
     public static func make(_ input: CardInput, now: Date, calendar: Calendar, locale: Locale) -> CardModel {
+        if let message = input.missingJobMessage {
+            return .state(StateCard(title: "relay", message: .text(message), command: nil))
+        }
         switch input.connection {
         case .connecting:
             return .state(StateCard(title: "relay", message: .text("Connecting to relay…"), command: nil))
@@ -133,6 +146,12 @@ public enum CardModel: Equatable, Sendable {
         case .connected:
             break
         }
+        if let jobID = input.jobID {
+            guard let job = input.jobs.first(where: { $0.id == jobID }) else {
+                return .state(StateCard(title: "relay", message: .text("Connecting to relay…"), command: nil))
+            }
+            return .job(card(job, input: input, now: now, calendar: calendar, locale: locale))
+        }
         guard let job = selectJob(input.jobs) else {
             return .state(StateCard(
                 title: "No jobs yet",
@@ -140,9 +159,13 @@ public enum CardModel: Equatable, Sendable {
                 command: nil
             ))
         }
+        return .job(card(job, input: input, now: now, calendar: calendar, locale: locale))
+    }
+
+    private static func card(_ job: Job, input: CardInput, now: Date, calendar: Calendar, locale: Locale) -> JobCard {
         let accounts = Dictionary(input.accounts.map { ($0.target, $0) }, uniquingKeysWith: { first, _ in first })
         let words = CardWords(now: now, calendar: calendar, locale: locale)
-        return .job(jobCard(job, workers: input.workersByJob[job.id] ?? [], accounts: accounts, input: input, words: words))
+        return jobCard(job, workers: input.workersByJob[job.id] ?? [], accounts: accounts, input: input, words: words)
     }
 
     private static func jobCard(_ job: Job, workers: [Worker], accounts: [String: Account], input: CardInput, words: CardWords) -> JobCard {
@@ -241,7 +264,7 @@ public enum CardModel: Equatable, Sendable {
         if job.projectMissing {
             primary = nil
         } else if let current, current.state == .running || current.state == .starting, current.pid != nil, let host = input.host {
-            primary = .openHost(provider: name(current), app: host)
+            primary = .openHost(provider: name(current), app: host.name, pid: host.pid)
         } else {
             primary = .showInFinder(path: job.projectRoot)
         }
@@ -259,6 +282,7 @@ public enum CardModel: Equatable, Sendable {
             connector: connector,
             facts: facts,
             tinyNote: handedOff ? "Same checkpoint & plan" : shortCommit.map { "Checkpoint " + $0 } ?? "No checkpoint yet",
+            checkpoint: checkpoint.map { CheckpointDetails($0, words: words) },
             primaryAction: primary,
             showsViewCheckpoint: checkpoint != nil,
             showsSwitchWorker: input.capabilities.contains("jobs.switch") && !job.projectMissing

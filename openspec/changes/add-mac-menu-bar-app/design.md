@@ -557,6 +557,10 @@ The primary action opens a view; it never starts, stops or sends anything.
 The host is looked up each time the window opens, never in the background. Process lookups go
 through a `ProcessTable` protocol so tests can give a fake process tree.
 
+The checkpoint and switch sheets are shown in place of the card, inside the same window, until they
+close: a menu-bar window has no stable parent for a system sheet. The primary action's button
+carries the host's process ID, so pressing it activates that process and nothing else.
+
 "View checkpoint" opens a sheet: title "Checkpoint 7"; rows "Commit" (all 40 characters, IBM Plex
 Mono, selectable), "Saved" (time and age), "Kind" (`baseline` "First checkpoint", `manual` "Saved
 by you", `pre_rollback` "Saved before a rollback", `handoff` "Saved at a handoff", `auto` "Saved
@@ -577,6 +581,9 @@ The sheet:
   target: the target in monospace, the provider name, and the availability words of decision 8.
   The person selects one.
 - Buttons "Cancel" and "Switch to codex:personal" (disabled until an account is selected).
+
+The request body is written as `{"target":"<target>","confirm_new_provider":<true or false>}`
+in that key order; the target has already matched the target pattern, so it needs no escaping.
 
 The flow (every message shown is the API's `message`, word for word):
 
