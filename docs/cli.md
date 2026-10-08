@@ -4,9 +4,9 @@ This page describes the `relay` command: its commands, where its output goes, an
 The source is in `src/cli/`. In this version every command shows its help and checks its
 arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
-`relay policy show`, which `docs/accounts.md` describes, and `relay daemon`, which
-`docs/daemon.md` describes; the other commands do not yet. The change named in the "Built by"
-column builds each one.
+`relay policy show`, which `docs/accounts.md` describes, and `relay daemon` and
+`relay doctor --reindex`, which `docs/daemon.md` describes; the other commands do not yet. The
+change named in the "Built by" column builds each one.
 
 ## Commands
 

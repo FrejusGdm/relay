@@ -80,18 +80,35 @@ test("a job ID that is not 8 hexadecimal characters is never used in a path", ()
   expect(() => takeJobLock(relayHome, "../../x", "checkpoint")).toThrow("relay refused to use the job ID");
 });
 
+// The events lock is an flock lock (add-daemon-api-and-status, task 4.1). lock-child.ts holds it
+// from another process until it is killed.
+async function holdInChild(file: string) {
+  mkdirSync(join(relayHome, "locks"), { recursive: true });
+  const child = Bun.spawn([process.execPath, join(import.meta.dir, "..", "platform", "lock-child.ts"), file], { stdout: "pipe" });
+  const { value } = await child.stdout.getReader().read();
+  expect(new TextDecoder().decode(value)).toBe("locked\n");
+  return child;
+}
+
 test("the events lock waits for a live holder, then gives exit code 6 after 2 seconds", async () => {
-  const eventsLock = join(relayHome, "locks", "3f9a2c1d.events.lock");
-  plantLock(eventsLock, process.pid, "append-event");
-  const started = Date.now();
-  const error = await withEventsLock(relayHome, "3f9a2c1d", () => "ran").catch((caughtError) => caughtError as CommandError);
-  expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
-  expect((error as CommandError).code).toBe(6);
+  const holder = await holdInChild(join(relayHome, "locks", "3f9a2c1d.events.lock"));
+  try {
+    const started = Date.now();
+    const error = await withEventsLock(relayHome, "3f9a2c1d", () => "ran").catch((caughtError) => caughtError as CommandError);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
+    expect((error as CommandError).code).toBe(6);
+  } finally {
+    holder.kill("SIGKILL");
+  }
 });
 
-test("the events lock left by a process that has ended is replaced", async () => {
-  plantLock(join(relayHome, "locks", "3f9a2c1d.events.lock"), await deadPid(), "append-event");
+test("the events lock held by a process that was killed is free at once", async () => {
+  const holder = await holdInChild(join(relayHome, "locks", "3f9a2c1d.events.lock"));
+  holder.kill("SIGKILL");
+  await holder.exited;
+  const started = Date.now();
   expect(await withEventsLock(relayHome, "3f9a2c1d", () => "ran")).toBe("ran");
+  expect(Date.now() - started).toBeLessThan(500);
 });
 
 test("eight processes recovering the same stale lock: exactly one gets it", async () => {
