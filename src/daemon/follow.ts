@@ -5,7 +5,7 @@
 // missing. The same check picks up new roots in projects.list and finds workers whose process is
 // gone without a recorded end.
 import type { Database } from "bun:sqlite";
-import { existsSync, statSync, watch, type FSWatcher } from "node:fs";
+import { statSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import type { EventStream } from "../api/sse";
 import type { Logger } from "../core/log";
@@ -74,17 +74,12 @@ export class Follower {
 
   private async checkOnce(): Promise<void> {
     const { db, relayHome } = this.opts;
-    // A root marked missing is read again once its state.json exists, so a job set up there later,
-    // or a project folder put back, is found. Until then the job keeps its rows, shown as missing.
-    const known = new Map(
-      db
-        .query<{ root_path: string; missing: number }, []>("SELECT root_path, missing FROM projects")
-        .all()
-        .map((row) => [row.root_path, row.missing === 1]),
+    // A root marked missing is read again, so a job set up there later is found.
+    const known = new Set(
+      db.query<{ root_path: string }, []>("SELECT root_path FROM projects WHERE missing = 0").all().map((row) => row.root_path),
     );
     for (const root of readProjects(relayHome)) {
-      const missing = known.get(root);
-      if (missing === false || (missing === true && !existsSync(join(root, ".relay", "state.json")))) continue;
+      if (known.has(root)) continue;
       await this.reindex(root, "project_indexed");
     }
 

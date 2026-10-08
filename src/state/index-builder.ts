@@ -69,18 +69,19 @@ export function syncTargets(db: Database, relayHome: string, accounts: Account[]
 }
 
 // (Re)indexes one project: its old rows are replaced. Returns false when the project has no
-// readable job, in which case it is marked missing.
+// readable job, in which case it is marked missing and rows it already had are kept, so a job
+// whose folder disappears while the daemon runs stays in the index, shown as missing.
 export async function indexProject(db: Database, relayHome: string, root: string): Promise<boolean> {
   const read = await readProject(relayHome, root);
   db.transaction(() => {
     const now = new Date().toISOString();
-    db.prepare("DELETE FROM jobs WHERE project_root = ?").run(root);
     db.prepare(
       `INSERT INTO projects (root_path, missing, last_seen_at) VALUES (?, ?, ?)
        ON CONFLICT (root_path) DO UPDATE SET missing = excluded.missing, last_seen_at = excluded.last_seen_at`,
     ).run(root, read.job === null ? 1 : 0, now);
     const job = read.job;
     if (job === null) return;
+    db.prepare("DELETE FROM jobs WHERE project_root = ?").run(root);
     // A job copied to another folder keeps its ID; the project read last wins.
     db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id);
     db.prepare("INSERT INTO jobs (id, project_root, title, state, updated_at) VALUES (?, ?, ?, ?, ?)").run(
