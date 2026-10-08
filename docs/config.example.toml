@@ -55,3 +55,12 @@ model = "gpt-6.1-sol"
 [limits."claude:personal".seven_day]
 threshold = 90
 switch_to = "codex:personal"
+
+# How relay switch hands a job to another agent. These are the defaults.
+[handoff]
+# Ask the outgoing agent for handoff notes. It costs a little usage on its account.
+ask_for_summary = true
+summary_timeout_seconds = 120
+stop_timeout_seconds = 30
+check_timeout_seconds = 600
+start_check_seconds = 5

@@ -1,0 +1,22 @@
+bun test v1.3.0
+
+test/text/invisible.test.ts:
+[32m(pass) removes invisible characters [0.12ms][0m
+(pass) keeps ordinary text [0.08ms]
+
+test/handoff/notes.test.ts:
+42 | expect(notes.goal).toBe("Continue the task");
+                         ^
+error: expect(received).toBe(expected)
+
+Expected: "Continue the task"
+Received: ""
+
+[31m(fail) reads structured notes [0.44ms][0m
+(skip) requests notes from a real provider
+
+[32m 231 pass[0m
+[31m 1 fail[0m
+ 3 skip
+ 500 expect() calls
+Ran 235 tests across 4 files. [1.20s]

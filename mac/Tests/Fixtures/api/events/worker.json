@@ -1,0 +1,14 @@
+{
+  "id": "5d2e8f01",
+  "job_id": "3f9a2c1d",
+  "target": "codex:personal",
+  "mode": "interactive",
+  "state": "running",
+  "pid": 5120,
+  "provider_session_id": null,
+  "from_handoff": true,
+  "started_at": "2026-10-07T14:36:12.000Z",
+  "ended_at": null,
+  "exit_code": null,
+  "end_reason": null
+}

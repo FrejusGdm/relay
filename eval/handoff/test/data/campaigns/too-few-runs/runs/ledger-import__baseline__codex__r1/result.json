@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "run_id": "ledger-import__baseline__codex__r1",
+  "campaign": "too-few-runs",
+  "plan": "standard",
+  "task_id": "ledger-import",
+  "task_version": "021998f2d9c9a7005a06e84fa1e725c682f77260",
+  "kind": "baseline",
+  "repetition": 1,
+  "from_target": "codex:personal",
+  "to_target": null,
+  "interrupt_point": null,
+  "baseline_median_steps": null,
+  "baseline_runs_used": null,
+  "interrupt_step_target": null,
+  "steps_at_switch": null,
+  "status": "completed",
+  "started_at": "2026-10-12T09:00:00.000Z",
+  "ended_at": "2026-10-12T10:00:00.000Z",
+  "wall_seconds_total": 2400,
+  "steps_total": 31,
+  "tools": {
+    "relay": "0.1.0",
+    "claude": "2.1.282",
+    "codex": "0.160.0",
+    "bun": "1.3.6",
+    "git": "2.39.0",
+    "python3": "3.11.3"
+  },
+  "base_sha": "707d4635967a789d28b38d258ecca93a0ff14154",
+  "segments": [
+    {
+      "target": "codex:personal",
+      "worker_id": "01co0001",
+      "model": "gpt-sample",
+      "started_at": "2026-10-12T09:00:00.000Z",
+      "ended_at": "2026-10-12T09:00:00.000Z",
+      "wall_seconds": 2400,
+      "steps": 31,
+      "end_reason": "exited",
+      "exit_code": 0,
+      "usage": {
+        "source": "not reported",
+        "input_tokens": null,
+        "cached_input_tokens": null,
+        "output_tokens": null,
+        "reasoning_output_tokens": null,
+        "cost_usd_estimate": null
+      },
+      "used_percent_before": null,
+      "used_percent_after": null
+    }
+  ],
+  "handoff": null,
+  "outcome": {
+    "final_checkpoint_sha": "35cf2c6b6718a61f453eff8fcf6cf46a7d1b452a",
+    "visible_tests": {
+      "passed": 9,
+      "failed": 0,
+      "total": 9
+    },
+    "acceptance_tests": {
+      "passed": 15,
+      "failed": 0,
+      "total": 15,
+      "failing": []
+    },
+    "solved": true,
+    "regressions": [],
+    "lines_added_before": null,
+    "lines_reverted": null,
+    "rework_ratio": null,
+    "files_reworked": []
+  },
+  "control_points": [
+    {
+      "point": "steps:25",
+      "step": 8,
+      "snapshot_sha": "efe75c4cc9dca189675c3c1b893636b183d665a2",
+      "acceptance_at_point": {
+        "passed": 2,
+        "failed": 13,
+        "total": 15
+      },
+      "regressions": [],
+      "lines_added_before": 40,
+      "lines_reverted": 4,
+      "rework_ratio": 0.1,
+      "files_reworked": [
+        "src/import.ts"
+      ]
+    },
+    {
+      "point": "steps:50",
+      "step": 16,
+      "snapshot_sha": "5f22004c4f935ebc237724fc98d5a2e3003b9de6",
+      "acceptance_at_point": {
+        "passed": 2,
+        "failed": 13,
+        "total": 15
+      },
+      "regressions": [],
+      "lines_added_before": 40,
+      "lines_reverted": 4,
+      "rework_ratio": 0.1,
+      "files_reworked": [
+        "src/import.ts"
+      ]
+    },
+    {
+      "point": "steps:75",
+      "step": 23,
+      "snapshot_sha": "2e1d57da61bc49e931051fe2fc0b47b232cc2d7e",
+      "acceptance_at_point": {
+        "passed": 2,
+        "failed": 13,
+        "total": 15
+      },
+      "regressions": [],
+      "lines_added_before": 40,
+      "lines_reverted": 4,
+      "rework_ratio": 0.1,
+      "files_reworked": [
+        "src/import.ts"
+      ]
+    }
+  ],
+  "safety": {
+    "ok": true,
+    "violations": [],
+    "bypass_flags_seen": false,
+    "argv_recorded": true
+  },
+  "contamination": false,
+  "notes": ""
+}

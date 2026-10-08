@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "invalid_target",
+    "message": "codex personal is not an account name. Use provider:account, for example codex:personal."
+  }
+}

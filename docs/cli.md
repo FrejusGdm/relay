@@ -4,8 +4,10 @@ This page describes the `relay` command: its commands, where its output goes, an
 The source is in `src/cli/`. In this version every command shows its help and checks its
 arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
-`relay policy show`, which `docs/accounts.md` describes, and `relay hooks`, `relay hook` and
-`relay statusline`, which `docs/hooks.md` describes; the other commands do not yet. The change named in the "Built by" column builds each one.
+`relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
+`relay statusline`, which `docs/hooks.md` describes, and `relay daemon` and
+`relay doctor --reindex`, which `docs/daemon.md` describes; the other commands do not yet. The
+change named in the "Built by" column builds each one.
 
 ## Commands
 
@@ -237,10 +239,12 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 6 | `Busy` | Another relay command is working on the job. |
 | 7 | `NeedsPerson` | relay needs the person: a question without a terminal and without `--yes`, a "no", or a command that must be run at a terminal. |
 | 8 | `UnsavedFiles` | A rollback would overwrite or delete files relay has not saved. |
+| 10 | `DaemonNotRunning` | The relay daemon is not running or could not start. |
 | 20 | `ProviderMissing` | The provider's program is not installed, or older than the oldest version relay was tested with. |
 | 21 | `NoSuchAccount` | The account is not in `config.toml`. |
 | 22 | `NotSignedIn` | The account is not signed in, or its sign-in did not finish. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 10 by `add-daemon-api-and-status`, 23 to 25 by `add-provider-adapters`, 31 to 33 by `add-relay-switch`. The other numbers are free. |
+| 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 23 to 25 by `add-provider-adapters`, 31 and 33 by `add-relay-switch`. The other numbers are free. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |

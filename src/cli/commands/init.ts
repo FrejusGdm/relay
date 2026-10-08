@@ -6,6 +6,7 @@ import { existsSync, lstatSync, mkdirSync, rmdirSync, rmSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { saveCheckpoint } from "../../checkpoint/save";
 import { onInterrupt } from "../../core/cleanup";
+import { reasonOf } from "../../core/log";
 import { printable } from "../../core/quote";
 import { VERSION } from "../../core/version";
 import { openRepository, RepositoryError, type Repository } from "../../git/repo";
@@ -18,6 +19,7 @@ import { drawJobId } from "../../job/id";
 import { JOB_FILES } from "../../job/names";
 import { readState, stateText, writeState, type JobState } from "../../job/state";
 import { checkGitleaks, scanTexts } from "../../secrets/scan";
+import { registerProject } from "../../state/projects-list";
 import { removeInvisible } from "../../text/invisible";
 import { CommandError } from "../errors";
 import { ExitCode } from "../exit-codes";
@@ -129,6 +131,13 @@ async function setUp(ctx: CommandContext): Promise<{ repo: Repository; jobId: st
     throw error;
   } finally {
     forget();
+  }
+  // The daemon finds jobs through this list (add-daemon-api-and-status). Failing to add the line
+  // does not undo the job; the next command that registers the project adds it.
+  try {
+    registerProject(ctx.relayHome, repo.worktreeRoot);
+  } catch (error) {
+    ctx.log.warn("project not registered", { reason: reasonOf(error) });
   }
 
   const excludeShown = shownPath(exclude, repo.worktreeRoot, ctx.homedir);

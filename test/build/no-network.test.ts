@@ -66,11 +66,11 @@ function networkUse(node: Node): string | undefined {
   return specifier !== undefined && NETWORK_MODULE.test(specifier) ? JSON.stringify(specifier) : undefined;
 }
 
-// A fetch or Bun.connect call with an object literal argument that has a `unix` property.
-function isUnixSocketCall(node: Node): boolean {
+// A call to one of `names` with an object literal argument that has a `unix` property.
+function isUnixSocketCall(node: Node, names: ReadonlySet<string>): boolean {
   if (!isCallExpression(node)) return false;
   const use = networkUse(node.expression);
-  if (use !== "fetch" && use !== "Bun.connect") return false;
+  if (use === undefined || !names.has(use)) return false;
   return node.arguments.some(
     (argument) =>
       isObjectLiteralExpression(argument) &&
@@ -90,13 +90,21 @@ const T3_ALLOWED: Record<string, ReadonlySet<string>> = {
   "src/t3/oauth.ts": new Set(["fetch", "Bun.serve"]),
 };
 
+// The calls a file may make, and only with a `unix` option: src/client/ connects to relay's socket,
+// and the daemon's listener in src/api/server.ts listens on it (add-daemon-api-and-status).
+function unixCallsAllowed(file: string): ReadonlySet<string> {
+  if (file.startsWith("src/client/")) return new Set(["fetch", "Bun.connect"]);
+  if (file === "src/api/server.ts") return new Set(["Bun.listen"]);
+  return new Set();
+}
+
 function scan(source: SourceFile, file: string, found: string[]): void {
-  const inClient = file.startsWith("src/client/");
+  const unixCalls = unixCallsAllowed(file);
   const t3Allowed = Object.hasOwn(T3_ALLOWED, file) ? T3_ALLOWED[file]! : new Set<string>();
   const allowed = new Set<string>();
   const key = (node: Node) => `${node.kind}:${node.pos}:${node.end}`;
   const visit = (node: Node): undefined => {
-    if (inClient && isUnixSocketCall(node) && isCallExpression(node)) allowed.add(key(node.expression));
+    if (isUnixSocketCall(node, unixCalls) && isCallExpression(node)) allowed.add(key(node.expression));
     const use = networkUse(node);
     if (use !== undefined && !allowed.has(key(node)) && !t3Allowed.has(use)) {
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
@@ -217,6 +225,25 @@ test("src/client/ may only call fetch and Bun.connect with a unix option", async
       'src/client/bad.ts:7: "node:net"',
       "src/client/bad.ts:8: fetch",
       "src/client/bad.ts:9: fetch",
+    ]);
+  });
+});
+
+test("src/api/server.ts may only call Bun.listen with a unix option", async () => {
+  await withScratchSource({
+    "api/server.ts": [
+      "Bun.listen({ unix: socketPath, socket: handlers });",
+      "Bun.listen({ hostname: \"127.0.0.1\", port: 7331, socket: handlers });",
+      "Bun.serve({ unix: socketPath });",
+      "await Bun.connect({ unix: socketPath, socket: handlers });",
+    ],
+    "api/other.ts": ["Bun.listen({ unix: socketPath, socket: handlers });"],
+  }, async (root) => {
+    expect(await forbiddenNetworkUse(root)).toEqual([
+      "src/api/other.ts:1: Bun.listen",
+      "src/api/server.ts:2: Bun.listen",
+      "src/api/server.ts:3: Bun.serve",
+      "src/api/server.ts:4: Bun.connect",
     ]);
   });
 });

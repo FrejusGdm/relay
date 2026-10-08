@@ -1,0 +1,34 @@
+{
+  "jobs": [
+    {
+      "id": "3f9a2c1d",
+      "title": "Build authentication",
+      "state": "active",
+      "project_root": "/projects/app",
+      "project_missing": false,
+      "current_worker": {
+        "id": "w2",
+        "job_id": "3f9a2c1d",
+        "target": "codex:personal",
+        "mode": "headless",
+        "state": "starting",
+        "pid": null,
+        "provider_session_id": null,
+        "from_handoff": true,
+        "started_at": "2026-10-07T14:03:00.000Z",
+        "ended_at": null,
+        "exit_code": null,
+        "end_reason": null
+      },
+      "last_checkpoint": {
+        "number": 7,
+        "commit": "912ec10000000000000000000000000000000000",
+        "ref": "refs/relay/jobs/3f9a2c1d/checkpoints/7",
+        "kind": "handoff",
+        "created_at": "2026-10-07T14:01:00.000Z",
+        "message": "Login form done"
+      },
+      "updated_at": "2026-10-07T14:03:00.000Z"
+    }
+  ]
+}

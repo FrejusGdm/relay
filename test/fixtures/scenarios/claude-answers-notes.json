@@ -1,0 +1,14 @@
+{
+  "claude": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "say": "## Done\n- Added the OAuth callback route in `src/auth/callback.ts`.\n\n## In progress\n- Refreshing expired Google tokens in `src/auth/google.ts`. The request is written but not tested.\n\n## Next steps\n1. Fix the failing test in `auth/google.test.ts`.\n2. Add the logout route.\n\n## Decisions\n- Sessions live in signed cookies. No session table is needed yet.\n\n## Files touched\n- src/auth/callback.ts\n- src/auth/google.ts\n\n## Claims to verify\n- `bun test` passes. Check: run `bun test`.\n- `src/auth/callback.ts` exports `handleCallback`. Check: open the file.\n\n## Problems\n- None."
+          }
+        ]
+      }
+    ]
+  }
+}

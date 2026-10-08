@@ -1,0 +1,9 @@
+{
+  "api": "v1",
+  "daemon_version": "0.5.0",
+  "pid": 4121,
+  "started_at": "2026-10-07T12:02:11.402Z",
+  "schema_version": 1,
+  "capabilities": ["accounts", "jobs", "events.sse", "jobs.checkpoint", "jobs.switch", "hooks"],
+  "agents_running": []
+}

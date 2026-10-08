@@ -98,10 +98,12 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
   const started = { command: def.name, options: optionNames, arguments: positionals.length };
 
   let config: RelayConfig;
+  let logLevel: LogLevel;
   try {
     config = loadConfig({ relayHome, homedir: ctx.homedir, uid: ctx.uid });
     if (levelProblem) throw levelProblem;
-    log.setLevel(resolveLogLevel(logLevelFlag, ctx.env, config));
+    logLevel = resolveLogLevel(logLevelFlag, ctx.env, config);
+    log.setLevel(logLevel);
   } catch (error) {
     if (!(error instanceof SettingsError)) throw error;
     log.info("command started", started);
@@ -120,7 +122,7 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
   });
 
   const code = await def.handler({
-    def, positionals, values, io, log, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, config,
+    def, positionals, values, io, log, logLevel, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, config,
   });
   finish(state, code);
   return code;

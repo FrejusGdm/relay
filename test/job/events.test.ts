@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendEvent, createEventLog, readEvents, type JobRef } from "../../src/job/events";
+import { tryLock } from "../../src/platform/file-lock";
 
 let root: string;
 let job: JobRef;
@@ -90,7 +91,23 @@ test("a blank line at the end of the log does not stop the next append", async (
   expect(readEvents(job).map((event) => event.id)).toEqual([1, 2]);
 });
 
-test("the events lock is gone after each append", async () => {
+test("the events lock is free after each append", async () => {
   await appendEvent(job, "a", {});
-  expect(() => readFileSync(join(job.relayHome, "locks", "3f9a2c1d.events.lock"))).toThrow();
+  const handle = tryLock(join(job.relayHome, "locks", "3f9a2c1d.events.lock"));
+  expect(handle).not.toBeNull();
+  handle!.release();
+});
+
+test("readEvents skips lines an agent wrote without a valid time, type or data, and appends still work", async () => {
+  await appendEvent(job, "job_started", { title: "main" });
+  const good = readFileSync(log, "utf8");
+  const forged = [
+    { v: 1, id: 2, ts: "not a time", job: "3f9a2c1d", type: "turn_failed", actor: "relay", data: {} },
+    { v: 1, id: 3, ts: "2026-10-07T14:00:00.000Z", job: "3f9a2c1d", type: "turn_failed", actor: "relay" },
+    { v: 1, id: 4, ts: "2026-10-07T14:00:00.000Z", job: "3f9a2c1d", type: 5, actor: "relay", data: {} },
+    { v: 1, id: 5, ts: "2026-10-07T14:00:00.000Z", job: "3f9a2c1d", type: "x", actor: "relay", data: ["a"] },
+  ].map((event) => JSON.stringify(event)).join("\n");
+  writeFileSync(log, `${good}${forged}\n`);
+  await appendEvent(job, "checkpoint_saved", { number: 1 });
+  expect(readEvents(job).map((event) => [event.id, event.type])).toEqual([[1, "job_started"], [6, "checkpoint_saved"]]);
 });

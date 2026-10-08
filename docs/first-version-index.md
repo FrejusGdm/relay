@@ -56,7 +56,8 @@ later change:
   daemon.
 - Phase 2 builds `appendEvent` with a lock file. Phase 5 replaces the lock mechanism with `flock`,
   which the operating system releases when a process dies, without changing the function.
-- Phase 5 makes `relay init` add the project's root to `RELAY_HOME/projects.list`.
+- Phase 5 makes `relay init`, and every command that finds a job, add the project's root to
+  `RELAY_HOME/projects.list`.
 
 The consistency check found two places where changes overlapped. Josué approved how each is
 resolved, and the proposals now say so:

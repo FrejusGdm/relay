@@ -1,0 +1,16 @@
+bun test v1.3.0
+
+test/text/invisible.test.ts:
+(pass) removes invisible characters [0.12ms]
+(pass) keeps ordinary text [0.08ms]
+(pass) ignores a printed (fail) marker [0.05ms]
+
+test/handoff/notes.test.ts:
+(pass) reads structured notes [0.22ms]
+(pass) keeps the task description [0.11ms]
+
+ 12 pass
+ 0 fail
+ 0 skip
+ 500 expect() calls
+Ran 235 tests across 4 files. [1.20s]
