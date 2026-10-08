@@ -1,7 +1,7 @@
 // Shared steps for the relay run tests: a scratch repository with a job and two accounts, relay run
 // in the same process or as its own process, and readers for the job's events and worker records.
 import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startAccountRecord } from "../../src/accounts/record";
 import { policyOf } from "../../src/policies/load";
@@ -83,4 +83,10 @@ export function resetTime(hours = 3): Date {
   const time = new Date(Date.now() + hours * 3600_000);
   time.setUTCSeconds(0, 0);
   return time;
+}
+
+// The first six characters of the job's latest checkpoint commit.
+export function latestCheckpoint(fixture: RunFixture): string {
+  const state = JSON.parse(readFileSync(join(fixture.scratch.repo, ".relay", "state.json"), "utf8")) as { latest_checkpoint: { commit: string } };
+  return state.latest_checkpoint.commit.slice(0, 6);
 }

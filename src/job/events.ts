@@ -53,6 +53,16 @@ export async function appendEvent(job: JobRef, type: string, data: Record<string
   });
 }
 
+// The bytes of the event log as they are, for the handoff commit that records them.
+export function readEventLogText(job: JobRef): string {
+  const fd = openLog(job, constants.O_RDONLY);
+  try {
+    return readRange(fd, 0, fstatSync(fd).size);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 // Every event, in file order, also a last one whose newline was never written. A line that is not
 // an event is what remains of an interrupted write, and is skipped. Agents can write to the file,
 // so an event is kept only when its time is a valid time, its type is text and its data is an

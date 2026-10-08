@@ -4,10 +4,11 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { readJsonFile, writeJsonFile } from "../accounts/files";
-import type { Mode, PermissionLevel, ProviderId, Transport } from "../adapters/types";
+import type { FailureReason, Mode, PermissionLevel, ProviderId, Transport } from "../adapters/types";
 import { isJobId } from "../job/id";
 
-export type EndReason = "exited" | "interrupted" | "relay_stopped";
+// add-relay-switch adds stopped_by_switch and start_failed to phase 3's reasons.
+export type EndReason = "exited" | "interrupted" | "relay_stopped" | "stopped_by_switch" | "start_failed";
 
 export interface WorkerRecord {
   worker_id: string;
@@ -29,6 +30,12 @@ export interface WorkerRecord {
   signal: string | null;
   end_reason: EndReason | null;
   log_path: string | null;
+  // Added by add-relay-switch. The reason of the worker's last failed turn, as the adapter reported
+  // it to relay; the handoff number that started the worker; the checkpoint that was latest when
+  // it started. Older records lack them.
+  last_failure?: FailureReason | null;
+  from_handoff?: number | null;
+  start_checkpoint?: number | null;
 }
 
 // Worker IDs have the format of job IDs: 8 random lowercase hexadecimal characters.

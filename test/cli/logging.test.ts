@@ -150,9 +150,9 @@ describe("Command events", () => {
 
   test("missing settings are logged with exists false", async () => {
     const relayHome = makeRelayHome();
-    await runRelayInProcess(["switch", "codex:personal"], { relayHome });
+    await runRelayInProcess(["status"], { relayHome });
     expect(entries(relayHome)).toEqual([
-      expect.objectContaining({ msg: "command started", command: "switch", options: [], arguments: 1 }),
+      expect.objectContaining({ msg: "command started", command: "status", options: [], arguments: 0 }),
       expect.objectContaining({ msg: "settings loaded", exists: false, accounts: 0, projects: 0 }),
       expect.objectContaining({ msg: "command finished", exit_code: 69 }),
     ]);

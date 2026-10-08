@@ -1,9 +1,12 @@
 // Headless relay run: progress output, --json, exit codes and Ctrl+C (task 9.5).
-import { expect, test } from "bun:test";
+import { expect, test, setDefaultTimeout } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { clockText } from "../../src/run/progress";
-import { jobEvents, relayRun, resetTime, runFixture, spawnRelayRun, steps, until, workers } from "./helpers";
+import { latestCheckpoint, jobEvents, relayRun, resetTime, runFixture, spawnRelayRun, steps, until, workers } from "./helpers";
+
+// add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
+setDefaultTimeout(30_000);
 
 const SESSION = "7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f";
 
@@ -15,7 +18,8 @@ test("text progress: the session, each command and changed file, and the end of 
     });
     expect(result).toEqual({
       code: 0, stderr: "",
-      stdout: "Allowed claude:work on this project.\nStarted Claude Code on claude:work · session 7c1e9a52\n  ran bun test · exit 0\n  changed src/a.ts\nTurn finished · 1 s\n",
+      stdout: "Allowed claude:work on this project.\nStarted Claude Code on claude:work · session 7c1e9a52\n  ran bun test · exit 0\n  changed src/a.ts\nTurn finished · 1 s\n"
+        + `Claude Code · work stopped (exit code 0)\nSaved checkpoint ${latestCheckpoint(fixture)}\n`,
     });
   } finally {
     fixture.cleanup();
@@ -29,7 +33,7 @@ test("--json prints each worker event as one JSON line, messages included", asyn
       session_id: SESSION, turns: [{ steps: [{ say: "Fixing." }, { run: "bun test" }] }],
     });
     expect(result.code).toBe(0);
-    expect(result.stderr).toBe("Allowed claude:work on this project.\n");
+    expect(result.stderr).toBe(`Allowed claude:work on this project.\nClaude Code · work stopped (exit code 0)\nNo changes since checkpoint ${latestCheckpoint(fixture)}\n`);
     const lines = result.stdout.trim().split("\n").map((line) => JSON.parse(line));
     const id = workers(fixture)[0]!.worker_id;
     expect(lines.every((line) => line.worker_id === id)).toBe(true);
@@ -55,23 +59,28 @@ test("exit 23 at a Codex usage limit, with the reset time", async () => {
 });
 
 test("exit 24 when the agent fails, crashes or asks for a permission", async () => {
-  const fixture = await runFixture();
-  try {
-    const failed = await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go."], steps({ error: "overloaded" }));
-    const log = workers(fixture)[0]!.log_path;
-    expect(failed).toMatchObject({ code: 24, stderr: `Claude Code stopped: the service is overloaded. Details are in ${log}.\n` });
+  // Each case runs in a job of its own: a second run in the same job continues it through a
+  // handoff (add-relay-switch).
+  const run = async (scenario: ReturnType<typeof steps>) => {
+    const fixture = await runFixture();
+    try {
+      const result = await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go."], scenario);
+      return { result, record: workers(fixture)[0]! };
+    } finally {
+      fixture.cleanup();
+    }
+  };
+  const failed = await run(steps({ error: "overloaded" }));
+  expect(failed.result).toMatchObject({ code: 24, stderr: `Claude Code stopped: the service is overloaded. Details are in ${failed.record.log_path}.\n` });
 
-    const crashed = await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go."], steps({ say: "Oh." }, { crash: { signal: "SIGKILL" } }));
-    expect(crashed).toMatchObject({ code: 24, stderr: `Claude Code stopped unexpectedly. Details are in ${workers(fixture)[0]!.log_path}.\n` });
-    expect(workers(fixture)[0]).toMatchObject({ signal: "SIGKILL", end_reason: "exited" });
+  const crashed = await run(steps({ say: "Oh." }, { crash: { signal: "SIGKILL" } }));
+  expect(crashed.result).toMatchObject({ code: 24, stderr: `Claude Code stopped unexpectedly. Details are in ${crashed.record.log_path}.\n` });
+  expect(crashed.record).toMatchObject({ signal: "SIGKILL", end_reason: "exited" });
 
-    const denied = await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go."], steps({ approval: { command: "rm -rf build" } }));
-    expect(denied.code).toBe(24);
-    expect(denied.stderr).toBe("Claude Code was not allowed to use Bash. relay does not answer permission requests; run relay run claude:work in your terminal to answer it yourself.\n");
-  } finally {
-    fixture.cleanup();
-  }
-});
+  const denied = await run(steps({ approval: { command: "rm -rf build" } }));
+  expect(denied.result.code).toBe(24);
+  expect(denied.result.stderr).toBe("Claude Code was not allowed to use Bash. relay does not answer permission requests; run relay run claude:work in your terminal to answer it yourself.\n");
+}, 30_000);
 
 test("a Codex approval request stops the agent, because relay never answers it", async () => {
   const fixture = await runFixture('[accounts."codex:personal"]\n');
@@ -81,7 +90,7 @@ test("a Codex approval request stops the agent, because relay never answers it",
     expect(result.stderr).toBe("Codex asked for permission to run rm -rf build. relay does not answer permission requests; run relay run codex:personal in your terminal to answer it yourself.\n");
     expect(workers(fixture)[0]).toMatchObject({ end_reason: "relay_stopped" });
     expect(jobEvents(fixture).find((event) => event.type === "approval_requested")?.data.summary).toBe("run rm -rf build");
-    expect(jobEvents(fixture).at(-1)?.data).toMatchObject({ end_reason: "relay_stopped", stop_how: "clean" });
+    expect(jobEvents(fixture).findLast((event) => event.type === "worker_ended")?.data).toMatchObject({ end_reason: "relay_stopped", stop_how: "clean" });
   } finally {
     fixture.cleanup();
   }
@@ -95,7 +104,7 @@ test("Ctrl+C interrupts the turn, prints the resume hint and exits 130", async (
     process.kill(-run.child.pid!, "SIGINT");
     expect(await run.exited).toBe(130);
     expect(run.stderr()).toBe(`Interrupted. Resume with relay run claude:work --resume ${SESSION}\n`);
-    expect(jobEvents(fixture).at(-1)).toMatchObject({ type: "worker_ended", data: { end_reason: "interrupted", stop_how: "clean" } });
+    expect(jobEvents(fixture).findLast((event) => event.type === "worker_ended")).toMatchObject({ data: { end_reason: "interrupted", stop_how: "clean" } });
     expect(jobEvents(fixture).some((event) => event.type === "turn_failed" && event.data.reason === "interrupted")).toBe(true);
     expect(workers(fixture)[0]).toMatchObject({ end_reason: "interrupted" });
   } finally {
@@ -129,7 +138,7 @@ test("a second Ctrl+C stops the agent at once", async () => {
     process.kill(-run.child.pid!, "SIGINT");
     expect(await run.exited).toBe(130);
     expect(Date.now() - before).toBeLessThan(5000);
-    expect(jobEvents(fixture).at(-1)).toMatchObject({ type: "worker_ended", data: { end_reason: "interrupted", stop_how: "killed", signal: "SIGKILL" } });
+    expect(jobEvents(fixture).findLast((event) => event.type === "worker_ended")).toMatchObject({ data: { end_reason: "interrupted", stop_how: "killed", signal: "SIGKILL" } });
   } finally {
     fixture.cleanup();
   }
@@ -143,7 +152,7 @@ for (const signal of ["SIGTERM", "SIGHUP"] as const) {
       await until(() => run.stdout().includes("Started Claude Code"));
       run.child.kill(signal);
       expect(await run.exited).toBe(143);
-      expect(jobEvents(fixture).at(-1)).toMatchObject({ type: "worker_ended", data: { end_reason: "relay_stopped", stop_how: "clean" } });
+      expect(jobEvents(fixture).findLast((event) => event.type === "worker_ended")).toMatchObject({ data: { end_reason: "relay_stopped", stop_how: "clean" } });
       expect(workers(fixture)[0]).toMatchObject({ end_reason: "relay_stopped" });
       expect(existsSync(join(fixture.relayHome, "locks", `${fixture.jobId}.worker.lock`))).toBe(false);
     } finally {

@@ -15,7 +15,7 @@ in the "Built by" column builds each one.
 | Command | Usage | Arguments | Built by |
 |---|---|---|---|
 | `init` | `relay init [--title <text>]` | none | `add-checkpoint-engine` |
-| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
+| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
 | `checkpoint` | `relay checkpoint [-m <text>] [--include <path>]... [--json]` | none | `add-checkpoint-engine` |
 | `checkpoints` | `relay checkpoints [--json]` | none | `add-checkpoint-engine` |
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
@@ -264,11 +264,12 @@ convention of 128 plus the signal number.
 
 Every command can also exit with 2 for a wrong command line, 70 for a bug in relay, 78 for a
 problem with the relay folder or `config.toml`, and 130 or 143 when a signal stops it. The table
-lists the other codes of the commands that `add-provider-adapters` builds.
+lists the other codes of the commands that `add-provider-adapters` and `add-relay-switch` build.
 
 | Command | Exit codes |
 |---|---|
-| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access, the allow list or a session of another account; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code |
+| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access or a session of another account; 4 a secret in the work when relay saves the checkpoint at the agent's exit, or in a handoff; 7 an answer is needed, such as the first handoff to an account or a change of the checks without a terminal; 31 the agent of a handoff did not start; 32 the handoff would raise the mode or the permission; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code |
+| `relay switch` | 0 switched or prepared; 1 a failure after the switch started; 3 not set up, or no agent worked on the job; 4 the secret scan; 5 git's settings or hooks changed; 6 the job is busy; 7 an answer is needed or was no; 20 to 22 the next agent's program or account is not ready; 25 full access; 31 the next agent did not start; 32 the mode or permission would go up; 33 the agent could not be stopped, or its `relay run` did not answer. After an interactive start, `relay switch` supervises the next agent and exits as `relay run` would. `docs/handoff.md` says what to do after each code |
 | `relay account` | 0 done; 1 the account table could not be found to remove; 6 another command is changing `config.toml`; 7 an answer is needed; 20 the program is missing; 21 no such account; 22 the sign-in did not finish; 78 an unsafe profile folder |
 | `relay hooks` | 0 done; 1 a settings file could not be changed, or relay runs from source without `RELAY_BIN`; 7 an answer is needed; 21 no such account; 78 an unsafe profile folder |
 | `relay policy show` | 0 done; 2 a provider relay has no adapter for |

@@ -1,10 +1,13 @@
 // The checks of relay run before an agent starts, one test per exit code (task 9.2).
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, setDefaultTimeout } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readAccountRecord, startAccountRecord } from "../../src/accounts/record";
 import { policyOf } from "../../src/policies/load";
 import { relayRun, runFixture, steps, workers } from "./helpers";
+
+// add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
+setDefaultTimeout(30_000);
 
 const finish = steps({ say: "Done." });
 const config = (fixture: { relayHome: string }) => readFileSync(join(fixture.relayHome, "config.toml"), "utf8");
@@ -105,14 +108,15 @@ test("exit 25: full access, and an account the project's allow list does not nam
     expect(config(fixture)).toEndWith(`[[projects]]\npath = ${JSON.stringify(fixture.scratch.repo)}\nallow = ["claude:work"]\n`);
     expect((await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], finish)).stdout).not.toContain("Allowed");
 
+    // add-relay-switch: an account the list does not name is asked about instead of refused.
     expect(await relayRun(fixture, ["codex:personal", "--headless", "--prompt", "Hi."], finish)).toMatchObject({
-      code: 25,
-      stderr: "This project allows only claude:work. To hand the job to codex:personal, use relay switch, which asks before your code goes to another company.\n",
+      code: 7,
+      stderr: 'codex:personal has not worked on this project before. Sending the repository to OpenAI needs your yes.\nRun "relay run codex:personal" in a terminal, or add --yes.\n',
     });
   } finally {
     fixture.cleanup();
   }
-});
+}, 30_000);
 
 test("exit 78: a profile folder other users can change", async () => {
   const fixture = await runFixture();

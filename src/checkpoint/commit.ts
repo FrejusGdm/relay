@@ -127,7 +127,7 @@ function commitMessage(repo: Repository, input: CommitInput, number: number): st
 }
 
 // The person's user.name and user.email, or relay and relay@localhost when either is missing.
-async function readIdentity(repo: Repository): Promise<{ name: string; email: string }> {
+export async function readIdentity(repo: Repository): Promise<{ name: string; email: string }> {
   const read = async (key: string, fallback: string) => {
     const result = await git(repo, ["config", "--get", key]);
     const value = result.code === 0 ? decoder.decode(result.stdout).trim() : "";

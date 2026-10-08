@@ -58,7 +58,7 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
 
   if (!entry?.allow.includes(to.id)) {
     const question = `This sends the repository and the job notes to ${company} through the account ${to.id}. Continue? [y/N]`;
-    const how = await answer(asker, question, [`${to.id} has not worked on this project before. Sending the repository to ${company} needs your yes.`, hint], nothingChanged,
+    const how = asker.preset?.newAccount ?? await answer(asker, question, [`${to.id} has not worked on this project before. Sending the repository to ${company} needs your yes.`, hint], nothingChanged,
       request.from?.provider === to.provider ? [policyOf(to.provider).ownAccountsNote] : []);
     result.allowed = { account: to.id, company, how };
     result.confirmations.push({ question, how });
@@ -66,7 +66,7 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
 
   if (request.from?.kind === "work" && to.kind === "personal") {
     const warning = `This job ran on a work account (${request.from.id}). ${to.id} is marked personal.`;
-    const how = await answer(asker, "Continue? [y/N]", [warning, hint], nothingChanged, [warning]);
+    const how = asker.preset?.personalAccount ?? await answer(asker, "Continue? [y/N]", [warning, hint], nothingChanged, [warning]);
     result.confirmations.push({ question: warning, how });
   }
   // Written only once every question has its yes, so a "no" leaves config.toml as it was.

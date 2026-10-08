@@ -1,21 +1,25 @@
-// relay run (the agent-runs spec; add-provider-adapters, design decision 15): the checks before an
-// agent starts, the worker lock, the worker record, the job events, the progress output and the
-// exit code. The agent is always started through its adapter, which builds its command line.
+// relay run (the agent-runs spec; add-provider-adapters, design decision 15; and what
+// add-relay-switch adds, the run-continuation spec): the checks before an agent starts, the
+// worker lock, the worker record, the job events, the progress output and the exit code. Inside a
+// job, relay run gives a new job the start prompt, continues a job that had earlier work through a
+// handoff, takes switch requests from relay switch in another terminal, and saves a checkpoint when
+// the agent exits. The agent is always started through its adapter, which builds its command line.
 import { existsSync, readFileSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { readAvailability } from "../accounts/availability";
 import { buildAgentEnv } from "../accounts/environment";
-import { checkProfileFolder } from "../accounts/profile";
-import { authFact, readAccountRecord, updateAccountRecord } from "../accounts/record";
+import { readAccountRecord, updateAccountRecord } from "../accounts/record";
 import { findAccount, isProvider } from "../accounts/registry";
 import { deleteOldWorkerLogs } from "../adapters/process";
-import { createAdapterRegistry } from "../adapters/registry";
+import { createAdapterRegistry, type AdapterRegistry } from "../adapters/registry";
 import { tomlString } from "../adapters/text";
 import type {
   Availability, FailureReason, Mode, PermissionLevel, ProviderAdapter, StopResult, WorkerEvent, WorkerHandle,
 } from "../adapters/types";
 import { textForAgent } from "../adapters/worker";
+import { saveCheckpoint } from "../checkpoint/save";
+import { buildSnapshotTree } from "../checkpoint/snapshot";
 import { ACCOUNT_WORD } from "../cli/commands/policy";
 import type { CommandContext } from "../cli/commands/registry";
 import { CommandError } from "../cli/errors";
@@ -24,13 +28,30 @@ import { appendTable, editConfig } from "../core/config/edit";
 import type { Account } from "../core/config/types";
 import { onInterrupt } from "../core/cleanup";
 import { printable, quote } from "../core/quote";
+import { openRepository, type Repository } from "../git/repo";
+import { git } from "../git/run";
+import { accountLabel, displayName } from "../handoff/account";
+import { checkAllowList } from "../handoff/allow-list";
+import type { Asker } from "../handoff/ask";
+import { markHandoff, newestHandoff, type HandoffRecord } from "../handoff/handoff-record";
+import { recoverSwitch } from "../handoff/journal";
+import { preflight, type HandoffEnv, type HeldWorker, type Preflight } from "../handoff/preflight";
+import { instructionFileNames, startPrompt } from "../handoff/render-prompt";
+import { readHandoffSettings, writeHandoffSettings, type HandoffSettings } from "../handoff/settings";
+import { performHandoff, type HandoffResult, type StartOutcome, type StartPlan } from "../handoff/switch";
 import { appendEvent, type JobRef } from "../job/events";
-import { takeWorkerLock } from "../job/lock";
+import { takeJobLock, takeWorkerLock, type WorkerLock } from "../job/lock";
+import { readState, writeState } from "../job/state";
 import { now } from "../platform/clock";
 import { redact } from "../secrets/redact";
+import {
+  listenForRequests, readSupervisor, removeOldRequests, requestPrinter, supervisorFields, takeSwitchRequest, writeSwitchReply,
+  type SwitchRequest,
+} from "./control";
 import { relayInstructions } from "./instructions";
 import { findJobContext } from "./job-context";
 import { failureLine, jsonLine, limitLine, progressLines, sessionLine } from "./progress";
+import { checkAgentReady } from "./ready";
 import {
   newWorkerId, readAllWorkerRecords, readWorkerRecords, workerRecordPath, writeWorkerRecord, type EndReason, type WorkerRecord,
 } from "./worker-record";
@@ -44,16 +65,43 @@ export interface RunOptions {
   permission?: string;
   model?: string;
   json: boolean;
+  // add-relay-switch: the job's checks (null when not given), --yes and --no-summary.
+  checks: string[] | null;
+  yes: boolean;
+  noSummary: boolean;
 }
 
 const PERMISSIONS = ["read-only", "edit-in-workspace", "full-access"];
 // How long a turn may take to end after Ctrl+C before relay stops the agent, as the adapters wait.
 const INTERRUPT_WAIT_MS = 10_000;
+// How long a headless agent started by a handoff has to report its session.
+const HEADLESS_START_MS = 60_000;
 // Leaves the alternate screen, shows the cursor and resets styles, in case the agent did not.
 const RESTORE_TERMINAL = "\x1b[?1049l\x1b[?25h\x1b[0m";
+const CHECK_LIMIT = 500;
 
 function usage(line: string): CommandError {
   return new CommandError(ExitCode.Usage, [line]);
+}
+
+export function checksLine(checks: string[]): string {
+  return checks.length === 0 ? "relay will run no checks at handoffs." : `relay will run these checks at every handoff: ${checks.join("; ")}`;
+}
+
+// What relay prints on standard error for a switch that stopped: "relay: " before each line, except
+// the hint line that ends a message, which tells the person what to run or change.
+export function stderrText(lines: string[]): string {
+  const hint = /^(?:Run "relay|Fix the output of the check|Remove the secret from|Rename the file whose name)/;
+  return lines.map((line) => `${hint.test(line) || line.startsWith("relay: ") ? "" : "relay: "}${line}\n`).join("");
+}
+
+// The --check values: one line of at most 500 characters each, and "" alone clears the list.
+export function parseChecks(values: string[] | undefined): string[] | null {
+  if (values === undefined || values.length === 0) return null;
+  for (const value of values) {
+    if (value.length > CHECK_LIMIT || /[\r\n]/.test(value)) throw usage("relay: A check must be one line of at most 500 characters.");
+  }
+  return values.filter((value) => value.trim() !== "");
 }
 
 export async function runAgent(ctx: CommandContext, options: RunOptions): Promise<number> {
@@ -65,46 +113,85 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
   if (options.headless && prompt === undefined) throw usage("A headless run needs --prompt or --prompt-file.");
 
   const { job, state } = await findJobContext(ctx.cwd, ctx.relayHome);
-  const account = resolveAccount(ctx, options.account);
-  const adapter = createAdapterRegistry({}, ctx.env).get(account.provider);
-  const detection = await adapter.detect();
-  if (!detection.installed) {
-    throw new CommandError(ExitCode.ProviderMissing, [`${adapter.displayName} is not installed. Install it, then try again.`]);
-  }
-  if (detection.tooOld !== undefined) {
-    throw new CommandError(ExitCode.ProviderMissing, [
-      `relay needs ${adapter.displayName} ${detection.tooOld.oldest} or newer. You have ${detection.version}. ` +
-        `Update ${adapter.displayName}, then try again.`,
-    ]);
-  }
-  checkProfileFolder(account.profileDir, process.getuid!(), ctx.homedir);
-  await checkSignIn(ctx, adapter, account);
-  if (options.permission === "full-access") {
-    throw new CommandError(ExitCode.Refused, ["relay does not start agents with full access in this version."]);
-  }
+  const repo = await openRepository(job.worktreeRoot);
   // With --json, lines that are not worker events go to standard error, so that standard output
   // holds only one JSON object per line.
   const say = (line: string) => (options.json ? ctx.io.err(`${line}\n`) : ctx.io.out(`${line}\n`));
-  allowOnProject(ctx, account, job.worktreeRoot, say);
+  const recovered = await recoverSwitch(repo, job);
+  if (recovered !== null) say(recovered);
+  const account = resolveAccount(ctx, options.account);
+  const registry = createAdapterRegistry({}, ctx.env);
+  const adapter = registry.get(account.provider);
+  const running = readSupervisor(ctx.relayHome, job.id);
+  if (running !== null) {
+    const [provider, name] = running.account.split(":") as [Account["provider"], string];
+    throw new CommandError(ExitCode.Busy, [
+      `relay: ${isProvider(provider) ? accountLabel({ provider, name }) : printable(running.account)} is working on this job. To hand it over, run relay switch ${account.id}.`,
+    ]);
+  }
+  if (options.checks !== null && !ctx.io.isTerminal) {
+    throw new CommandError(ExitCode.NeedsPerson, ["relay: Changing the checks needs a terminal. Run the command in your terminal."]);
+  }
+  const { version } = await checkAgentReady(ctx, adapter, account);
+  if (options.permission === "full-access") {
+    throw new CommandError(ExitCode.Refused, ["relay does not start agents with full access in this version."]);
+  }
+  const records = readWorkerRecords(ctx.relayHome, job.id);
+  const firstRun = allowFirstProject(ctx, account, job.worktreeRoot, say);
   if (readAccountRecord(ctx.relayHome, account).policy_checked_on_seen !== adapter.policy.checkedOn) {
     say(`The ${adapter.displayName} policy notes changed since you last saw them. Read them with relay policy show ${account.provider}.`);
     updateAccountRecord(ctx.relayHome, account, { policy_checked_on_seen: adapter.policy.checkedOn, policy_seen_at: now().toISOString() });
   }
+  const mode: Mode = options.headless ? "headless" : "interactive";
+  const permission: PermissionLevel = options.permission === "read-only" ? "read-only" : "edit-in-workspace";
+  const asker: Asker = {
+    terminal: ctx.io.isTerminal, yes: options.yes, say,
+    ask: async (question) => {
+      ctx.io.out(`${question} `);
+      return ctx.io.readLine();
+    },
+  };
 
-  const release = takeWorkerLock(ctx.relayHome, job.id, account.id);
-  const forget = onInterrupt(release);
+  if (options.checks !== null) say(checksLine(options.checks));
+  const supervisor = new JobSupervisor(ctx, job, registry, say, options.json);
   try {
-    const resume = resolveResume(ctx.relayHome, job.id, adapter, account, options.resume);
-    return await supervise(ctx, {
-      job, adapter, account, prompt, resume, model: options.model, json: options.json,
-      permission: options.permission === "read-only" ? "read-only" : "edit-in-workspace",
-      mode: options.headless ? "headless" : "interactive", providerVersion: detection.version ?? null,
-      startCheckpoint: state.latest_checkpoint?.number ?? null,
+    // A job with earlier work continues through a handoff, unless the person resumes a session.
+    if (records.length > 0 && options.resume === undefined) {
+      const reused = await reusePrepared(ctx, repo, job, account, say);
+      const first = reused !== null
+        ? await supervisor.startPrepared(reused, account, adapter)
+        : (await supervisor.handoff(await preflight(handoffEnv(ctx, registry), {
+          cwd: ctx.cwd, arg: account.id, command: "run", startMode: mode, permission: options.headless ? permission : undefined,
+          noSummary: options.noSummary, newChecks: options.checks, asker, held: null,
+        }), asker)).worker;
+      if (first !== null) return await supervisor.supervise(first);
+      return supervisor.exitCode;
+    }
+    if (!firstRun) await checkAllowList({
+      asker, config: ctx.config, configContext: { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!() }, repo,
+      from: records[0] === undefined ? null : findAccount(ctx.config, records[0].account) ?? null, fromRunning: false, to: account, command: "run",
+    }).then(async (result) => {
+      if (result.allowed !== null) await appendEvent(job, "provider_allowed", { ...result.allowed });
     });
+    const settings = updateChecks(ctx, job.id, mode, permission, options.checks);
+    const resume = resolveResume(ctx.relayHome, job.id, adapter, account, options.resume);
+    const firstPrompt = options.resume !== undefined ? prompt : startPrompt({
+      jobId: job.id, title: state.title, files: instructionFileNames(job.worktreeRoot), checks: settings.checks.map((check) => check.command),
+      ...(prompt === undefined ? {} : { request: prompt }),
+    });
+    const worker = await supervisor.begin({
+      account, adapter, mode, permission, instructions: relayInstructions(job.id, job.worktreeRoot), prompt: firstPrompt, resume,
+      model: options.model, providerVersion: version, startCheckpoint: readState(join(job.worktreeRoot, ".relay")).latest_checkpoint?.number ?? null,
+      fromHandoff: null, startCheck: false,
+    });
+    return await supervisor.supervise(worker);
   } finally {
-    release();
-    forget();
+    supervisor.close();
   }
+}
+
+export function handoffEnv(ctx: CommandContext, registry: AdapterRegistry): HandoffEnv {
+  return { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!(), env: ctx.env, config: ctx.config, registry };
 }
 
 function readPrompt(ctx: CommandContext, options: RunOptions): string | undefined {
@@ -159,37 +246,49 @@ function resolveAccount(ctx: CommandContext, given: string | undefined): Account
   return found;
 }
 
-async function checkSignIn(ctx: CommandContext, adapter: ProviderAdapter, account: Account): Promise<void> {
-  if (account.credentialEnv.length > 0) {
-    const missing = account.credentialEnv.find((name) => !ctx.env[name]);
-    if (missing !== undefined) throw new CommandError(ExitCode.NotSignedIn, [`${account.id} needs $${missing}, which is not set.`]);
-    return;
-  }
-  const status = await adapter.authStatus(account, buildAgentEnv(account, ctx.env));
-  updateAccountRecord(ctx.relayHome, account, { last_auth: authFact(status) });
-  if (!status.signedIn) {
-    throw new CommandError(ExitCode.NotSignedIn, [`${account.id} is not signed in. Run relay account login ${account.id}.`]);
-  }
+// The first relay run in a project adds an entry that allows only its account, and asks nothing
+// (the provider-allow-list spec, "relay run asks instead of refusing"). Returns whether it did.
+function allowFirstProject(ctx: CommandContext, account: Account, root: string, say: (line: string) => void): boolean {
+  if (ctx.config.projects.some((entry) => entry.path === root)) return false;
+  editConfig(
+    { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!() },
+    (text) => appendTable(text, `[[projects]]\npath = ${tomlString(root)}\nallow = ["${account.id}"]`),
+    (result) => result.projects.some((entry) => entry.path === root && entry.allow.includes(account.id)),
+  );
+  say(`Allowed ${account.id} on this project.`);
+  return true;
 }
 
-// The project's allow list (the agent-runs spec, "The project allow list"): the first run adds an
-// entry that allows only its account; a later run on another account is refused.
-function allowOnProject(ctx: CommandContext, account: Account, root: string, say: (line: string) => void): void {
-  const project = ctx.config.projects.find((entry) => entry.path === root);
-  if (project === undefined) {
-    editConfig(
-      { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!() },
-      (text) => appendTable(text, `[[projects]]\npath = ${tomlString(root)}\nallow = ["${account.id}"]`),
-      (result) => result.projects.some((entry) => entry.path === root && entry.allow.includes(account.id)),
-    );
-    say(`Allowed ${account.id} on this project.`);
-    return;
+// handoff-settings.json: the first run of a job records its mode and permission level, which no
+// later handoff may raise, and --check replaces the job's checks.
+function updateChecks(ctx: CommandContext, jobId: string, mode: Mode, permission: PermissionLevel, checks: string[] | null): HandoffSettings {
+  const settings = readHandoffSettings(ctx.relayHome, jobId)
+    ?? { schema_version: 1, job_id: jobId, mode, permission: mode === "headless" ? permission : null, checks: [], next_handoff: 1 };
+  if (checks !== null) {
+    settings.checks = checks.map((command) => ({ command, timeout_seconds: ctx.config.handoff.checkTimeoutSeconds, added_at: now().toISOString() }));
   }
-  if (project.allow.includes(account.id)) return;
-  throw new CommandError(ExitCode.Refused, [
-    `This project allows only ${project.allow.length === 0 ? "no account" : project.allow.join(", ")}. ` +
-      `To hand the job to ${account.id}, use relay switch, which asks before your code goes to another company.`,
-  ]);
+  writeHandoffSettings(ctx.relayHome, settings);
+  return settings;
+}
+
+// The newest handoff, when it is prepared or failed to start, targets this account, and the
+// working tree still matches its checkpoint, apart from state.json and events.jsonl.
+async function reusePrepared(
+  ctx: CommandContext, repo: Repository, job: JobRef, account: Account, say: (line: string) => void,
+): Promise<HandoffRecord | null> {
+  const handoff = newestHandoff(ctx.relayHome, job.id);
+  if (handoff === null || handoff.to_account !== account.id || (handoff.outcome !== "prepared" && handoff.outcome !== "start_failed")) return null;
+  const state = readState(join(job.worktreeRoot, ".relay"));
+  const { tree } = await buildSnapshotTree(repo, {
+    jobId: job.id, relayHome: ctx.relayHome, maxFileBytes: ctx.config.checkpoint.maxFileSizeMb * 1024 * 1024, approved: state.approved_paths,
+  });
+  const result = await git(repo, ["diff-tree", "-r", "--name-only", "-z", handoff.checkpoint.tree, tree]);
+  if (result.code !== 0) return null;
+  const changed = Buffer.from(result.stdout).toString("utf8").split("\0")
+    .filter((path) => path !== "" && path !== ".relay/state.json" && path !== ".relay/events.jsonl" && path !== ".relay/checkpoint.md" && path !== ".relay/verify.md");
+  if (changed.length > 0) return null;
+  say(`Using the prepared handoff ${handoff.number}`);
+  return handoff;
 }
 
 // The provider session to resume, or undefined for a new session.
@@ -214,184 +313,486 @@ function resolveResume(
   return resume;
 }
 
-interface Supervision {
-  job: JobRef;
-  adapter: ProviderAdapter;
+interface WorkerPlan {
   account: Account;
-  prompt: string | undefined;
-  resume: string | undefined;
-  permission: PermissionLevel;
-  model: string | undefined;
-  json: boolean;
+  adapter: ProviderAdapter;
   mode: Mode;
+  permission: PermissionLevel;
+  instructions: string;
+  prompt: string | undefined;
+  resume?: string;
+  model?: string;
   providerVersion: string | null;
   startCheckpoint: number | null;
+  fromHandoff: number | null;
+  // A worker started by a handoff must keep running for handoff.start_check_seconds (interactive)
+  // or report its session within 60 seconds (headless) to count as started.
+  startCheck: boolean;
 }
 
 type Signal = "SIGINT" | "SIGTERM" | "SIGHUP";
 type ExitStatus = { code: number | null; signal: string | null };
 type LastTurn = { completed: true } | { completed: false; reason: FailureReason; retryAt?: Date };
 
-async function supervise(ctx: CommandContext, run: Supervision): Promise<number> {
-  const { job, adapter, account } = run;
-  const headless = run.mode === "headless";
-  let handle: WorkerHandle | undefined;
-  let stopping: Promise<StopResult> | undefined;
-  // A headless turn starts with the agent, because the prompt is its first message.
-  let turnOpen = headless;
-  let interrupted = false;
-  let terminated = false;
-  let permission: string | null = null;
-  const stop = (timeoutMs?: number) => {
-    if (handle === undefined || (stopping !== undefined && timeoutMs === undefined)) return;
-    stopping = handle.stop(timeoutMs === undefined ? {} : { timeoutMs });
-  };
-  // Ctrl+C reaches relay only in a headless run: the first interrupts the turn, which ends the run,
-  // and the second stops the agent at once. SIGTERM and SIGHUP stop the agent; a second signal
-  // stops it at once.
-  // Once the agent has exited, the outcome is fixed and later signals change nothing.
-  let signals = 0;
-  let exited = false;
-  let interruptTimer: ReturnType<typeof setTimeout> | undefined;
-  const onSignal = (signal: Signal) => {
-    if ((signal === "SIGINT" && !headless) || exited) return;
-    if (signal === "SIGINT") interrupted = true;
-    else terminated = true;
-    if (++signals > 1) stop(0);
-    else if (signal === "SIGINT" && turnOpen && handle !== undefined) {
-      void handle.interrupt().catch(() => stop());
-      // A turn that does not end after the interrupt is stopped like any other.
-      interruptTimer = setTimeout(() => stop(), INTERRUPT_WAIT_MS);
-    } else stop();
-  };
-  const restoreSignals = takeSignals(onSignal);
-  try {
-    const workerId = newUnusedWorkerId(ctx.relayHome, job.id);
-    deleteOldWorkerLogs(ctx.relayHome);
-    const logPath = join(ctx.relayHome, "logs", "workers", `${job.id}-${workerId}.log`);
-    const startedAt = now();
-    handle = await adapter.start(account, {
-      jobId: job.id, workerId, cwd: job.worktreeRoot, mode: run.mode,
-      instructions: relayInstructions(job.id, job.worktreeRoot),
-      ...(run.prompt === undefined ? {} : { prompt: run.prompt }),
-      ...(run.resume === undefined ? {} : { resumeSessionId: run.resume }),
-      permission: run.permission,
-      ...(run.model === undefined ? {} : { model: run.model }),
-      env: buildAgentEnv(account, ctx.env, { jobId: job.id, workerId }), logPath,
-    });
-    if (interrupted || terminated) stop();
-    const record: WorkerRecord = {
-      worker_id: workerId, job_id: job.id, account: account.id, provider: account.provider, mode: run.mode,
-      transport: handle.transport, provider_version: run.providerVersion, provider_session_id: handle.presetSessionId ?? run.resume ?? null,
-      pid: handle.pid, cwd: job.worktreeRoot, permission: headless ? run.permission : null, argv: handle.argv,
-      resumed_from: run.resume ?? null, started_at: startedAt.toISOString(), ended_at: null, exit_code: null,
-      signal: null, end_reason: null, log_path: headless ? logPath : null,
-    };
-    writeWorkerRecord(ctx.relayHome, record);
-    await appendEvent(job, "worker_started", {
-      worker_id: workerId, target: account.id, provider: account.provider, mode: run.mode, transport: handle.transport,
-      provider_version: run.providerVersion, permission: record.permission, pid: handle.pid,
-      provider_session_id: record.provider_session_id, argv: handle.argv, resumed_from: record.resumed_from,
-      from_handoff: null, start_checkpoint: run.startCheckpoint,
-    });
-
-    const facts = new Facts(ctx, run, record);
-    const print = (line: string) => {
-      if (headless && !run.json) ctx.io.out(`${line}\n`);
-    };
-    let sessionShown = false;
-    let lastTurn: LastTurn | null = null;
-    let status: ExitStatus | undefined;
-    // In a terminal run, a status-line reading changes availability.json without a worker event.
-    const watch = headless ? undefined : setInterval(() => void facts.queue(() => facts.availability()), 1000);
-    try {
-      for await (const event of handle.events()) {
-        if (run.json) ctx.io.out(`${jsonLine(workerId, event)}\n`);
-        if (event.kind === "exited") {
-          status = { code: event.code, signal: event.signal };
-          break;
-        }
-        if (event.kind === "session_started" && !sessionShown) {
-          sessionShown = true;
-          print(sessionLine(adapter.displayName, account.id, event.providerSessionId));
-        }
-        for (const line of progressLines(event, adapter.displayName, facts.relativePaths(event))) print(line);
-        await facts.queue(() => facts.write(event));
-        if (event.kind === "turn_completed" || event.kind === "turn_failed") {
-          lastTurn = event.kind === "turn_completed" ? { completed: true }
-            : { completed: false, reason: event.reason, ...(event.retryAt === undefined ? {} : { retryAt: event.retryAt }) };
-          turnOpen = false;
-          if (interrupted || terminated) stop();
-        }
-        if (event.kind === "approval_needed" && headless) {
-          // relay never answers a permission request, so the agent would otherwise wait for ever.
-          permission ??= `${adapter.displayName} asked for permission to ${printable(redact(event.summary, 200))}.`;
-          stop();
-        }
-        if (event.kind === "permission_denied") permission ??= `${adapter.displayName} was not allowed to use ${printable(event.tool)}.`;
-      }
-    } finally {
-      if (watch !== undefined) clearInterval(watch);
-    }
-    status ??= await handle.wait();
-    exited = true;
-    const stopped = stopping === undefined ? null : await stopping;
-    if (!headless) restoreTerminal(ctx);
-    await facts.queue(() => facts.availability());
-    const endReason: EndReason = interrupted ? "interrupted" : stopped !== null ? "relay_stopped" : "exited";
-    const ended = now();
-    await facts.queue(() => facts.finish(endReason, status!, stopped, ended, startedAt));
-    return outcome(ctx, run, { workerId, logPath, interrupted, terminated, permission, lastTurn, status, sessionId: facts.sessionId() });
-  } catch (error) {
-    // The worker lock is released after this, so an agent that is still running is stopped first.
-    if (handle !== undefined) await handle.stop({ timeoutMs: INTERRUPT_WAIT_MS }).catch(() => {});
-    throw error;
-  } finally {
-    clearTimeout(interruptTimer);
-    restoreSignals();
-  }
-}
-
-interface Outcome {
-  workerId: string;
-  logPath: string;
+interface Ended {
+  switched: boolean;
+  startFailed: boolean;
   interrupted: boolean;
   terminated: boolean;
   permission: string | null;
   lastTurn: LastTurn | null;
   status: ExitStatus;
-  sessionId: string | null;
+}
+
+// One run of one agent under this relay process.
+interface Worker {
+  plan: WorkerPlan;
+  record: WorkerRecord;
+  logPath: string;
+  started: Promise<StartOutcome>;
+  ended: Promise<Ended>;
+  held: HeldWorker;
+  // Whether a switch stopped the agent.
+  isSwitched(): boolean;
+}
+
+// The relay process that supervises the job's agents, one after another: it holds the worker lock,
+// takes switch requests, and when an agent exits saves a checkpoint and gives the exit code.
+export class JobSupervisor {
+  exitCode: number = ExitCode.Ok;
+  private lock: WorkerLock | null = null;
+  private forgetLock: (() => void) | null = null;
+  private stopListening: (() => void) | null = null;
+  private switching: Promise<Worker | null> | null = null;
+  private current: Worker | null = null;
+  constructor(
+    private readonly ctx: CommandContext,
+    private readonly job: JobRef,
+    private readonly registry: AdapterRegistry,
+    private readonly say: (line: string) => void,
+    private readonly json: boolean,
+  ) {}
+
+  close(): void {
+    this.stopListening?.();
+    this.stopListening = null;
+    this.lock?.();
+    this.forgetLock?.();
+    this.lock = null;
+  }
+
+  // Takes the worker lock before the first agent starts, with the fields relay switch reads, and
+  // starts listening for switch requests.
+  private takeLock(account: Account, workerId: string, mode: Mode): void {
+    if (this.lock !== null) {
+      this.lock.update({ account: account.id, worker_id: workerId, mode });
+      return;
+    }
+    this.lock = takeWorkerLock(this.ctx.relayHome, this.job.id, account.id, supervisorFields(workerId, mode));
+    this.forgetLock = onInterrupt(() => this.lock?.());
+    removeOldRequests(this.ctx.relayHome, this.job.id);
+    this.stopListening = listenForRequests(() => this.takeRequest());
+  }
+
+  // A handoff run by this process, before any agent of it runs (relay run on a job with earlier
+  // work, and relay switch without a relay run). Returns the next worker, or null when the handoff
+  // was only prepared.
+  async handoff(pre: Preflight, asker: Asker): Promise<{ worker: Worker | null; result: HandoffResult }> {
+    let next: Worker | null = null;
+    let result: HandoffResult;
+    try {
+      result = await performHandoff({
+        pre, env: handoffEnv(this.ctx, this.registry), asker, progress: this.say, restoreTerminal: () => {},
+        start: async (plan) => {
+          next = await this.begin(this.planFrom(plan));
+          return next.started;
+        },
+      });
+    } catch (error) {
+      if (error instanceof CommandError && error.code === ExitCode.StartFailed && next !== null) await (next as Worker).ended;
+      throw error;
+    }
+    return { worker: next, result };
+  }
+
+  // Starts the agent of a handoff that relay switch --no-start prepared, or whose start failed.
+  async startPrepared(handoff: HandoffRecord, account: Account, adapter: ProviderAdapter): Promise<Worker> {
+    const folder = join(this.ctx.relayHome, "jobs", this.job.id, "handoffs", String(handoff.number));
+    const read = (name: string) => readFileSync(join(folder, name), "utf8");
+    this.say(`Starting ${accountLabel(account)}`);
+    if (handoff.start.mode === "interactive") this.say(`Continuing on ${displayName(account.provider)}.`);
+    const worker = await this.begin(this.planFrom({
+      account, adapter, mode: handoff.start.mode, permission: handoff.start.permission, instructions: read("instructions.md"),
+      prompt: read("prompt.md"), fromHandoff: handoff.number, startCheckpoint: handoff.checkpoint.number,
+    }));
+    const started = await worker.started;
+    const relayDir = join(this.job.worktreeRoot, ".relay");
+    if (started.ok) {
+      markHandoff(this.ctx.relayHome, this.job.id, handoff.number, "started", { to_worker_id: started.workerId });
+      if (handoff.start.mode === "headless") this.say(`Continuing on ${displayName(account.provider)}.`);
+      const state = readState(relayDir);
+      if (state.last_handoff !== null && state.last_handoff !== undefined) {
+        writeState(relayDir, { ...state, last_handoff: { ...(state.last_handoff as Record<string, unknown>), outcome: "started" } });
+      }
+      return worker;
+    }
+    await worker.ended;
+    markHandoff(this.ctx.relayHome, this.job.id, handoff.number, "start_failed", { start_error: started.reason });
+    const back = handoff.from_account !== null && handoff.from_account !== account.id ? `, or "relay run ${handoff.from_account}" to go back` : "";
+    throw new CommandError(ExitCode.StartFailed, [
+      `${accountLabel(account)} did not start: ${started.reason}.`,
+      `Your work is saved in checkpoint ${handoff.checkpoint.commit.slice(0, 6)}, and the handoff is ready.`,
+      `Run "relay run ${account.id}" to try again${back}.`,
+    ]);
+  }
+
+  private planFrom(plan: StartPlan): WorkerPlan {
+    return {
+      account: plan.account, adapter: plan.adapter, mode: plan.mode, permission: plan.permission ?? "edit-in-workspace",
+      instructions: plan.instructions, prompt: plan.prompt, providerVersion: null, startCheckpoint: plan.startCheckpoint,
+      fromHandoff: plan.fromHandoff, startCheck: true,
+    };
+  }
+
+  // Supervises workers until the last one ends, then saves a checkpoint and returns the exit code.
+  async supervise(first: Worker): Promise<number> {
+    let worker = first;
+    for (;;) {
+      const ended = await worker.ended;
+      if (ended.switched) {
+        const next = await this.switching;
+        this.switching = null;
+        if (next === null) return this.exitCode;
+        worker = next;
+        continue;
+      }
+      return await this.finish(worker, ended);
+    }
+  }
+
+  // Starts an agent through its adapter and watches its events until it exits.
+  async begin(plan: WorkerPlan): Promise<Worker> {
+    const { ctx, job } = this;
+    const { account, adapter } = plan;
+    const headless = plan.mode === "headless";
+    const workerId = newUnusedWorkerId(ctx.relayHome, job.id);
+    this.takeLock(account, workerId, plan.mode);
+    deleteOldWorkerLogs(ctx.relayHome);
+    const logPath = join(ctx.relayHome, "logs", "workers", `${job.id}-${workerId}.log`);
+    const startedAt = now();
+    let handle: WorkerHandle;
+    try {
+      handle = await adapter.start(account, {
+        jobId: job.id, workerId, cwd: job.worktreeRoot, mode: plan.mode, instructions: plan.instructions,
+        ...(plan.prompt === undefined ? {} : { prompt: plan.prompt }),
+        ...(plan.resume === undefined ? {} : { resumeSessionId: plan.resume }),
+        permission: plan.permission,
+        ...(plan.model === undefined ? {} : { model: plan.model }),
+        env: buildAgentEnv(account, ctx.env, { jobId: job.id, workerId }), logPath,
+      });
+    } catch (error) {
+      if (!plan.startCheck) throw error;
+      const reason = printable((error as Error).message.replace(/\.$/, ""));
+      const record = this.newRecord(plan, workerId, startedAt, null);
+      const status = { code: null, signal: null };
+      return {
+        plan, record, logPath, started: Promise.resolve({ ok: false, reason }),
+        ended: Promise.resolve({ switched: false, startFailed: true, interrupted: false, terminated: false, permission: null, lastTurn: null, status }),
+        held: { record, stop: async () => ({ how: "already_exited", exitCode: null, alive: false }), lastFailure: () => null },
+        isSwitched: () => false,
+      };
+    }
+    const record = this.newRecord(plan, workerId, startedAt, handle);
+    writeWorkerRecord(ctx.relayHome, record);
+    await appendEvent(job, "worker_started", {
+      worker_id: workerId, target: account.id, provider: account.provider, mode: plan.mode, transport: handle.transport,
+      provider_version: plan.providerVersion, permission: record.permission, pid: handle.pid,
+      provider_session_id: record.provider_session_id, argv: handle.argv, resumed_from: record.resumed_from,
+      from_handoff: plan.fromHandoff, start_checkpoint: plan.startCheckpoint,
+    });
+    this.setCurrentWorker({ id: workerId, account: account.id, mode: plan.mode, started_at: record.started_at, from_handoff: plan.fromHandoff });
+
+    let stopping: Promise<StopResult> | undefined;
+    let switched = false;
+    // A headless turn starts with the agent, because the prompt is its first message.
+    let turnOpen = headless;
+    let interrupted = false;
+    let terminated = false;
+    let permission: string | null = null;
+    let lastTurn: LastTurn | null = null;
+    const stop = (timeoutMs?: number) => {
+      if (stopping !== undefined && timeoutMs === undefined) return;
+      stopping = handle.stop(timeoutMs === undefined ? {} : { timeoutMs });
+    };
+    // Ctrl+C reaches relay only in a headless run: the first interrupts the turn, which ends the run,
+    // and the second stops the agent at once. SIGTERM and SIGHUP stop the agent; a second signal
+    // stops it at once. Once the agent has exited, the outcome is fixed and later signals change
+    // nothing.
+    let signals = 0;
+    let exited = false;
+    let interruptTimer: ReturnType<typeof setTimeout> | undefined;
+    const onSignal = (signal: Signal) => {
+      if ((signal === "SIGINT" && !headless) || exited || switched) return;
+      if (signal === "SIGINT") interrupted = true;
+      else terminated = true;
+      if (++signals > 1) stop(0);
+      else if (signal === "SIGINT" && turnOpen) {
+        void handle.interrupt().catch(() => stop());
+        // A turn that does not end after the interrupt is stopped like any other.
+        interruptTimer = setTimeout(() => stop(), INTERRUPT_WAIT_MS);
+      } else stop();
+    };
+    const restoreSignals = takeSignals(onSignal);
+
+    let resolveStarted!: (outcome: StartOutcome) => void;
+    const started = new Promise<StartOutcome>((done) => { resolveStarted = done; });
+    let startSettled = !plan.startCheck;
+    const settleStart = (outcome: StartOutcome) => {
+      if (startSettled) return;
+      startSettled = true;
+      resolveStarted(outcome);
+    };
+    if (!plan.startCheck) resolveStarted({ ok: true, workerId });
+    const startTimer = plan.startCheck && !headless
+      ? setTimeout(() => settleStart({ ok: true, workerId }), ctx.config.handoff.startCheckSeconds * 1000)
+      : plan.startCheck ? setTimeout(() => {
+        settleStart({ ok: false, reason: `${adapter.displayName} did not report a session within 60 seconds` });
+        stop();
+      }, HEADLESS_START_MS) : undefined;
+
+    const facts = new Facts(ctx, job, account, record);
+    const print = (line: string) => {
+      if (headless && !this.json) ctx.io.out(`${line}\n`);
+    };
+    const ended = (async (): Promise<Ended> => {
+      let sessionShown = false;
+      let status: ExitStatus | undefined;
+      // In a terminal run, a status-line reading changes availability.json without a worker event.
+      const watch = headless ? undefined : setInterval(() => void facts.queue(() => facts.availability()), 1000);
+      try {
+        for await (const event of handle.events()) {
+          if (this.json) ctx.io.out(`${jsonLine(workerId, event)}\n`);
+          if (event.kind === "exited") {
+            status = { code: event.code, signal: event.signal };
+            break;
+          }
+          if (event.kind === "session_started") {
+            if (headless) settleStart({ ok: true, workerId });
+            if (!sessionShown) {
+              sessionShown = true;
+              print(sessionLine(adapter.displayName, account.id, event.providerSessionId));
+            }
+          }
+          for (const line of progressLines(event, adapter.displayName, facts.relativePaths(event, job.worktreeRoot))) print(line);
+          await facts.queue(() => facts.write(event));
+          if (event.kind === "turn_completed" || event.kind === "turn_failed") {
+            lastTurn = event.kind === "turn_completed" ? { completed: true }
+              : { completed: false, reason: event.reason, ...(event.retryAt === undefined ? {} : { retryAt: event.retryAt }) };
+            turnOpen = false;
+            if (interrupted || terminated) stop();
+          }
+          if (event.kind === "approval_needed" && headless) {
+            // relay never answers a permission request, so the agent would otherwise wait for ever.
+            permission ??= `${adapter.displayName} asked for permission to ${printable(redact(event.summary, 200))}.`;
+            stop();
+          }
+          if (event.kind === "permission_denied") permission ??= `${adapter.displayName} was not allowed to use ${printable(event.tool)}.`;
+        }
+      } finally {
+        if (watch !== undefined) clearInterval(watch);
+      }
+      status ??= await handle.wait();
+      exited = true;
+      clearTimeout(startTimer);
+      clearTimeout(interruptTimer);
+      restoreSignals();
+      const stopped = stopping === undefined ? null : await stopping;
+      if (!headless && !switched) restoreTerminal(ctx);
+      await facts.queue(() => facts.availability());
+      const seconds = Math.round((now().getTime() - startedAt.getTime()) / 1000);
+      const startFailed = !startSettled && status.code !== 0;
+      if (startFailed) {
+        settleStart({ ok: false, reason: `${printable(account.provider)} exited with code ${status.code ?? status.signal} after ${seconds} ${seconds === 1 ? "second" : "seconds"}` });
+        if (!headless) restoreTerminal(ctx);
+      }
+      settleStart({ ok: true, workerId });
+      const endReason: EndReason = switched ? "stopped_by_switch" : startFailed ? "start_failed" : interrupted ? "interrupted"
+        : stopped !== null ? "relay_stopped" : "exited";
+      await facts.queue(() => facts.finish(endReason, status!, stopped, now(), startedAt));
+      if (this.current?.record.worker_id === workerId) this.setCurrentWorker(null);
+      return { switched, startFailed, interrupted, terminated, permission, lastTurn, status };
+    })();
+
+    const held: HeldWorker = {
+      record,
+      lastFailure: () => (lastTurn !== null && !lastTurn.completed ? lastTurn.reason : null),
+      stop: async (timeoutMs) => {
+        switched = true;
+        stop(timeoutMs);
+        // The adapter sends SIGKILL at the time limit; a process that outlives that did not stop.
+        const done = await Promise.race([ended.then(() => true), Bun.sleep(timeoutMs + 10_000).then(() => false)]);
+        if (!done) return { how: "killed", exitCode: null, alive: true };
+        const result = await stopping!;
+        return { how: result.how, exitCode: result.exitCode, alive: false };
+      },
+    };
+    const worker: Worker = { plan, record, logPath, started, ended, held, isSwitched: () => switched };
+    this.current = worker;
+    return worker;
+  }
+
+  private newRecord(plan: WorkerPlan, workerId: string, startedAt: Date, handle: WorkerHandle | null): WorkerRecord {
+    const headless = plan.mode === "headless";
+    return {
+      worker_id: workerId, job_id: this.job.id, account: plan.account.id, provider: plan.account.provider, mode: plan.mode,
+      transport: handle?.transport ?? (plan.account.provider === "claude" ? (headless ? "claude-print" : "claude-interactive") : (headless ? "codex-app-server" : "codex-interactive")),
+      provider_version: plan.providerVersion, provider_session_id: handle?.presetSessionId ?? plan.resume ?? null,
+      pid: handle?.pid ?? null, cwd: this.job.worktreeRoot, permission: headless ? plan.permission : null, argv: handle?.argv ?? [],
+      resumed_from: plan.resume ?? null, started_at: startedAt.toISOString(), ended_at: null, exit_code: null,
+      signal: null, end_reason: null, log_path: headless ? join(this.ctx.relayHome, "logs", "workers", `${this.job.id}-${workerId}.log`) : null,
+      last_failure: null, from_handoff: plan.fromHandoff, start_checkpoint: plan.startCheckpoint,
+    };
+  }
+
+  // state.json's current_worker, a readable copy of what relay holds under RELAY_HOME. It is
+  // written under the job lock; when another relay command holds the lock, the copy waits.
+  private setCurrentWorker(value: Record<string, unknown> | null): void {
+    const relayDir = join(this.job.worktreeRoot, ".relay");
+    let release: () => void;
+    try {
+      release = takeJobLock(this.ctx.relayHome, this.job.id, "run");
+    } catch {
+      return;
+    }
+    try {
+      const state = readState(relayDir);
+      writeState(relayDir, { ...state, current_worker: value, updated_at: now().toISOString() });
+    } catch {
+      // A damaged state.json is reported by the next command that needs it.
+    } finally {
+      release();
+    }
+  }
+
+  // Takes a switch request from relay switch in another terminal, while an agent runs. The
+  // switch runs here, where the agent runs; its lines go to this terminal and to relay switch.
+  private takeRequest(): void {
+    const worker = this.current;
+    if (this.switching !== null || worker === null) return;
+    const taken = takeSwitchRequest(this.ctx.relayHome, this.job.id);
+    if (taken === null) return;
+    const print = requestPrinter(this.ctx.relayHome, this.job.id, taken.id);
+    const say = (line: string) => {
+      print(line);
+      this.ctx.io.out(`${line}\n`);
+    };
+    let resolveNext!: (next: Worker | null) => void;
+    this.switching = new Promise((done) => { resolveNext = done; });
+    void this.serveRequest(worker, taken.request, say).then(
+      ({ worker: next, result }) => {
+        writeSwitchReply(this.ctx.relayHome, this.job.id, taken.id, { exit_code: ExitCode.Ok, errors: [], result });
+        resolveNext(next);
+      },
+      (error: unknown) => {
+        const code = error instanceof CommandError ? error.code : ExitCode.Internal;
+        const errors = error instanceof CommandError ? error.lines : [`relay could not finish the switch: ${printable((error as Error).message)}`];
+        writeSwitchReply(this.ctx.relayHome, this.job.id, taken.id, { exit_code: code, errors, result: null });
+        if (!worker.isSwitched()) {
+          // Refused before the agent was stopped: it keeps working under this relay run.
+          this.switching = null;
+          return;
+        }
+        this.exitCode = code;
+        this.ctx.io.err(stderrText(errors));
+        resolveNext(null);
+      },
+    );
+  }
+
+  private async serveRequest(worker: Worker, request: SwitchRequest, print: (line: string) => void): Promise<{ worker: Worker | null; result: Record<string, unknown> }> {
+    const env = handoffEnv(this.ctx, this.registry);
+    const asker: Asker = { terminal: false, yes: false, say: print, ask: async () => null, preset: request.answers };
+    const pre = await preflight(env, {
+      cwd: this.job.worktreeRoot, arg: request.to, command: "switch", startMode: request.no_start ? "none" : worker.plan.mode,
+      noSummary: request.ask_for_notes === "flag", newChecks: request.new_checks, asker, held: worker.held,
+    });
+    let next: Worker | null = null;
+    const result = await performHandoff({
+      pre, env, asker, progress: print,
+      restoreTerminal: () => {
+        if (worker.plan.mode === "interactive") restoreTerminal(this.ctx);
+      },
+      start: async (plan) => {
+        next = await this.begin(this.planFrom(plan));
+        return next.started;
+      },
+    });
+    return { worker: next, result: switchJson(result) };
+  }
+
+  // After the last agent ends: the closing lines, a checkpoint of kind auto, and the exit code.
+  private async finish(worker: Worker, ended: Ended): Promise<number> {
+    const code = outcome(this.ctx, worker, ended, this.say);
+    const { account } = worker.plan;
+    const label = accountLabel(account);
+    const how = ended.status.code !== null ? `exit code ${ended.status.code}` : `signal ${ended.status.signal}`;
+    this.say(`${label} stopped (${how})`);
+    try {
+      const saved = await saveCheckpoint(await openRepository(this.job.worktreeRoot), {
+        relayHome: this.ctx.relayHome, command: "run", kind: "auto", maxFileSizeMb: this.ctx.config.checkpoint.maxFileSizeMb, env: this.ctx.env,
+      });
+      if (saved.saved) this.say(`Saved checkpoint ${saved.commit.slice(0, 6)}`);
+      else {
+        const latest = readState(join(this.job.worktreeRoot, ".relay")).latest_checkpoint;
+        this.say(latest === null ? "No changes to save" : `No changes since checkpoint ${latest.commit.slice(0, 6)}`);
+      }
+    } catch (error) {
+      if (!(error instanceof CommandError)) throw error;
+      this.ctx.io.err(error.lines.map((line) => `${line}\n`).join(""));
+      return error.code;
+    }
+    return code;
+  }
+}
+
+// The --json result of a switch (add-relay-switch, design decision 24).
+export function switchJson(result: HandoffResult): Record<string, unknown> {
+  return {
+    handoff_id: result.number, checkpoint_sha: result.checkpoint.commit, prompt_path: result.promptPath, to_worker_id: result.toWorkerId,
+    outcome: result.outcome, notes_source: result.notesSource, mismatches: result.mismatches.length,
+  };
 }
 
 // The closing lines and the exit code (the agent-runs spec, "Headless exit codes" and
 // "Interactive runs").
-function outcome(ctx: CommandContext, run: Supervision, result: Outcome): number {
-  const { adapter, account } = run;
+function outcome(ctx: CommandContext, worker: Worker, result: Ended, say: (line: string) => void): number {
+  const { adapter, account } = worker.plan;
   const err = (line: string) => ctx.io.err(`${line}\n`);
   const { lastTurn, status } = result;
   const limit = lastTurn !== null && !lastTurn.completed && (lastTurn.reason === "usage_limit" || lastTurn.reason === "rate_limit")
     ? { reason: lastTurn.reason, retryAt: lastTurn.retryAt } : null;
   if (result.interrupted) {
-    err(result.sessionId === null ? "Interrupted." : `Interrupted. Resume with relay run ${account.id} --resume ${printable(result.sessionId)}`);
+    const sessionId = worker.record.provider_session_id;
+    err(sessionId === null ? "Interrupted." : `Interrupted. Resume with relay run ${account.id} --resume ${printable(sessionId)}`);
     return ExitCode.Interrupted;
   }
   if (result.terminated) return ExitCode.Terminated;
-  if (run.mode === "interactive") ctx.io.out(`Recorded worker ${result.workerId} (${account.id}).\n`);
+  if (worker.plan.mode === "interactive") say(`Recorded worker ${worker.record.worker_id} (${account.id}).`);
   if (limit !== null) {
     err(limitLine(adapter.displayName, limit.reason, limit.retryAt));
     return ExitCode.LimitReached;
   }
-  if (run.mode === "interactive") return status.code ?? signalExitCode(status.signal);
+  if (worker.plan.mode === "interactive") return status.code ?? signalExitCode(status.signal);
   if (result.permission !== null) {
     err(`${result.permission} relay does not answer permission requests; run relay run ${account.id} in your terminal to answer it yourself.`);
     return ExitCode.AgentFailed;
   }
   if (lastTurn !== null && !lastTurn.completed && lastTurn.reason !== "crashed") {
-    err(failureLine(adapter.displayName, lastTurn.reason, result.logPath));
+    err(failureLine(adapter.displayName, lastTurn.reason, worker.logPath));
     return ExitCode.AgentFailed;
   }
   if (lastTurn?.completed !== true || status.code !== 0) {
-    err(failureLine(adapter.displayName, "crashed", result.logPath));
+    err(failureLine(adapter.displayName, "crashed", worker.logPath));
     return ExitCode.AgentFailed;
   }
   return ExitCode.Ok;
@@ -407,7 +808,10 @@ function takeSignals(handler: (signal: Signal) => void): () => void {
     process.on(name, own);
     return { name, listeners, own };
   });
+  let restored = false;
   return () => {
+    if (restored) return;
+    restored = true;
     for (const { name, listeners, own } of saved) {
       process.removeListener(name, own);
       for (const listener of listeners) process.on(name, listener as () => void);
@@ -446,8 +850,13 @@ class Facts {
   private chain: Promise<unknown> = Promise.resolve();
   private lastAvailability: string;
 
-  constructor(private readonly ctx: CommandContext, private readonly run: Supervision, private readonly record: WorkerRecord) {
-    this.lastAvailability = availabilityKey(readAvailability(ctx.relayHome, run.account));
+  constructor(
+    private readonly ctx: CommandContext,
+    private readonly job: JobRef,
+    private readonly account: Account,
+    private readonly record: WorkerRecord,
+  ) {
+    this.lastAvailability = availabilityKey(readAvailability(ctx.relayHome, account));
   }
 
   queue(write: () => Promise<void>): Promise<void> {
@@ -456,14 +865,9 @@ class Facts {
     return next;
   }
 
-  sessionId(): string | null {
-    return this.record.provider_session_id;
-  }
-
   // The files a completed file change touched, relative to the worktree root when they are in it.
-  relativePaths(event: WorkerEvent): string[] {
+  relativePaths(event: WorkerEvent, root: string): string[] {
     if (event.kind !== "tool" || event.status !== "completed" || event.paths === undefined) return [];
-    const root = this.run.job.worktreeRoot;
     return event.paths.map((path) => {
       const inside = relative(root, resolve(root, path));
       return inside === "" || inside.startsWith("..") || isAbsolute(inside) ? path : inside;
@@ -471,7 +875,7 @@ class Facts {
   }
 
   async write(event: WorkerEvent): Promise<void> {
-    const { job } = this.run;
+    const { job } = this;
     const worker_id = this.record.worker_id;
     switch (event.kind) {
       case "session_started":
@@ -490,7 +894,7 @@ class Facts {
             worker_id, command: redact(event.command), exit_code: event.exitCode ?? null, status: event.status,
           });
         }
-        const paths = this.relativePaths(event);
+        const paths = this.relativePaths(event, job.worktreeRoot);
         if (paths.length > 0) await appendEvent(job, "file_changed", { worker_id, paths });
         return;
       }
@@ -505,6 +909,9 @@ class Facts {
         });
         return this.availability();
       case "turn_failed":
+        // relay's own record keeps the reason, so a handoff never takes it from the event log.
+        this.record.last_failure = event.reason;
+        writeWorkerRecord(this.ctx.relayHome, this.record);
         await appendEvent(job, "turn_failed", {
           worker_id, reason: event.reason, retry_at: event.retryAt?.toISOString() ?? null, source: event.source,
         });
@@ -524,12 +931,12 @@ class Facts {
   // relay run reports the change when a turn ends, when the worker ends, and every second while an
   // agent runs in the terminal.
   async availability(): Promise<void> {
-    const reading = readAvailability(this.ctx.relayHome, this.run.account);
+    const reading = readAvailability(this.ctx.relayHome, this.account);
     const key = availabilityKey(reading);
     if (key === this.lastAvailability) return;
     this.lastAvailability = key;
-    await appendEvent(this.run.job, "availability", {
-      worker_id: this.record.worker_id, target: this.run.account.id, status: reading.state, reason: reading.detail ?? null,
+    await appendEvent(this.job, "availability", {
+      worker_id: this.record.worker_id, target: this.account.id, status: reading.state, reason: reading.detail ?? null,
       retry_at: reading.retryAt?.toISOString() ?? null, measured_at: reading.observedAt.toISOString(), source: reading.source,
       windows: reading.windows.map((window) => ({
         name: window.name, window_minutes: window.windowMinutes ?? null, used_percent: window.usedPercent ?? null,
@@ -541,7 +948,7 @@ class Facts {
   async finish(endReason: EndReason, status: ExitStatus, stopped: StopResult | null, ended: Date, started: Date): Promise<void> {
     Object.assign(this.record, { ended_at: ended.toISOString(), exit_code: status.code, signal: status.signal, end_reason: endReason });
     writeWorkerRecord(this.ctx.relayHome, this.record);
-    await appendEvent(this.run.job, "worker_ended", {
+    await appendEvent(this.job, "worker_ended", {
       worker_id: this.record.worker_id, exit_code: status.code, signal: status.signal, end_reason: endReason,
       stop_how: stopped?.how ?? null, seconds: Math.round((ended.getTime() - started.getTime()) / 1000),
     });

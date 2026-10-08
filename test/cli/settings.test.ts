@@ -16,8 +16,8 @@ describe("Commands that are not built yet", () => {
   const readSettings = COMMANDS.filter((def) => !def.quiet);
   const unbuilt = readSettings.filter((def) => !def.built);
 
-  test("there are four of them", () => {
-    expect(unbuilt).toHaveLength(4);
+  test("there are two of them", () => {
+    expect(unbuilt).toHaveLength(2);
   });
 
   test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(

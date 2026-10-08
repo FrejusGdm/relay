@@ -9,6 +9,7 @@ import { buildSnapshotTree } from "../checkpoint/snapshot";
 import { gitFailed } from "../checkpoint/commit";
 import { onInterrupt, wasInterrupted } from "../core/cleanup";
 import { printable } from "../core/quote";
+import { now } from "../platform/clock";
 import type { Repository } from "../git/repo";
 import { git } from "../git/run";
 import { redactEnvValues } from "../secrets/redact";
@@ -30,6 +31,8 @@ export interface CheckResult {
   // Set on the last check only, for the whole run.
   changedFiles: string[];
   timeoutSeconds: number;
+  // When the check ended.
+  ranAt: Date;
   error?: string;
 }
 
@@ -107,7 +110,7 @@ function checkEnv(base: Record<string, string | undefined>, credentialNames: str
 async function runOne(run: CheckRun, check: CheckSetting, env: Record<string, string>, logPath: string): Promise<CheckResult> {
   const result: CheckResult = {
     command: check.command, outcome: "could_not_start", exitCode: null, signal: null, seconds: 0, counts: null,
-    logPath, excerpt: [], changedFiles: [], timeoutSeconds: check.timeout_seconds,
+    logPath, excerpt: [], changedFiles: [], timeoutSeconds: check.timeout_seconds, ranAt: now(),
   };
   rmSync(logPath, { force: true });
   const log = openSync(logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -144,6 +147,7 @@ async function runOne(run: CheckRun, check: CheckSetting, env: Record<string, st
   clearTimeout(killTimer);
 
   result.seconds = Math.round((performance.now() - started) / 1000);
+  result.ranAt = now();
   result.signal = child.signalCode ?? null;
   result.exitCode = child.exitCode;
   result.outcome = timedOut ? "timed_out" : result.exitCode === 0 ? "passed" : "failed";

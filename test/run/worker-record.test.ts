@@ -1,12 +1,17 @@
 // Worker records and the worker lock (task 9.3).
-import { expect, test } from "bun:test";
+import { expect, test, setDefaultTimeout } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { takeWorkerLock } from "../../src/job/lock";
 import { relayRun, runFixture, spawnRelayRun, steps, until, workers } from "./helpers";
 
+// add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
+setDefaultTimeout(30_000);
+
 const FIELDS = ["worker_id", "job_id", "account", "provider", "mode", "transport", "provider_version", "provider_session_id",
-  "pid", "cwd", "permission", "argv", "resumed_from", "started_at", "ended_at", "exit_code", "signal", "end_reason", "log_path"];
+  "pid", "cwd", "permission", "argv", "resumed_from", "started_at", "ended_at", "exit_code", "signal", "end_reason", "log_path",
+  // add-relay-switch
+  "last_failure", "from_handoff", "start_checkpoint"];
 
 test("a headless Codex run leaves a complete record with mode 0600", async () => {
   const fixture = await runFixture('[accounts."codex:personal"]\n');
@@ -61,7 +66,7 @@ test("a second run in the same job is refused with exit 6 while the worker lock 
       expect(Object.keys(lock)).toEqual(["pid", "account", "started_at"]);
       expect(statSync(join(fixture.relayHome, "locks", `${fixture.jobId}.worker.lock`)).mode & 0o777).toBe(0o600);
       expect(await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], steps({ say: "Hi." }))).toMatchObject({
-        code: 6, stderr: `Another agent is already working on this job (claude:work, process ${process.pid}).\n`,
+        code: 6, stderr: "relay: Claude Code · work is working on this job. To hand it over, run relay switch claude:work.\n",
       });
       expect(workers(fixture)).toEqual([]);
     } finally {

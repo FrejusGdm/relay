@@ -31,8 +31,8 @@ flowchart TD
     job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock, the events lock<br/>and the config lock<br/>exclude.ts: the /.relay/ exclude line"]
     secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names<br/>redact.ts: secret-looking values in facts"]
     text["src/text/<br/>invisible.ts: the one list<br/>of invisible characters"]
-    handoff["src/handoff/<br/>the parts of relay switch: account.ts, settings.ts, files.ts,<br/>checks.ts and check-parsers/, notes-request.ts, notes-parse.ts,<br/>notes-build.ts, context.ts, claims.ts, fence.ts,<br/>render-checkpoint.ts, verify-file.ts, scan.ts, ask.ts,<br/>instruction-files.ts, permission.ts, allow-list.ts"]
-    runfolder["src/run/<br/>run.ts: relay run, from the checks to the exit code<br/>job-context.ts: the job of this checkout<br/>instructions.ts: relay's fixed instructions<br/>worker-record.ts: the worker records<br/>progress.ts: the lines of a headless run"]
+    handoff["src/handoff/<br/>switch.ts: performHandoff, the steps of a switch<br/>preflight.ts, journal.ts, commit.ts, events.ts,<br/>handoff-record.ts: the steps' parts<br/>account.ts, settings.ts, files.ts,<br/>checks.ts and check-parsers/, notes-request.ts, notes-parse.ts,<br/>notes-build.ts, context.ts, claims.ts, fence.ts,<br/>render-checkpoint.ts, render-prompt.ts, verify-file.ts,<br/>scan.ts, ask.ts, instruction-files.ts, permission.ts, allow-list.ts"]
+    runfolder["src/run/<br/>run.ts: relay run, from the checks to the exit code<br/>job-context.ts: the job of this checkout<br/>instructions.ts: relay's fixed instructions<br/>worker-record.ts: the worker records<br/>progress.ts: the lines of a headless run<br/>ready.ts: whether an agent can start<br/>control.ts: switch requests from relay switch"]
   end
 
   subgraph test["test/"]
@@ -46,7 +46,7 @@ flowchart TD
     buildtests["build/: no-network.test.ts"]
     daemontests["platform/, daemon/, api/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
-    handofftests["handoff/, config/: the handoff parts<br/>handoff/job.ts, asker.ts: a job and a question function<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/:<br/>test outputs and checkpoint.md files"]
+    handofftests["handoff/, config/: the handoff parts and the switch<br/>handoff/job.ts, asker.ts, switch-helpers.ts: jobs,<br/>questions, scenario files and terminals<br/>e2e/: whole handoffs with the relay program<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/, fixtures/e2e/:<br/>test outputs, checkpoint.md files and prompts"]
     runtests["run/: relay run with the fake agents,<br/>headless, interactive and end to end"]
     adaptertests["adapters/, accounts/, policies/, docs/:<br/>adapter core, accounts, policies and document tests<br/>adapters/contract.ts, fixtures.ts, registry.ts:<br/>the contract suite<br/>fixtures/providers/: the provider fixtures<br/>helpers/child.ts, helpers/fake-programs.ts"]
   end
@@ -107,6 +107,8 @@ flowchart TD
   handoff -->|"asks the outgoing agent through"| adapters
   handoff -->|"adds to the allow list through"| config
   handofftests -->|"check, with fakes from"| handoff
+  commands -->|"switch.ts and run.ts hand off with"| handoff
+  runfolder -->|"runs performHandoff and supervises the next agent"| handoff
   commands -->|"hook.ts, hooks.ts, statusline.ts use"| hooks
   hooks -->|"writes availability.json through"| accounts
   adapters -->|"interactive workers read the spool of"| hooks
@@ -292,18 +294,25 @@ actions registered in `src/core/cleanup.ts`: the scan removes its temporary file
 gitleaks, and `relay init` removes what it had created. `docs/checkpoints.md` describes
 both flows in diagrams.
 
-`src/handoff/` holds the parts of `relay switch` that `add-relay-switch` builds before its switch
-engine. `account.ts` turns the command's argument into an account, and `settings.ts` keeps each
+`src/handoff/` holds `relay switch`. `switch.ts` holds `performHandoff`, which runs the steps of a
+switch in a fixed order after `preflight.ts` has done every check that changes nothing; it writes
+the journal of `journal.ts` after each step that changes something, records the handoff in git
+with `commit.ts`, builds the events with `events.ts`, and keeps the private record of each handoff
+with `handoff-record.ts`. The relay process that holds the agent stops and starts agents: that is
+`JobSupervisor` in `src/run/run.ts`, which `relay run` and `src/cli/commands/switch.ts` share, and
+`src/run/control.ts` lets a `relay switch` in another terminal hand it a switch request.
+`account.ts` turns the command's argument into an account, and `settings.ts` keeps each
 job's mode, permission ceiling and checks in `RELAY_HOME/jobs/<job>/handoff-settings.json`, written
 through `files.ts`. `checks.ts` runs the job's checks and `check-parsers/` reads their counts.
 `notes-request.ts` asks the outgoing agent for notes through its adapter and `notes-parse.ts` reads
 them; `notes-build.ts` and `context.ts` gather the facts relay holds itself from the event log and
 git; `claims.ts` compares the notes with those facts. `render-checkpoint.ts` writes
-`.relay/checkpoint.md` with the fence from `fence.ts`, and `verify-file.ts` counts the rows of
+`.relay/checkpoint.md` with the fence from `fence.ts`, `render-prompt.ts` writes the start and
+continuation prompts, and `verify-file.ts` counts the rows of
 `.relay/verify.md`. `scan.ts` passes everything a handoff writes or sends to the secret scan.
 `instruction-files.ts`, `permission.ts` and `allow-list.ts` hold the questions and refusals that run
 before the outgoing agent is stopped, and `ask.ts` is how they ask. `docs/handoff.md` shows the
-order of a handoff and its safety checks in a diagram.
+order of a handoff, its safety checks and the two-terminal flow in diagrams.
 
 `relay init` then saves the first checkpoint, and `src/cli/commands/checkpoint.ts` saves the next
 ones. Both call `saveCheckpoint` in `src/checkpoint/save.ts`, the one function that saves a

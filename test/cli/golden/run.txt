@@ -1,5 +1,5 @@
 Usage
-  relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]
+  relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]
 
 Start an agent inside a relay job.
 Without an account, relay uses defaults.account from your settings.
@@ -19,5 +19,8 @@ Options
       --permission <level>  headless: read-only or edit-in-workspace
       --model <name>       The model the agent uses
       --json               headless: print each worker event as JSON
+      --check <command>    A check relay runs at every handoff ("" clears them)
+      --yes                Answer yes to relay's own questions
+      --no-summary         Do not ask the previous agent for handoff notes
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
