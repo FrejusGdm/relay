@@ -106,7 +106,7 @@ When a command other than `hook` is run with valid arguments, relay SHALL load t
 - **THEN** relay prints the settings error and exits with code 78
 
 ### Requirement: The hook command is silent
-`relay hook` without `--help` SHALL write nothing to standard output or standard error and SHALL exit with code 0 in every case, including usage errors and settings errors, except when it is stopped by a signal (130 for SIGINT, 143 for SIGTERM). When standard input is not a terminal, it SHALL read standard input to the end and discard it without parsing or logging it. It SHALL record what happened in `RELAY_HOME/logs/hook.log` when that folder can be used.
+`relay hook` without `--help` SHALL write nothing to standard output or standard error and SHALL exit with code 0 in every case, including usage errors and settings errors, except when it is stopped by a signal (130 for SIGINT, 143 for SIGTERM). When standard input is not a terminal and the arguments or settings are invalid, it SHALL read at most 1 MiB of standard input for at most 200 ms and discard it without parsing or logging it, so that an input that never ends cannot keep it running. It SHALL record what happened in `RELAY_HOME/logs/hook.log` when that folder can be used.
 
 #### Scenario: Called by an agent
 - **WHEN** Claude Code runs `relay hook claude Stop` with a JSON document on standard input

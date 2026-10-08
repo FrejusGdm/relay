@@ -57,8 +57,12 @@ For an account's availability the adapter SHALL start `codex app-server` with th
 - **THEN** availability is `unknown` with the detail "Codex did not say whether usage is allowed." and the windows it returned
 
 #### Scenario: Not signed in
-- **WHEN** the app server answers `account/rateLimits/read` with an error because the profile is not signed in
+- **WHEN** the app server answers `account/rateLimits/read` with an error whose message contains "authentication required to read rate limits"
 - **THEN** availability is `unavailable` with the detail "Codex is not signed in on this account. Run relay account login codex:<name>."
+
+#### Scenario: Another error
+- **WHEN** the app server answers `account/rateLimits/read` with any other error
+- **THEN** availability is `unknown` with the detail "relay could not read Codex's rate limits.", and the earlier reading in `availability.json` stays as it was
 
 ### Requirement: Sending, interrupting and resuming through the app server
 The adapter SHALL send a message with `turn/steer` (with `expectedTurnId`) while a turn runs and with `turn/start` otherwise, interrupt with `turn/interrupt` and the current `threadId` and `turnId`, and resume with `thread/resume` passing `threadId`, `cwd`, `sandbox`, `approvalPolicy` and `developerInstructions` again.
@@ -75,7 +79,11 @@ When the app server sends `item/commandExecution/requestApproval`, `item/fileCha
 - **THEN** relay prints "Codex is asking for permission: run rm -rf build. relay does not answer permission requests, so it stopped this run." and no response to that request is ever sent
 
 ### Requirement: codex exec fallback
-When `codex app-server` exits before answering `initialize`, does not answer within 15 seconds, or answers `thread/start` with method-not-found, the adapter SHALL use `codex exec --json -C <root> -s <sandbox> -c developer_instructions=<TOML string> [-m <model>] <prompt>` with standard input at end of file. `RELAY_CODEX_TRANSPORT=exec` SHALL force this transport.
+When `codex app-server` exits before answering `initialize`, does not answer within 15 seconds, or answers `thread/start` with method-not-found, the adapter SHALL use `codex exec --json -C <root> -s <sandbox> -c developer_instructions=<TOML string> [-m <model>] -- <prompt>` with standard input at end of file. A prompt that is exactly `-` SHALL be sent as `- `, because `codex exec` reads standard input for `-`. `RELAY_CODEX_TRANSPORT=exec` SHALL force this transport.
+
+#### Scenario: Prompt that looks like an option
+- **WHEN** the prompt is `--dangerously-bypass-approvals-and-sandbox`
+- **THEN** `fake-codex` receives `--` followed by that text as the last argument, and runs it as the prompt
 
 #### Scenario: App server unavailable
 - **WHEN** `fake-codex app-server` exits with code 2 at once
@@ -93,14 +101,22 @@ In `codex exec` mode the adapter SHALL report `usage_limit` when `turn.failed` o
 - **THEN** the adapter emits `turn_failed` with reason `usage_limit`, `retryAt` at the next 15:45 local time, and source `message_text`
 
 ### Requirement: Resuming in codex exec mode
-In `codex exec` mode the adapter SHALL resume with `codex exec resume <session ID> --json -c sandbox_mode="<sandbox>" -c developer_instructions=<TOML string> <prompt>`, run with the job root as working directory and standard input at end of file.
+In `codex exec` mode the adapter SHALL resume with `codex exec resume <session ID> --json -c sandbox_mode="<sandbox>" -c developer_instructions=<TOML string> -- <prompt>`, run with the job root as working directory and standard input at end of file. A session ID that is not a UUID SHALL be refused before any process starts.
 
 #### Scenario: Resume command line
 - **WHEN** relay resumes thread `0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31` with the exec transport
-- **THEN** `fake-codex` receives the arguments `exec resume 0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31 --json` followed by the two `-c` settings and the prompt
+- **THEN** `fake-codex` receives the arguments `exec resume 0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31 --json` followed by the two `-c` settings, `--` and the prompt
+
+#### Scenario: Session ID that is not a UUID
+- **WHEN** relay is asked to resume the session `--dangerously-bypass-approvals-and-sandbox`
+- **THEN** relay refuses with "The session ID to resume is not a UUID, so relay did not start the agent." and starts no process
 
 ### Requirement: Interactive Codex
-For an interactive worker the adapter SHALL run `codex -C <root> -c developer_instructions=<TOML string> [<prompt>]` (or `codex resume <session ID>` with the same settings) attached to the person's terminal. The provider session ID SHALL come from the `session_id` of the first `SessionStart` hook event recorded for this worker, and SHALL stay unknown when no such event arrives.
+For an interactive worker the adapter SHALL run `codex -C <root> -c developer_instructions=<TOML string> [-- <prompt>]` (or `codex resume <session ID>` with the same settings) attached to the person's terminal. The provider session ID SHALL come from the `session_id` of the first `SessionStart` hook event recorded for this worker whose `session_id` is a UUID, and SHALL stay unknown when no such event arrives.
+
+#### Scenario: Session ID in the spool that is not a UUID
+- **WHEN** the spool holds a `SessionStart` line for this worker with `session_id` `--dangerously-bypass-approvals-and-sandbox`
+- **THEN** relay ignores that line
 
 #### Scenario: Hooks not trusted yet
 - **WHEN** an interactive Codex worker ends and no `SessionStart` hook event was recorded for it

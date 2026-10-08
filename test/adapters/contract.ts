@@ -198,7 +198,7 @@ export function defineAdapterContract(entry: AdapterContractEntry): void {
             let refusal: unknown;
             try { await worker.send("Second message."); } catch (error) { refusal = error; }
             expect(refusal).toBeInstanceOf(UnsupportedOperation);
-            expect((refusal as Error).message.startsWith(`${adapter.displayName} in ${transport.id} mode cannot `)).toBe(true);
+            expect((refusal as Error).message).toMatch(new RegExp(`^${adapter.displayName} in [a-z -]+ mode cannot .+\\.$`));
           }
         });
       });

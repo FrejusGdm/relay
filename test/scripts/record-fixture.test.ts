@@ -47,8 +47,11 @@ test("Recording redacts an email and lists each replacement", async () => {
     expect(meta.source).toBe("recorded"); expect(meta.tool_version).toBe("2.1.282");
     expect(meta.redactions.filter((entry) => entry === "email address")).toHaveLength(1);
     expect(meta.redactions.filter((entry) => entry !== "email address" && entry !== "home folder" && entry !== "temporary repository")).toEqual([]);
-    expect(stdout).toContain("No event mapper exists yet for claude/print; expected-events.json is empty. Fill it before committing the fixture.");
-    expect(JSON.parse(readFileSync(join(destination, "expected-events.json"), "utf8"))).toEqual([]);
+    // The events come from the claude-print mapper registered in test/adapters/registry.ts.
+    const events = JSON.parse(readFileSync(join(destination, "expected-events.json"), "utf8")) as { kind: string; text?: string }[];
+    expect(events.map((event) => event.kind)).toEqual(["session_started", "message", "message", "turn_completed"]);
+    expect(events[1]?.text).toBe("Contact redacted.");
+    expect(stdout).toContain('"kind": "turn_completed"');
   });
 }, 20_000);
 test("Recording stops before writing a fixture when the scanner finds a token", async () => {

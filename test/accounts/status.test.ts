@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readAvailability, recordReading, RESET_PASSED } from "../../src/accounts/availability";
 import { setClock } from "../../src/platform/clock";
@@ -77,4 +77,19 @@ test("relay account status shows sign-in, profile and the recorded availability 
 test("relay account status for an unknown account exits 21", async () => {
   const result = await runRelayInProcess(["account", "status", "claude:nope"], { relayHome: relayWithWork(), env: fakeEnv() });
   expect(result).toEqual({ code: 21, stdout: "", stderr: "claude:nope is not one of your accounts. See relay account list.\n" });
+});
+
+test("relay account status reads a Codex account's rate limits live and records them", async () => {
+  const relayHome = mkdtempSync(join(HOME, "relay-"));
+  writeFileSync(join(relayHome, "config.toml"), '[accounts."codex:personal"]\n', { mode: 0o600 });
+  mkdirSync(join(relayHome, "profiles", "codex-personal"), { recursive: true, mode: 0o700 });
+  const resets = new Date(Date.now() + 3600_000).toISOString();
+  const env = fakeEnv({ rate_limits: { primary: { used_percent: 62, window_minutes: 300, resets_at: resets }, ordinary_usage_allowed: true } });
+  const { code, stdout } = await runRelayInProcess(["account", "status", "codex:personal", "--json"], { relayHome, env });
+  expect(code).toBe(0);
+  const json = JSON.parse(stdout);
+  expect(json.availability).toMatchObject({ state: "available", source: "provider_api" });
+  expect(json.availability.windows[0]).toMatchObject({ name: "five_hour", window_minutes: 300, used_percent: 62 });
+  const text = await runRelayInProcess(["account", "status", "codex:personal"], { relayHome, env });
+  expect(text.stdout).toContain("  Availability  available (provider, just now)\n");
 });

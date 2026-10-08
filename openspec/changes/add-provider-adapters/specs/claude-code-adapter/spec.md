@@ -71,14 +71,18 @@ The adapter SHALL interrupt by sending `SIGINT` to its child. When no `result` a
 - **THEN** the adapter emits `turn_failed` with reason `interrupted`, sends no `SIGTERM`, and the process keeps running until its input is closed
 
 ### Requirement: Resuming a Claude session
-The adapter SHALL resume with `--resume <session ID>` in place of `--session-id`, and SHALL pass every other flag of the original start again, because Claude Code does not restore them on resume.
+The adapter SHALL resume with `--resume <session ID>` in place of `--session-id`, and SHALL pass every other flag of the original start again, because Claude Code does not restore them on resume. A session ID that is not a UUID SHALL be refused with "The session ID to resume is not a UUID, so relay did not start the agent." before any process starts.
 
 #### Scenario: Headless resume
 - **WHEN** relay resumes session `7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f` headless
 - **THEN** `fake-claude` receives `--resume 7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f` and not `--session-id`
 
 ### Requirement: Interactive launch in the person's terminal
-For an interactive worker the adapter SHALL run `claude --session-id <id> --append-system-prompt <instructions> [<prompt>]` (or `--resume <id>` in place of `--session-id`) with the person's terminal as standard input, output and error, and with no permission flag.
+For an interactive worker the adapter SHALL run `claude --session-id <id> --append-system-prompt <instructions> [-- <prompt>]` (or `--resume <id>` in place of `--session-id`) with the person's terminal as standard input, output and error, and with no permission flag. A prompt that is one word SHALL get a space at its end, because Claude Code runs a subcommand whose name equals the first argument after `--`.
+
+#### Scenario: Prompt that looks like an option or a command
+- **WHEN** the prompt is `--permission-mode=bypassPermissions now`, or the one word `update`
+- **THEN** `fake-claude` receives `--` followed by `--permission-mode=bypassPermissions now`, or by `update `, as the last argument, and runs it as the prompt
 
 #### Scenario: Person types directly
 - **WHEN** the person runs `relay run claude:work` in a terminal

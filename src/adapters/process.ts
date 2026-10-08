@@ -7,7 +7,7 @@
 // port or by a process ID read from a file.
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { chmodSync, closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, constants, fchmodSync, fstatSync, ftruncateSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { now } from "../platform/clock";
 import { LineSplitter } from "./lines";
@@ -28,6 +28,8 @@ export interface HeadlessProcess extends AgentProcess {
   // Writes to the child's standard input. Only for input "pipe".
   write(text: string): Promise<void>;
   closeInput(): void;
+  // Adds a line "relay <text>" to the worker log, while it is open.
+  note(text: string): void;
 }
 
 export interface HeadlessOptions {
@@ -39,8 +41,12 @@ export interface HeadlessOptions {
   // for a program that takes its prompt as an argument.
   input: "pipe" | "eof";
   logPath: string;
+  // When set, a worker log larger than this many bytes is emptied before the program starts.
+  logLimit?: number;
   // Called with every complete line, in order, after it was written to the worker log.
   onLine(stream: "out" | "err", line: string): void;
+  // Called once all output has been read, for the last notes of the worker log.
+  closingNotes?(): string[];
 }
 
 export interface InteractiveOptions {
@@ -80,7 +86,7 @@ function isOwnFolder(path: string): boolean {
   return stat !== undefined && stat.isDirectory() && stat.uid === process.getuid!();
 }
 
-function openWorkerLog(path: string): number {
+function openWorkerLog(path: string, limit = Infinity): number {
   const folder = dirname(path);
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   const uid = process.getuid!();
@@ -92,6 +98,7 @@ function openWorkerLog(path: string): number {
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.uid !== uid) throw new Error(`The worker log ${path} is not safe to use.`);
     fchmodSync(fd, 0o600);
+    if (stat.size > limit) ftruncateSync(fd, 0);
   } catch (error) {
     closeSync(fd);
     throw error;
@@ -104,7 +111,7 @@ function openWorkerLog(path: string): number {
 export function startHeadless(options: HeadlessOptions): Promise<HeadlessProcess> {
   let log: number;
   try {
-    log = openWorkerLog(options.logPath);
+    log = openWorkerLog(options.logPath, options.logLimit);
   } catch (error) {
     return Promise.reject(error);
   }
@@ -171,6 +178,7 @@ export function startHeadless(options: HeadlessOptions): Promise<HeadlessProcess
         }, OUTPUT_GRACE_MS);
         void Promise.all(drained).then(() => {
           clearTimeout(grace);
+          for (const text of options.closingNotes?.() ?? []) writeLog(`relay ${text}\n`);
           closeLog();
           resolveExit({ code, signal });
         });
@@ -195,6 +203,9 @@ export function startHeadless(options: HeadlessOptions): Promise<HeadlessProcess
         return Promise.reject(new Error("The agent's input is closed."));
       }
       return new Promise((done, fail) => input.write(text, (error) => (error ? fail(error) : done())));
+    },
+    note(text) {
+      writeLog(`relay ${text}\n`);
     },
     closeInput() {
       child.stdin?.end();

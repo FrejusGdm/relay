@@ -108,7 +108,8 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
     if (!(error instanceof SettingsError)) throw error;
     log.info("command started", started);
     log.warn("settings invalid", { path: join(relayHome, "config.toml"), problems: error.problems });
-    const code = await settingsFailure(error, def, io);
+    const code = def.withoutSettings === undefined ? await settingsFailure(error, def, io)
+      : await def.withoutSettings({ def, positionals, values, io, log, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome });
     finish(state, code);
     return code;
   }
@@ -204,8 +205,10 @@ function newInvocation(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// An agent may still be writing to relay hook; reading to the end spares it a broken pipe.
+// An agent may still be writing to relay hook; reading its input spares it a broken pipe. The read
+// has the same limits as the hook's own, 1 MiB and 200 ms, so an input that never ends cannot keep
+// relay running.
 async function quietExit(io: Io): Promise<number> {
-  if (!io.stdinIsTTY) await io.readStdinToEnd();
+  if (!io.stdinIsTTY) await io.readStdin(1024 * 1024, 200);
   return ExitCode.Ok;
 }

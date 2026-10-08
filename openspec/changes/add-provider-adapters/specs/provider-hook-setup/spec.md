@@ -53,7 +53,7 @@ When the settings file is not valid JSON, or its `hooks` value is not an object,
 - **THEN** relay does not offer hooks and prints "To let relay see sessions you start yourself, run relay hooks install claude:personal."
 
 ### Requirement: Removing relay's hooks
-`relay hooks remove <account> [--yes]` SHALL remove only relay's entries, drop an event key or matcher group that becomes empty only if relay's entry was its last entry, restore the original status line if relay's wrapper was installed, and keep a backup as when installing.
+`relay hooks remove <account> [--yes]` SHALL remove only relay's entries (an entry is relay's when its command is exactly the one relay writes for its current program path, whatever the program's file name, or runs a program named `relay`), drop an event key or matcher group that becomes empty only if relay's entry was its last entry, restore the original status line if relay's wrapper was installed, and keep a backup as when installing.
 
 #### Scenario: Clean removal
 - **WHEN** relay's hooks are the only hooks in `settings.json` and the person removes them
@@ -74,11 +74,19 @@ With `--status-line`, relay SHALL set the profile's `statusLine` to `{"type":"co
 - **THEN** the original value is saved, and relay prints "Your status line still shows; relay runs it after recording the usage numbers."
 
 ### Requirement: relay statusline claude
-`relay statusline claude` SHALL read the status-line JSON from standard input, keep only `session_id` and the `rate_limits` windows' `used_percentage` and `resets_at`, record them for the account, then run the saved original command with the same input and pass its output and exit code through. It SHALL print nothing of its own and add no more than 50 ms before the original runs.
+`relay statusline claude` SHALL read the status-line JSON from standard input, keep only `session_id` and the `rate_limits` windows' `used_percentage` and `resets_at`, record them for the account, then run the saved original command with the same input and pass its output (at most 1 MiB) and exit code through. It SHALL print nothing of its own and add no more than 50 ms before the original runs. The original SHALL run in its own process group; after 2 seconds relay SHALL kill that group, stop reading, and print what it read with exit code 0. When `config.toml` is invalid or names no matching account, relay SHALL record nothing and still run the original saved for `RELAY_TARGET`, or for the profile folder recorded in `statusline-original.json`.
 
 #### Scenario: No original status line
 - **WHEN** no original status line was saved
 - **THEN** the command records the reading, prints nothing, and exits with code 0
+
+#### Scenario: Original that does not finish
+- **WHEN** the original prints `partial` and starts `sleep 30` in the background
+- **THEN** relay prints `partial` after about 2 seconds, and the `sleep` process is gone
+
+#### Scenario: Settings invalid
+- **WHEN** `config.toml` is not valid TOML and the status line runs with the `CLAUDE_CONFIG_DIR` of an account whose status line relay saved
+- **THEN** the person's status line is printed as before
 
 #### Scenario: Account found from the profile
 - **WHEN** the status line runs in a session with `CLAUDE_CONFIG_DIR=~/.relay/profiles/claude-work` and no `RELAY_TARGET`
@@ -92,7 +100,7 @@ In this version `relay hook <provider> <event>` SHALL follow the hook command co
 - **THEN** the spool line does not contain it
 
 ### Requirement: Spool line contents
-Each spool line SHALL keep only the input fields `session_id`, `cwd`, `hook_event_name`, `error`, `notification_type`, `reason`, `source`, `model` and `turn_id`, and SHALL record `relay_job`, `relay_target` and `relay_worker` from `RELAY_JOB`, `RELAY_TARGET` and `RELAY_WORKER` (or null), and `profile`: the value of `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, or `default`.
+Each spool line SHALL keep only the input fields `session_id`, `cwd`, `hook_event_name`, `error`, `notification_type`, `reason`, `source`, `model` and `turn_id`, and SHALL record `relay_job`, `relay_target` and `relay_worker` from `RELAY_JOB`, `RELAY_TARGET` and `RELAY_WORKER` (or null), and `profile`: the value of `CLAUDE_CONFIG_DIR` or `CODEX_HOME` resolved to an absolute path, or `default`.
 
 #### Scenario: StopFailure recorded
 - **WHEN** Claude Code runs `relay hook claude StopFailure` with `{"session_id":"7c1e…","hook_event_name":"StopFailure","error":"rate_limit","error_details":"429 Too Many Requests","last_assistant_message":"…"}` and `RELAY_TARGET=claude:work`
