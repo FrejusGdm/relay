@@ -124,7 +124,7 @@ flowchart TD
   stale --> listen["Listen on relay.sock (mode 0600),<br/>write daemon.pid, log daemon_started"]
   listen --> wait["Answer requests until SIGTERM or SIGINT"]
   wait --> stopping["Stop accepting connections,<br/>send shutdown to event streams"]
-  stopping --> operations["Wait for running checkpoints and switches<br/>(a note in the log after 30 seconds,<br/>never cut off in the middle)"]
+  stopping --> operations["Wait for running checkpoints and switches,<br/>also those relay switch handed to the daemon<br/>(a note in the log after 30 seconds,<br/>never cut off in the middle)"]
   operations --> agents["Stop the agents the daemon started,<br/>wait up to 30 seconds, record worker_ended"]
   agents --> requests["Let open requests finish"]
   requests --> clean["Remove relay.sock and daemon.pid,<br/>log daemon_stopped, exit 0"]

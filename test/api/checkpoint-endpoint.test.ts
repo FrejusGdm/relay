@@ -4,6 +4,8 @@
 // stay as they were.
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import type { Subprocess } from "bun";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { FAKE_SCANNER, jobId, personState, relayRefs, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, spawnDaemon, stopDaemon, testSocket, waitForDaemon } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
@@ -162,4 +164,12 @@ test("SIGTERM during a checkpoint lets it finish and answer, and refuses new con
   expect(status).toBe(201);
   expect(scratch.git("rev-parse", `refs/relay/jobs/${job}/checkpoints/2`).trim()).toBe(body.checkpoint.commit);
   expect(await daemon.exited).toBe(0);
+});
+
+test("a project whose .relay/state.json is gone returns 409 project_missing", async () => {
+  const { scratch, job } = await project();
+  rmSync(join(scratch.repo, ".relay", "state.json"));
+  expect(await answer(post(scratch, `/v1/jobs/${job}/checkpoint`))).toEqual({
+    status: 409, body: { error: { code: "project_missing", message: `The project for job ${job} is not at ${scratch.repo} any more.` } },
+  });
 });

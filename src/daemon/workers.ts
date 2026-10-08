@@ -13,6 +13,8 @@ export interface SupervisedJob {
   done: Promise<unknown>;
   // Stops the running worker as SIGTERM would.
   stop(): Promise<void>;
+  // Takes no more switch requests from relay switch and waits for the switch being served.
+  finishSwitch(): Promise<void>;
 }
 
 const STOP_WAIT_MS = 30_000;
@@ -36,6 +38,12 @@ export class HeadlessWorkers {
       const worker = supervised.running();
       return worker === null ? [] : [{ worker: worker.worker_id, target: worker.account, job }];
     });
+  }
+
+  // Lets switches that relay switch handed to the daemon's job supervisors finish, as running
+  // operations do (design.md decision 7, step 3), and takes no new ones.
+  async finishSwitches(): Promise<void> {
+    await Promise.allSettled([...this.jobs.values()].map((job) => job.finishSwitch()));
   }
 
   // Stops every worker and waits up to 30 seconds for relay to record their ends (design.md

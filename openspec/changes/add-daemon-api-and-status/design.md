@@ -643,7 +643,8 @@ Decisions added while building task groups 7, 9 and 11:
 - **The switch endpoint is `relay switch` without a terminal.** `src/daemon/engines.ts` calls the
   preflight of `add-relay-switch` with start mode `headless` and a person who cannot answer, then
   `performHandoff` through the `JobSupervisor` of `src/run/run.ts`; there is no second switch
-  implementation. Where the two changes disagree, the steps follow `add-relay-switch` and the
+  implementation. Like `relay switch`, it first cleans up a switch whose process is gone (step 0,
+  `recoverSwitch`). Where the two changes disagree, the steps follow `add-relay-switch` and the
   answers follow this design:
   - `add-relay-switch` hands a switch to the `relay run` that holds the job's agent (its decision
     15). This design did not cover that case. The daemon does the same as `relay switch`, so the
@@ -683,7 +684,8 @@ Decisions added while building task groups 7, 9 and 11:
   check. The allow list edit now looks for the entry again in the file under the config lock.
 - **Shutdown order.** Step 1 only stops accepting connections; open connections, including the one
   of a running checkpoint or switch, stay open until steps 3 and 4 are done, and then get up to 10
-  seconds to finish.
+  seconds to finish. Step 3 also waits for a switch that `relay switch` handed to a job supervisor
+  in the daemon, and those supervisors take no new requests from then on.
 - **`relay daemon stop --force`** is a new option of `relay daemon`; `restart` passes it on to
   `stop`.
 - **Tests.** Under the test preload (`RELAY_TEST=1`), `relay run` and `relay switch` start the

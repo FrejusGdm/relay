@@ -11,6 +11,7 @@ import type { RelayConfig } from "../core/config/types";
 import type { Io } from "../cli/io";
 import { openRepository, type Repository } from "../git/repo";
 import type { Asker } from "../handoff/ask";
+import { recoverSwitch } from "../handoff/journal";
 import { preflight, type HandoffEnv } from "../handoff/preflight";
 import { CommandError } from "../cli/errors";
 import { handSwitchOver } from "../run/control";
@@ -75,7 +76,9 @@ export async function switchJob(
 ): Promise<{ handoff: Record<string, unknown>; workerId: string | null }> {
   const config = readConfig(ctx);
   if (!config.accounts.some((account) => account.id === target)) throw new TargetNotFound(target);
-  await openProject(ctx.relayHome, job);
+  const repo = await openProject(ctx.relayHome, job);
+  // Step 0 of relay switch: a switch whose process is gone is cleaned up first.
+  await recoverSwitch(repo, findJob(repo, ctx.relayHome).job);
   const registry = createAdapterRegistry({}, ctx.env);
   const env: HandoffEnv = { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!(), env: ctx.env, config, registry };
   const asker: Asker = {
@@ -101,6 +104,7 @@ export async function switchJob(
       ctx.workers.add(job.id, {
         running: () => supervisor.runningRecord(),
         stop: () => supervisor.stopRunning(),
+        finishSwitch: () => supervisor.stopTakingRequests(),
         done: supervisor.supervise(worker).finally(() => supervisor.close()),
       });
     }
@@ -140,11 +144,13 @@ function supervisorContext(ctx: EngineContext, first: RelayConfig): SupervisorCo
 // The job's worktree root, checked to be a repository whose .relay/state.json names this job.
 async function openProject(relayHome: string, job: JobPlace): Promise<Repository> {
   let repo: Repository;
+  let found: string;
   try {
     repo = await openRepository(job.root);
+    found = findJob(repo, relayHome).job.id;
   } catch {
     throw new ProjectMissing(job.id, job.root);
   }
-  if (repo.worktreeRoot !== job.root || findJob(repo, relayHome).job.id !== job.id) throw new ProjectMissing(job.id, job.root);
+  if (repo.worktreeRoot !== job.root || found !== job.id) throw new ProjectMissing(job.id, job.root);
   return repo;
 }

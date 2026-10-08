@@ -417,6 +417,14 @@ export class JobSupervisor {
     return record !== undefined && record.ended_at === null ? record : null;
   }
 
+  // Takes no more switch requests and waits for the one being served. A request that is not taken
+  // is refused by relay switch after 5 seconds, with nothing changed.
+  async stopTakingRequests(): Promise<void> {
+    this.stopListening?.();
+    this.stopListening = null;
+    await this.switching?.catch(() => null);
+  }
+
   // Stops the running agent as SIGTERM would and waits until relay has recorded its end.
   async stopRunning(): Promise<void> {
     const worker = this.current;

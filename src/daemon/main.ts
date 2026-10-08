@@ -138,6 +138,7 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     server.refuse();
     stream.shutdown();
     await operations.finish(log);
+    await workers.finishSwitches();
     await workers.stopAll();
     await server.stop();
     await spool.stop();
