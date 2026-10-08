@@ -1,6 +1,6 @@
 # relay roadmap
 
-Last updated 2026-10-07.
+Last updated 2026-10-08.
 
 This file is the big picture: what we build, in what order, and which decisions are
 still open. The task board for the jstack loop is kept privately. The details live in two
@@ -19,8 +19,9 @@ other places:
   - `prior-art-and-pricing.md`: similar tools, licensing, lifetime licenses,
     payments, landing page references;
   - `handoff-sources.md`: what Anthropic, OpenAI and Cognition have published on
-    handing work from one agent or context window to the next, and the changes it
-    led to in the handoff notes request.
+    handing work from one agent or context window to the next, and the changes it    led to in the handoff notes request;
+  - `t3-outside-access.md`: what T3 Code lets outside programs do (its MCP server,
+    sign-in, thread tools) and how it handles usage limits, checked on 2026-10-08.
 
 ## What the research changed
 
@@ -66,13 +67,18 @@ end without waiting for him. Specifically:
 | 2026-10-07 | Business model: a one-time payment (a lifetime license for the paid features); the core stays free. |
 | 2026-10-07 | Payment provider: Stripe, following Stripe's own implementation guides and best practices. Build in Stripe test mode until Josué adds live keys. |
 | 2026-10-07 | No Apple Developer account for now: the CLI never needs one, and the Mac app works unsigned (first launch: right-click, Open). Only a smooth public download of the Mac app would need it later. |
+| 2026-10-08 | Approved `add-t3-limit-rules`: limit rules per account and window (use all of the 5-hour window; keep 10 percent of the weekly window by default, then move work to another provider), applied to T3 Code threads. |
+| 2026-10-08 | relay drives T3 Code through T3's MCP server, the documented door for outside programs. This settles the adapter part of the T3 relationship; a relay view inside T3 is still open. |
+| 2026-10-08 | One exception to "relay never stores tokens": relay keeps the access token T3 Code issues to it, in the operating system's credential store only. It is not a login to Anthropic or OpenAI, and the person can revoke it in T3. |
+| 2026-10-08 | relay asks T3 for the `full-access` level, because T3 only lets outside programs act on threads whose permission mode is not broader than theirs. relay never changes a thread's permission mode. |
+| 2026-10-08 | Claude usage readings come from `claude -p "/usage"`, once a check confirms it spends no usage. T3's experimental usage call is never used. |
 
 ## Decisions still open
 
 | Decision | Recommendation | What it blocks |
 |---|---|---|
 | Ask Anthropic and OpenAI directly | Yes, before a public release: driving the unmodified programs, unattended, across a person's own accounts. | Public release, marketing |
-| Relationship with T3 Code | Integrate: a T3 adapter and a relay view inside T3, while working everywhere else too. | Positioning |
+| A relay view inside T3 Code | Decide after `add-t3-limit-rules` is in use. The adapter part (driving T3 through its MCP server) was decided on 2026-10-08. | Positioning |
 | The name | T3 Code already has a component called "T3 Connect Relay". Check whether "relay" is clear enough for search, a domain and a Homebrew name before a public release. | Public release |
 
 ## Phases
@@ -107,7 +113,10 @@ first version; each has a detailed OpenSpec proposal.
 6. **Handoff evaluation.** The same real task handed off at different points; compare
    outcomes before adding any automation.
 7. **Single-job failover.** Supported limit signals start a handoff; reset times
-   are timer events; per-provider policy switches.
+   are timer events; per-provider policy switches. It starts with `add-t3-limit-rules`:
+   usage readings, limit rules per account and window, and moving T3 Code threads to
+   another provider past a threshold. That change needs phases 1, 3, 4 and 5; its
+   settings, rules engine and T3 client are built first, because they need only phase 1.
 8. **The Mac menu-bar app.** The tiny and expanded card from `DESIGN.md`, over the
    socket API, notarized, with updates.
 9. **Leases and parallel work.** Tasks, leases with heartbeats, worktrees per task, a
@@ -115,7 +124,7 @@ first version; each has a detailed OpenSpec proposal.
 
 ## Later
 
-T3 Code adapter and a relay view inside T3; Cursor and OpenCode adapters; the job
+A relay view inside T3; Cursor and OpenCode adapters; the job
 lineage view; a public release with security review items from
 `docs/research/security.md`; and, if wanted, the paid tier and cloud features. The website
 (the landing page) is proposed in `openspec/changes/add-website/`.
