@@ -95,6 +95,18 @@ on this computer (`add-t3-limit-rules`): `src/t3/client.ts` may use `fetch`, and
 may use `fetch` and `Bun.serve` for the sign-in listener on `127.0.0.1`. The settings only accept
 a T3 address on `127.0.0.1` or `localhost`. Any other network use under `src/t3/` fails the check.
 
+`test/checkpoint/e2e.test.ts` builds the program with the `build:<system>-<processor>` script
+of `package.json` for the machine it runs on, writes it to a temporary folder, and runs it as a
+separate process on a scratch repository: `relay init`, a checkpoint, the list, a refused change
+to `core.fsmonitor`, a rollback and its undo. With `RELAY_TEST_GIT_LOG=1`, the program writes
+every git command it runs to `$RELAY_HOME/logs/git-calls.jsonl`. The runner writes a call there
+only after its allow list accepted it, so the log cannot show a refused call. The test therefore
+pins the exact set of git commands a whole job uses, none of which contacts a remote, so a new
+command fails the test until someone reviews it. It also checks that each call starts with
+relay's settings, that refs are written only through `update-ref --stdin`, and that every ref
+under `refs/relay/` belongs to the job. It
+needs git and gitleaks on `PATH`, like the other checkpoint tests.
+
 ## Continuous integration
 
 GitHub runs `.github/workflows/ci.yml` on every pull request and every push to `main`. A new
@@ -111,8 +123,8 @@ flowchart LR
   end
 
   subgraph build["build (starts when both check jobs pass)"]
-    buildLinux["Linux: build relay-linux-x64,<br/>smoke test, upload"]
-    buildMac["macOS: build relay-darwin-arm64,<br/>print codesign -dv, smoke test, upload"]
+    buildLinux["Linux: build relay-linux-x64,<br/>release check, smoke test, upload"]
+    buildMac["macOS: build relay-darwin-arm64,<br/>release check, print codesign -dv,<br/>smoke test, upload"]
   end
 
   security["security (ubuntu-24.04):<br/>pin check, bun audit,<br/>gitleaks secret scan"]
@@ -126,8 +138,9 @@ The diagram shows the five jobs. The two `check` jobs install the dependencies f
 check the types and run the tests, one on Linux and one on macOS. Before the tests, each `check`
 job downloads gitleaks 8.30.1 for its own system, checks the archive against the SHA-256 checksum
 published in the release's checksums file, and puts the program on `PATH`, because the secret scan
-tests need the real gitleaks. When both pass, the two `build`
-jobs build the program for their own system, run the smoke test on it, and keep it as a download
+tests need the real gitleaks. When both pass, the two `build` jobs build the program for their own
+system, run the release check (`scripts/check-release-binary.sh`, which fails if the test fakes of
+`docs/testing-adapters.md` reached the program), run the smoke test on it, and keep it as a download
 for 7 days. The macOS build job also prints `codesign -dv` as a record of the signature that the
 build gave the program. The `security` job runs at the same time as the others. It checks that
 every action in the workflows is pinned to a full commit SHA, runs `bun audit` on the
@@ -140,8 +153,8 @@ file, rule and line), and only for a finding you have checked by hand. A real se
 revoked instead, because the history cannot be changed.
 
 In a private repository, GitHub counts each minute on a macOS runner as ten minutes on a Linux
-runner, so the macOS jobs only install, test, build and run the smoke test. Slower checks belong
-in the Linux jobs.
+runner, so the macOS jobs only install, test, build and run the release check and the smoke test.
+Slower checks belong in the Linux jobs.
 
 Every `uses:` line in a workflow names a full 40-character commit SHA followed by a `# vX.Y.Z`
 comment. Run the same check as CI before you push; it prints nothing when every action is pinned:

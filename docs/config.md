@@ -140,7 +140,7 @@ provider's own program keeps its sign-in.
 | Setting | Type | Default | Meaning |
 |---|---|---|---|
 | `profile_dir` | path | `<relay folder>/profiles/<provider>-<name>` | The account's profile folder. Example: `profile_dir = "~/.codex"`. Two accounts cannot share a folder. |
-| `credential_env` | list of variable names | `[]` | The names of credential variables this account may receive from your shell, for example `["ANTHROPIC_API_KEY"]`. Names use capital letters, digits and `_`. relay removes every other credential variable when it starts an agent. |
+| `credential_env` | list of variable names | `[]` | The names of credential variables this account may receive from your shell, for example `["ANTHROPIC_API_KEY"]`. Names use capital letters, digits and `_`. A Claude Code account may name only `ANTHROPIC_` variables and `CLAUDE_CODE_OAUTH_TOKEN`, and a Codex account only `OPENAI_` and `CODEX_` variables (not `CODEX_HOME`, `CODEX_THREAD_ID` or the `CODEX_SANDBOX` ones), so one provider's key never reaches another provider. relay removes every other credential variable when it starts an agent. |
 | `kind` | `"personal"` or `"work"` | none | Whether this is a personal or a work account. |
 
 An account with no settings, `[accounts."claude:personal"]` alone, is valid.

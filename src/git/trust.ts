@@ -117,13 +117,17 @@ const decoder = new TextDecoder();
 // Writes $RELAY_HOME/jobs/<job>/git-trust.json. `jobDir` is that job folder; its name is the job ID.
 export async function recordTrust(repo: Repository, jobDir: string): Promise<void> {
   const salt = randomBytes(32).toString("hex");
+  writeRecord(repo, jobDir, salt, await readCurrent(repo, salt));
+}
+
+function writeRecord(repo: Repository, jobDir: string, salt: string, current: CurrentState): void {
   const record: TrustRecord = {
     schema_version: 1,
     job_id: basename(jobDir),
     recorded_at: new Date().toISOString(),
     worktree_root: repo.worktreeRoot,
     values_salt: salt,
-    ...(await readCurrent(repo, salt)),
+    ...current,
   };
   mkdirSync(jobDir, { recursive: true, mode: 0o700 });
   chmodSync(jobDir, 0o700);
@@ -152,7 +156,77 @@ export async function recordTrust(repo: Repository, jobDir: string): Promise<voi
 // `git rev-parse`, which start no hooks and no file-system monitor.
 export async function compareTrust(repo: Repository, jobDir: string): Promise<TrustChange[]> {
   const stored = readRecord(join(jobDir, TRUST_FILE));
-  const current = await readCurrent(repo, stored.values_salt);
+  return changesSince(stored, await readCurrent(repo, stored.values_salt));
+}
+
+// What relay accept-git-changes asks the person to trust, read once.
+export interface TrustReview {
+  // The reason the record cannot be read, or null.
+  problem: TrustRecordError | null;
+  changes: TrustChange[];
+  // The lines that describe the current state to the person, before the question.
+  lines: string[];
+  // Reads the settings and hooks again. When they equal the state `lines` describe, writes that
+  // state as the new record and returns true; otherwise writes nothing and returns false, so a
+  // change made while the person read the report is never trusted.
+  accept(): Promise<boolean>;
+}
+
+export async function reviewTrust(repo: Repository, jobDir: string): Promise<TrustReview> {
+  let stored: TrustRecord | null = null;
+  let problem: TrustRecordError | null = null;
+  try {
+    stored = readRecord(join(jobDir, TRUST_FILE));
+  } catch (error) {
+    if (!(error instanceof TrustRecordError)) throw error;
+    problem = error;
+  }
+  const salt = stored?.values_salt ?? randomBytes(32).toString("hex");
+  const shown = await readCurrent(repo, salt);
+  const changes = stored === null ? [] : changesSince(stored, shown);
+  return {
+    problem,
+    changes,
+    lines: problem === null ? describeChanges(changes, repo, "") : currentStateLines(problem, shown, repo),
+    accept: async () => {
+      if (JSON.stringify(await readCurrent(repo, salt)) !== JSON.stringify(shown)) return false;
+      writeRecord(repo, jobDir, salt, shown);
+      return true;
+    },
+  };
+}
+
+// The job and worktree that a readable trust record belongs to, or null when the record is
+// missing or damaged.
+export function trustRecordOwner(jobDir: string): { jobId: string; worktreeRoot: string } | null {
+  try {
+    const record = readRecord(join(jobDir, TRUST_FILE));
+    return { jobId: record.job_id, worktreeRoot: record.worktree_root };
+  } catch (error) {
+    if (error instanceof TrustRecordError) return null;
+    throw error;
+  }
+}
+
+// Without a record there is nothing to compare, so the person is shown what git would run now:
+// the settings that can start a program, and the hooks.
+function currentStateLines(problem: TrustRecordError, current: CurrentState, repo: Repository): string[] {
+  const settings = current.keys.map((key) => key.name).filter(isMarkedKey).map(describeKey);
+  // git runs a hook only by its exact event name, so the .sample files git init writes never run.
+  const hooks = [current.hooks, current.hooks_path].flatMap((folder) =>
+    (folder?.entries ?? []).filter((entry) => !entry.name.endsWith(".sample")).map((entry) => hookName(join(folder!.dir, entry.name), repo)));
+  const list = (items: string[]) => (items.length === 0 ? ["  none"] : items.map((item) => `  ${item}`));
+  return [
+    visible(problem.message),
+    "relay cannot tell what changed in the git configuration or hooks since this job started.",
+    "These settings can run commands or change where git writes files:",
+    ...list(settings),
+    "These hooks exist:",
+    ...list(hooks),
+  ];
+}
+
+function changesSince(stored: TrustRecord, current: CurrentState): TrustChange[] {
   const changes: TrustChange[] = configChanges(stored.config_files, current.config_files);
   const named = new Set(changes.flatMap((change) => (change.kind === "config" ? [...change.addedKeys, ...change.removedKeys, ...change.changedKeys] : [])));
   const order = keyChanges(stored.keys, current.keys).filter((name) => !named.has(name));
@@ -164,18 +238,34 @@ export async function compareTrust(repo: Repository, jobDir: string): Promise<Tr
   return changes;
 }
 
+// The files whose hashes or keys changed, for the checkpoint_refused and git_changes_accepted events.
+export function changedFiles(changes: TrustChange[]): string[] {
+  return [...new Set(changes.flatMap((change) => (change.kind === "order" ? [] : [change.path])))];
+}
+
 // The lines relay prints when it refuses to run git (the git-safety spec). Every name and path is
 // passed through `visible`, so a crafted key or file name cannot move the cursor or hide text.
 export function trustReport(changes: TrustChange[], repo: Repository): string[] {
+  return [
+    ...describeChanges(changes, repo, "Stopped: "),
+    "relay will not run git here until you check this change.",
+    "If you made it yourself, run relay accept-git-changes in your terminal.",
+  ];
+}
+
+// One block per changed file, then the hooks. Each block starts with `prefix` and a sentence; with
+// no prefix, a sentence that starts with a word starts with a capital letter.
+function describeChanges(changes: TrustChange[], repo: Repository, prefix: string): string[] {
+  const sentence = (text: string, isPath: boolean) => (prefix !== "" || isPath ? `${prefix}${text}` : text[0]!.toUpperCase() + text.slice(1));
   const lines: string[] = [];
   for (const change of changes) {
     if (change.kind === "hook") continue;
     if (change.kind === "order") {
-      lines.push("Stopped: the order in which git reads its settings changed since this job started.");
+      lines.push(sentence("the order in which git reads its settings changed since this job started.", false));
       for (const key of change.changedKeys) lines.push(`  changed  ${describeKey(key)}`);
       continue;
     }
-    lines.push(`Stopped: ${visible(displayPath(change.path, repo))} changed since this job started.`);
+    lines.push(sentence(`${visible(displayPath(change.path, repo))} changed since this job started.`, true));
     if (change.kind === "attributes") continue;
     for (const key of change.addedKeys) lines.push(`  added  ${describeKey(key)}`);
     for (const key of change.removedKeys) lines.push(`  removed  ${describeKey(key)}`);
@@ -186,18 +276,15 @@ export function trustReport(changes: TrustChange[], repo: Repository): string[] 
   }
   const hooks = changes.filter((change) => change.kind === "hook");
   if (hooks.length > 0) {
-    lines.push("Stopped: the git hooks changed since this job started.");
-    const defaultFolder = join(repo.commonDir, "hooks");
-    for (const hook of hooks) {
-      const name = dirname(hook.path) === defaultFolder ? basename(hook.path) : displayPath(hook.path, repo);
-      lines.push(`  ${hook.change}  ${visible(name)}`);
-    }
+    lines.push(sentence("the git hooks changed since this job started.", false));
+    for (const hook of hooks) lines.push(`  ${hook.change}  ${hookName(hook.path, repo)}`);
   }
-  lines.push(
-    "relay will not run git here until you check this change.",
-    "If you made it yourself, run relay accept-git-changes in your terminal.",
-  );
   return lines;
+}
+
+// A hook in the repository's own hooks folder by its name, any other by its path.
+function hookName(path: string, repo: Repository): string {
+  return visible(dirname(path) === join(repo.commonDir, "hooks") ? basename(path) : displayPath(path, repo));
 }
 
 async function readCurrent(repo: Repository, salt: string): Promise<CurrentState> {
@@ -501,6 +588,10 @@ function describeKey(key: string): string {
   if (RUNS_COMMANDS.some((pattern) => pattern.test(key))) return `${name} (can run commands)`;
   const warning = KEY_WARNINGS.find(([pattern]) => pattern.test(key));
   return warning === undefined ? name : `${name} (${warning[1]})`;
+}
+
+function isMarkedKey(key: string): boolean {
+  return RUNS_COMMANDS.some((pattern) => pattern.test(key)) || KEY_WARNINGS.some(([pattern]) => pattern.test(key));
 }
 
 function sha256(data: string | Uint8Array): string {

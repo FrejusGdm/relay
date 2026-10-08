@@ -12,7 +12,7 @@ let log: Logger | undefined;
 // process group, so Control-C does not reach it; relay stops it before exiting.
 // Stopping git can let the command finish first, so the normal exit keeps the interrupt's code.
 let interruptedCode: number | undefined;
-const stop = async (signal: "SIGINT" | "SIGTERM", code: number) => {
+const stop = async (signal: "SIGINT" | "SIGTERM" | "SIGHUP", code: number) => {
   interruptedCode = code;
   log?.warn("command interrupted", { signal });
   runInterruptActions();
@@ -21,6 +21,9 @@ const stop = async (signal: "SIGINT" | "SIGTERM", code: number) => {
 };
 process.on("SIGINT", () => stop("SIGINT", ExitCode.Interrupted));
 process.on("SIGTERM", () => stop("SIGTERM", ExitCode.Terminated));
+// A closed terminal sends SIGHUP. Without a handler relay would end without its cleanup, and an
+// agent it started in its own process group would keep running.
+process.on("SIGHUP", () => stop("SIGHUP", ExitCode.Terminated));
 
 const code = await runCli({
   argv: process.argv.slice(2),
