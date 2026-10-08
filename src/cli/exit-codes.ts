@@ -10,6 +10,7 @@ export const ExitCode = Object.freeze({
   Busy: 6,
   NeedsPerson: 7,
   UnsavedFiles: 8,
+  DaemonNotRunning: 10,
   ProviderMissing: 20,
   NoSuchAccount: 21,
   NotSignedIn: 22,

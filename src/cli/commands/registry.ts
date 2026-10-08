@@ -1,10 +1,11 @@
-import type { RelayConfig } from "../../core/config/types";
+import type { LogLevel, RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
 import { acceptGitChanges } from "./accept-git-changes";
 import { account } from "./account";
 import { checkpoint } from "./checkpoint";
 import { checkpoints } from "./checkpoints";
+import { daemon } from "./daemon";
 import { hook } from "./hook";
 import { init } from "./init";
 import { notBuilt } from "./not-built";
@@ -30,6 +31,7 @@ export interface CommandContext {
   values: Record<string, string | boolean | string[] | undefined>;
   io: Io;
   log: Logger;
+  logLevel: LogLevel;    // from --log-level, RELAY_LOG_LEVEL or the settings, for logs a command opens
   // The folder relay was started in, the environment, the home folder and the checked relay folder.
   cwd: string;
   env: Record<string, string | undefined>;
@@ -304,8 +306,8 @@ export const COMMANDS: CommandDef[] = [
     minArgs: 1,
     maxArgs: 1,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: daemon,
   },
   {
     name: "doctor",

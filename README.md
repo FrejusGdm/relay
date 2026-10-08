@@ -66,6 +66,7 @@ in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 | `docs/first-version-index.md` | Every command, exit code, event, job file and module of the first version |
 | [Codebase map](docs/codebase-map.md) | The folders of the source code and tests, with a diagram |
 | [docs/cli.md](docs/cli.md) | The `relay` command line: commands, output and exit codes |
+| [docs/daemon.md](docs/daemon.md) | The background service: its files, the `relay daemon` commands and the private socket |
 | [docs/adapters.md](docs/adapters.md) | How relay starts, watches and stops Claude Code and Codex, and the events adapters report |
 | [docs/accounts.md](docs/accounts.md) | Adding, checking and removing accounts, profile folders, and what relay never stores |
 | [docs/testing-adapters.md](docs/testing-adapters.md) | The fake agents and scenario files that tests use instead of real providers |
