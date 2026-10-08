@@ -16,8 +16,12 @@ What exists today: the interface in `src/adapters/types.ts`, the registry in
 `src/adapters/lines.ts`, reset-time reading in `src/adapters/reset-time.ts`, TOML string encoding in
 `src/adapters/text.ts`, the agent environment in `src/accounts/environment.ts`, the redaction of
 facts in `src/secrets/redact.ts`, and the clock in `src/platform/clock.ts`. The Claude Code and
-Codex adapters themselves come in later tasks of the same change; until then, asking the registry
-for one fails with "The Claude Code adapter is not built yet."
+Codex adapters in `src/adapters/claude/adapter.ts` and `src/adapters/codex/adapter.ts` can so far
+find their program, read its version and sign-in state, name its login command, and declare their
+capabilities, policy and hooks; `src/adapters/program.ts` holds the part they share. Starting
+workers and reading availability come in later tasks of the same change; until then `start()` and
+`availability()` fail with a "not built yet" message. `docs/accounts.md` describes the accounts
+that use these adapters.
 
 ## Words used on this page
 
@@ -289,3 +293,67 @@ Facts that relay writes to the job's event log, such as the commands an agent ra
 GitHub, Slack and AWS keys, and JSON web tokens), the value after `Bearer `, the value of a
 `NAME=value` pair whose name contains `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY` or `APIKEY`, and the
 value after `--password`, `--token` and `--api-key`, with `[redacted]`.
+
+## Finding the program and its version
+
+Each adapter finds its program in `RELAY_CLAUDE_BIN` or `RELAY_CODEX_BIN` when set, otherwise on
+`PATH`, and always starts it by its absolute path. `detect()` runs `claude --version` or
+`codex --version` and reads `2.1.282 (Claude Code)` or `codex-cli 0.160.0`. It compares the version
+with the oldest version in the adapter's `tested-versions.json` (`src/adapters/claude/` and
+`src/adapters/codex/`) and marks an older one as too old; newer versions are accepted, because both
+tools release almost every day and the contract tests catch format changes. `relay providers`
+prints the result:
+
+```
+claude   Claude Code 2.1.282   headless (claude -p), interactive
+codex    Codex 0.160.0         headless (app server, codex exec fallback), interactive
+```
+
+`relay providers --json` prints each provider's `id`, `installed`, `version` and its transports with
+their capabilities.
+
+`authStatus()` runs `claude auth status --json` or `codex login status` with the account's
+environment. Only the exit code counts: 0 means signed in. relay also keeps the method the provider
+names (Claude Code's `authMethod`, or "ChatGPT" or "API key" in Codex's output) when it looks like a
+method name, and discards the rest of the output, which can hold an email address.
+
+## Provider policies
+
+Each adapter carries a dated record of what relay may do under the provider's terms, in
+`src/adapters/claude/policy.toml` and `src/adapters/codex/policy.toml`. The fields are:
+
+| Field | Meaning |
+|---|---|
+| `provider`, `display_name` | The provider's ID and the name relay shows. |
+| `checked_on` | The date someone last read the terms below, such as `"2026-10-07"`. |
+| `max_age_days` | After how many days the notes count as out of date: a whole number from 1 to 90. |
+| `sign_in_methods` | The ways an account can sign in. |
+| `unattended_subscription_use` | `allowed`, `api_key_only` or `unclear`. |
+| `same_provider_automatic_switching` | Always `off` in this version. |
+| `usage_signals` | What relay reads to learn about usage limits. |
+| `summary`, `unclear` | relay's reading of the terms, and what they leave open. |
+| `[[terms]]` | At least one `title` and `url` of the provider's terms. |
+
+```mermaid
+flowchart LR
+  toml["policy.toml<br/>(claude, codex)"] -->|"imported when relay is built"| load["src/policies/load.ts<br/>parsePolicy in schema.ts"]
+  load -->|"invalid: the module throws,<br/>tests and build fail"| fail["build refused"]
+  load --> show["relay policy show &lt;provider&gt;"]
+  load --> add["relay account add:<br/>summary, date and links<br/>before the question"]
+  load --> check["scripts/check-policies.ts:<br/>exit 1 when older than max_age_days"]
+  switching["src/policies/switching.ts<br/>mayAutoSwitch(from, to)"] -->|"same provider"| no["no, with the reason"]
+```
+
+The diagram shows where the policy files go. relay imports both files when it is built and checks
+them with `parsePolicy` in `src/policies/schema.ts`; a missing or invalid field, such as a missing
+`checked_on`, stops the tests with a message like "src/adapters/codex/policy.toml: checked_on is
+required.". `relay policy show <provider>` prints the whole record, adding "This may be out of
+date." when `checked_on` is older than `max_age_days`, and `relay account add` prints the summary,
+the date and the links before it asks. `bun run scripts/check-policies.ts` lists every stale policy,
+and every policy whose `checked_on` is a date that has not begun yet in any time zone, and exits 1.
+A future date would keep a policy from counting as stale. CI runs the script in a job of its own,
+so the terms are read again before a release, and a stale date does not stop the build, the
+release-binary check or the smoke test. relay itself does not refuse a future date when it starts,
+so that a computer with a wrong clock can still run it.
+`mayAutoSwitch(from, to)` in `src/policies/switching.ts` answers no, with the reason, whenever both
+accounts belong to the same provider, and no setting changes that.

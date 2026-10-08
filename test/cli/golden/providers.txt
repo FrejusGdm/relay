@@ -1,13 +1,14 @@
 Usage
-  relay providers
+  relay providers [--json]
 
 Show which agent programs are installed.
+relay runs each program's --version and lists what relay can do with it.
 
 Examples
   relay providers
+  relay providers --json
 
 Options
+      --json               Print the result as JSON
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.

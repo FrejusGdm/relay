@@ -7,7 +7,7 @@ Each provider's terms limit what relay may do with an account. This capability m
 ## ADDED Requirements
 
 ### Requirement: Every adapter has a policy file
-Each adapter SHALL ship a policy file `src/adapters/<provider>/policy.toml` with `provider`, `display_name`, `checked_on` (a date), `max_age_days`, `sign_in_methods`, `unattended_subscription_use` (`allowed`, `api_key_only` or `unclear`), `same_provider_automatic_switching` (`off`), `usage_signals`, `summary`, `unclear` and at least one `[[terms]]` entry with `title` and `url`. relay SHALL refuse to build when a policy file is missing or invalid.
+Each adapter SHALL ship a policy file `src/adapters/<provider>/policy.toml` with `provider`, `display_name`, `checked_on` (a date), `max_age_days` (a whole number from 1 to 90), `sign_in_methods`, `unattended_subscription_use` (`allowed`, `api_key_only` or `unclear`), `same_provider_automatic_switching` (`off`), `usage_signals`, `summary`, `unclear` and at least one `[[terms]]` entry with `title` and `url`. relay SHALL refuse to build when a policy file is missing or invalid.
 
 #### Scenario: Missing field
 - **WHEN** the Codex policy file has no `checked_on`
@@ -43,11 +43,15 @@ relay SHALL answer "no" whenever any part of relay asks whether it may move a jo
 - **THEN** this rule does not refuse it
 
 ### Requirement: Stale policies are flagged
-`relay policy show` SHALL add "This may be out of date." when `checked_on` is older than `max_age_days` (90), and `bun run scripts/check-policies.ts` SHALL exit 1 listing each stale policy, so that the policies are checked again before a release.
+`relay policy show` SHALL add "This may be out of date." when `checked_on` is older than `max_age_days` (90), and `bun run scripts/check-policies.ts` SHALL exit 1 listing each stale policy and each policy whose `checked_on` has not begun yet in any time zone, so that the policies are checked again before a release. CI SHALL run the script in a job separate from the release build.
 
 #### Scenario: Old policy
 - **WHEN** the clock reads 2027-01-10 and the Claude policy was checked on 2026-10-07
 - **THEN** `relay policy show claude` includes "Last checked 2026-10-07 (95 days ago). This may be out of date." and `bun run scripts/check-policies.ts` exits 1
+
+#### Scenario: Date in the future
+- **WHEN** the clock reads 2026-10-06 09:00 UTC and the Claude policy says `checked_on = "2026-10-07"`
+- **THEN** `bun run scripts/check-policies.ts` prints "src/adapters/claude/policy.toml has checked_on 2026-10-07, a date in the future. Write the date the Claude Code terms were last read." and exits 1
 
 ### Requirement: Changed policies are announced
 When an account's recorded `checked_on` differs from the policy file's current `checked_on`, `relay run` on that account SHALL print one notice line before starting the agent and SHALL then record the new date.

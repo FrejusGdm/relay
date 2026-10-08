@@ -309,6 +309,67 @@ build an adapter registry with it, for example
 searches the program's text for `fake-claude`, `fake-codex` and `RELAY_FAKE_SCENARIO`. It exits 1
 when it finds any of them, so a fake can never ship. CI runs it after each release build.
 
+## The contract suite and fixtures
+
+`bun test test/adapters` runs one shared contract suite on every adapter registered in
+`test/adapters/registry.ts`. `defineAdapterContract(entry)` in `test/adapters/contract.ts` takes the
+provider, its fake program, a factory for the adapter, and for each transport its fixture folder and
+its event mapper, and declares the same checks for each: the session ID comes first, failures carry
+the right reason and reset time, unknown and broken lines are tolerated, interrupt, resume and send
+behave as the declared capabilities say, and the agent gets the right standard input, working
+directory and environment without credential variables or invisible characters. The registry is
+empty until the Claude Code and Codex adapters can start workers.
+
+A fixture is a folder `test/fixtures/providers/<provider>/<transport>/<name>/` with three files:
+`output.jsonl` (the lines the tool printed; for the app server, each message with its direction,
+`{"dir":"server"|"client","msg":…}`), `expected-events.json` (the worker events the adapter's mapper
+must produce, never `exited`) and `meta.json` (`provider`, `transport`, `tool_version`,
+`recorded_at`, `source`, `command`, `redactions`). `test/adapters/fixtures.ts` loads and checks them,
+replays one through a mapper with the clock at `recorded_at` and the time zone UTC, and names the
+fixture and the first event that differs when a replay fails.
+
+Each headless transport needs `normal-turn`, `usage-limit`, `auth-failure`, `interrupted` and
+`resumed`, and the Codex app server also `rate-limits-read` and `hooks-list`. The 17 fixtures in the
+repository today are written from the documented shapes and say `"source": "documentation"`.
+`test/adapters/fakes-match-fixtures.test.ts` runs each fake with a scenario that matches a fixture and
+checks that the fake prints the same kinds of messages with the same fields, so the fakes and the
+fixtures cannot drift apart; once a transport has a mapper, it compares the events instead.
+
+```mermaid
+flowchart LR
+  real["real claude or codex<br/>(RELAY_RECORD=1 only)"] -->|"scripts/record-fixture.ts:<br/>redact, scan for secrets"| fixture["test/fixtures/providers/…<br/>output.jsonl, expected-events.json, meta.json"]
+  docs["documented shapes"] -->|"written by hand"| fixture
+  fixture -->|"replayed through the mapper"| contract["test/adapters/contract.ts"]
+  fake["fake-claude, fake-codex"] -->|"same messages and fields"| fixture
+  versions["tested-versions.json"] -->|"every recorded tool_version listed"| contract
+```
+
+The diagram shows how fixtures are made and used. `RELAY_RECORD=1 bun run scripts/record-fixture.ts
+<provider> <transport> <name>` runs the real program in a temporary git repository with the prompt
+"Create the file hello.txt containing the word hi, then stop.". It replaces the home folder with
+`/home/user`, email addresses and the fields `accountId`, `email`, `organization_id` and
+`account_uuid` with `redacted`, lists each replacement in `meta.json`, and runs the secret scanner;
+a finding stops it with nothing written. Without `RELAY_RECORD=1` it prints that recording uses
+your plan and exits 2. The suite fails when a recorded fixture's `tool_version` is missing from the
+adapter's `tested-versions.json`; the oldest listed version is the oldest relay accepts.
+
+`bun run scripts/check-codex-protocol.ts` runs `codex app-server generate-json-schema` into a
+temporary folder and checks that every method, field and value in
+`src/adapters/codex/protocol-used.json` still exists, printing "Missing in Codex <version>: <entry>"
+for each one that does not and exiting 1. Run it by hand before using relay with a new Codex
+version; `--schema-dir <folder>` checks a folder of schema files instead.
+
+Each entry has one of three forms. `Type.field` needs the field in the definition `Type` or in one
+of its variants. `Type=value` needs the value among the values of `Type` itself, such as
+`TurnStatus=completed`. `Type.field=value` needs the value among the values of that field, such as
+`UserInput.type=text`. A value found only somewhere deeper in the definition does not count. A
+method is written as a value of the field `method` of the message type for its direction:
+`ClientRequest.method=turn/start` for a request relay sends, `ServerNotification.method=turn/started`
+for a notification Codex sends, and `ServerRequest.method=item/fileChange/requestApproval` for a
+request Codex sends to relay. The generated files define many types more than once; the script
+compares the copies without their titles and descriptions and exits 1, naming the type, when two
+copies differ.
+
 ## What is not verified
 
 The fakes follow the formats that Claude Code's and Codex's documentation and Codex's generated

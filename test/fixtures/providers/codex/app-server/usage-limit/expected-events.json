@@ -1,0 +1,31 @@
+[
+  {
+    "kind": "session_started",
+    "providerSessionId": "0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31",
+    "source": "stream",
+    "model": "gpt-6.1-sol",
+    "providerVersion": "0.160.0"
+  },
+  {
+    "kind": "limit_update",
+    "windows": [
+      {
+        "name": "five_hour",
+        "windowMinutes": 300,
+        "usedPercent": 100,
+        "resetsAt": "2026-10-08T15:45:00.000Z",
+        "source": "provider_api"
+      }
+    ],
+    "state": "quota_exhausted",
+    "retryAt": "2026-10-08T15:45:00.000Z",
+    "source": "provider_api"
+  },
+  {
+    "kind": "turn_failed",
+    "reason": "usage_limit",
+    "message": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 3:45 PM.",
+    "source": "provider_api",
+    "retryAt": "2026-10-08T15:45:00.000Z"
+  }
+]

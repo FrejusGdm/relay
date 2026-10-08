@@ -8,10 +8,18 @@ Signing in runs the provider's own login. relay never sees your password or toke
 Examples
   relay account list
   relay account add codex work
+  relay account add claude personal --profile-dir ~/.claude
+  relay account add claude api --api-key-env ANTHROPIC_API_KEY
+  relay account status claude:personal
   relay account login codex:work
+  relay account remove codex:work
 
 Options
+      --profile-dir <dir>  add: use this folder as the profile
+      --api-key-env <VAR>  add: pass this key variable
+      --kind <kind>        add: personal or work
+      --no-login           add: do not sign in now
+      --yes                add, remove: do not ask
+      --json               list, status: print JSON
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.

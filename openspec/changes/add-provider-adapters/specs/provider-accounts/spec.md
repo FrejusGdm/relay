@@ -17,6 +17,10 @@ A person may hold several accounts of the same provider. This capability lets re
 - **WHEN** the login finishes and `claude auth status --json` exits with code 0
 - **THEN** relay prints "Added claude:work.", then "  Profile    ~/.relay/profiles/claude-work" and "  Signed in  yes (claude.ai)"
 
+#### Scenario: Account added again under an old name
+- **WHEN** `claude:work` was removed and the person adds `claude:work` again
+- **THEN** relay writes a new `account.json` for it and deletes the old `availability.json`, so nothing recorded for the earlier account carries over
+
 #### Scenario: The person says no
 - **WHEN** the person answers anything other than `y` or `yes`
 - **THEN** relay prints "Nothing changed." and exits with code 7, and no folder or setting is created
@@ -112,7 +116,7 @@ Every agent relay starts SHALL also receive `RELAY_JOB` (the job ID), `RELAY_TAR
 - **THEN** relay prints "codex:personal is signed in." and exits with code 0
 
 ### Requirement: Removing an account
-`relay account remove <account> [--yes]` SHALL remove the account's table from `config.toml` after confirmation, and SHALL refuse while a project allow list names it. It SHALL NOT delete or change the profile folder or anything inside it.
+`relay account remove <account> [--yes]` SHALL remove the account's table from `config.toml` after confirmation, and SHALL refuse while a project allow list names it or while `[defaults]`, `[t3]` or `[limits]` names it. It SHALL NOT delete or change the profile folder or anything inside it.
 
 #### Scenario: Profile folder is kept
 - **WHEN** the person removes `claude:work` and confirms
@@ -122,9 +126,25 @@ Every agent relay starts SHALL also receive `RELAY_JOB` (the job ID), `RELAY_TAR
 - **WHEN** a `[[projects]]` entry allows `claude:work`
 - **THEN** relay prints "claude:work is allowed on /Users/josue/app. Remove it from that project's allow list in config.toml first." and exits with code 2
 
+#### Scenario: Still named in other settings
+- **WHEN** `[defaults]` sets `account = "claude:work"`, or a `[t3]` or `[limits]` entry names `claude:work`
+- **THEN** relay prints "claude:work is named in [defaults], [t3] or [limits] in config.toml. Remove it there first." and exits with code 2
+
 ### Requirement: Writing config.toml safely
-relay SHALL change `config.toml` only by appending whole tables or removing one whole `[accounts."<id>"]` table, keeping every other byte, creating the file with mode 0600 when missing, writing a temporary file and renaming it, and restoring the previous content if the result does not pass validation.
+relay SHALL change `config.toml` only by appending whole tables or removing one whole `[accounts."<id>"]` table, keeping every other byte, creating the file with mode 0600 when missing, writing a temporary file and renaming it, and restoring the previous content if the result does not pass validation. A removed table SHALL end at its last setting, so comments and blank lines before the next table stay. relay SHALL hold the lock `RELAY_HOME/locks/config.lock` from reading the file to renaming the new one, and SHALL refuse to change a `config.toml` that is a symbolic link.
 
 #### Scenario: Comments survive
 - **WHEN** `config.toml` holds the person's comments and `relay account add codex personal` succeeds
 - **THEN** every line that was in the file before is still there, in the same order, followed by the new account table
+
+#### Scenario: A comment above the next table
+- **WHEN** `config.toml` holds `[accounts."claude:work"]`, then a blank line, the comment `# limits: keep me` and `[defaults]`, and the person removes `claude:work`
+- **THEN** the comment and `[defaults]` are still there
+
+#### Scenario: Two changes at once
+- **WHEN** two `relay account add` commands for different accounts change `config.toml` at the same moment
+- **THEN** the second waits for the first, and `config.toml` holds both accounts; a command that cannot take the lock within 2 seconds prints "Another relay command is changing config.toml. Try again when it finishes." and exits with code 6
+
+#### Scenario: Linked config.toml
+- **WHEN** `config.toml` is a symbolic link to a file in a dotfiles folder and the person adds an account
+- **THEN** relay prints "relay: <path> is a symbolic link, and relay does not change config.toml through a link. Make the change in the file it leads to yourself, or replace the link with that file and try again.", exits with code 78, and leaves the link and the file unchanged

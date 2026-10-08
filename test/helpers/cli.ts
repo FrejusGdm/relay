@@ -19,6 +19,8 @@ export async function runRelayInProcess(
     env?: Record<string, string>;
     relayHome?: string;
     stdin?: string;
+    // With answers, standard input acts as a terminal that gives these lines one by one.
+    answers?: string[];
     commands?: CommandDef[];
     uid?: number;
     cwd?: string;
@@ -40,10 +42,11 @@ export async function runRelayInProcess(
     io: {
       out: (text) => (stdout += text),
       err: (text) => (stderr += text),
-      stdinIsTTY: false,
+      stdinIsTTY: options.answers !== undefined,
       readStdinToEnd: async () => options.stdin ?? "",
       isTerminal: options.terminal !== undefined,
       readLine: async () => {
+        if (options.answers !== undefined) return options.answers.shift() ?? null;
         options.terminal?.beforeAnswer?.();
         return options.terminal?.answer ?? null;
       },

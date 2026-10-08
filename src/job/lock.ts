@@ -1,5 +1,6 @@
 // Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
-// command that writes, and the short events lock, held while one event is appended. A lock file
+// command that writes, the short events lock, held while one event is appended, and the config
+// lock, held while config.toml is changed (add-provider-adapters, design decision 10). A lock file
 // holds its owner as JSON. It is written to a temporary file first and then linked into place,
 // which fails when the lock exists, so a reader never sees half an owner.
 import { randomBytes } from "node:crypto";
@@ -18,7 +19,7 @@ interface Owner {
 }
 
 const RETRY_MS = 10;
-const EVENTS_WAIT_MS = 2000;
+const SHORT_WAIT_MS = 2000;
 const RECOVERY_STALE_MS = 10_000;
 
 function lockPath(relayHome: string, jobId: string, suffix: "lock" | "events.lock"): string {
@@ -52,7 +53,7 @@ export function takeJobLock(relayHome: string, jobId: string, command: string): 
 // Runs `action` while holding the events lock, trying every 10 ms for up to 2 seconds.
 export async function withEventsLock<T>(relayHome: string, jobId: string, action: () => T): Promise<T> {
   const path = lockPath(relayHome, jobId, "events.lock");
-  const deadline = Date.now() + EVENTS_WAIT_MS;
+  const deadline = Date.now() + SHORT_WAIT_MS;
   for (;;) {
     const release = tryLock(path, "append-event");
     if (release !== null) {
@@ -71,6 +72,31 @@ export async function withEventsLock<T>(relayHome: string, jobId: string, action
       ]);
     }
     await Bun.sleep(RETRY_MS);
+  }
+}
+
+// Runs `action` while holding $RELAY_HOME/locks/config.lock, trying every 10 ms for up to 2
+// seconds. The wait blocks, because the change to config.toml that it protects is synchronous.
+export function withConfigLock<T>(relayHome: string, action: () => T): T {
+  const dir = join(relayHome, "locks");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, "config.lock");
+  const deadline = Date.now() + SHORT_WAIT_MS;
+  for (;;) {
+    const release = tryLock(path, "edit-config");
+    if (release !== null) {
+      try {
+        return action();
+      } finally {
+        release();
+      }
+    }
+    const owner = readOwner(path);
+    if (owner !== null && owner !== "gone" && isStale(owner.parsed)) recoverStale(path, owner.text);
+    if (Date.now() >= deadline) {
+      throw new CommandError(ExitCode.Busy, ["Another relay command is changing config.toml. Try again when it finishes."]);
+    }
+    Bun.sleepSync(RETRY_MS);
   }
 }
 
