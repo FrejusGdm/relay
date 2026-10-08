@@ -6,12 +6,13 @@ socket (a special file that only programs on the same computer can connect to). 
 network port. The behaviour comes from the OpenSpec change `add-daemon-api-and-status`
 (`openspec/changes/add-daemon-api-and-status/`).
 
-Today the daemon starts, stops, keeps to one copy per relay folder, checks every connection,
-keeps an index of jobs, workers, checkpoints and accounts in SQLite, follows the job files as
-commands change them, answers the read endpoints and the live event stream that `docs/api.md`
-describes, and receives the agents' hook events (`docs/hooks.md`, "How hook events reach the
-daemon"). The checkpoint and switch endpoints come with the later task groups of the change, and
-each one extends this page.
+The daemon starts, stops, keeps to one copy per relay folder, checks every connection, keeps an
+index of jobs, workers, checkpoints and accounts in SQLite, follows the job files as commands
+change them, answers the read endpoints and the live event stream that `docs/api.md` describes,
+and receives the agents' hook events (`docs/hooks.md`, "How hook events reach the daemon"). It also
+saves checkpoints and switches jobs when a client asks, with the same engines as `relay
+checkpoint` and `relay switch`, and runs the agents that such a switch starts. `relay run` and
+`relay switch` start it when it is not running.
 
 ## Where its files are
 
@@ -28,6 +29,7 @@ each one extends this page.
   spool/hooks.<pid>.draining     the spool while a starting daemon reads it
   logs/daemon.log                the daemon's log, JSON lines, 10 MB x 5 files
   logs/daemon.stderr.log         what the detached daemon prints, such as a crash trace
+  logs/workers/<job>-<worker>.log   the output of an agent the daemon started
 ```
 
 On Linux, when `RELAY_HOME` is not set and `XDG_RUNTIME_DIR` is, the runtime directory is
@@ -74,6 +76,21 @@ $ relay daemon stop
 relay daemon stopped
 ```
 
+When the daemon runs agents that it started itself, through a switch that a client asked for,
+stopping it stops them too, so the command refuses and names them:
+
+```
+$ relay daemon stop
+relay daemon is running 1 agent (codex:personal on job 3f9a2c1d). Stopping the daemon stops it too. Run relay daemon stop --force to continue.
+$ relay daemon stop --force
+relay daemon stopped
+```
+
+With `--force`, the daemon stops each such agent the way `relay run` does on `SIGTERM`, waits up
+to 30 seconds for it to end, and records a `worker_ended` event with `end_reason`
+`relay_stopped` in the job's `.relay/events.jsonl`. Agents that run under `relay run` in a
+terminal belong to that command, so they never make `relay daemon stop` refuse.
+
 It prints `relay daemon is not running` and exits 0 when there is nothing to stop. It sends the
 signal only to a process that both `daemon.pid` and the daemon's own answer name, so it never
 stops an unrelated process that reuses an old process ID. On Linux it also checks, just before the
@@ -87,7 +104,7 @@ daemon status.` and exits 1. When a process holds the daemon lock but does not a
 second, it sends nothing and prints `relay daemon (pid 4121) is not responding. Stop it with:
 kill 4121`, so you can decide.
 
-`relay daemon restart` runs `stop`, then `start`.
+`relay daemon restart` runs `stop`, then `start`, and passes `--force` on to `stop`.
 
 `relay daemon run` runs the daemon in the foreground of the terminal, which helps when you want
 to watch it. Control-C stops it cleanly. It prints nothing while it runs; its log is in
@@ -106,8 +123,11 @@ flowchart TD
   lock -- yes --> stale["Remove a socket and a pid file<br/>left by a daemon that crashed"]
   stale --> listen["Listen on relay.sock (mode 0600),<br/>write daemon.pid, log daemon_started"]
   listen --> wait["Answer requests until SIGTERM or SIGINT"]
-  wait --> stopping["Stop accepting connections,<br/>let open requests finish"]
-  stopping --> clean["Remove relay.sock and daemon.pid,<br/>log daemon_stopped, exit 0"]
+  wait --> stopping["Stop accepting connections,<br/>send shutdown to event streams"]
+  stopping --> operations["Wait for running checkpoints and switches<br/>(a note in the log after 30 seconds,<br/>never cut off in the middle)"]
+  operations --> agents["Stop the agents the daemon started,<br/>wait up to 30 seconds, record worker_ended"]
+  agents --> requests["Let open requests finish"]
+  requests --> clean["Remove relay.sock and daemon.pid,<br/>log daemon_stopped, exit 0"]
 ```
 
 The diagram shows how the daemon starts and stops. The lock on `daemon.lock` decides which
@@ -115,7 +135,9 @@ daemon runs: the operating system gives it to one process only and takes it back
 process ends, even after a crash or `kill -9`. Two daemons started at the same moment therefore
 end with exactly one running, and the other exits with code 0. Because only the lock holder
 touches the socket and the pid file, a new daemon can safely remove the ones a crashed daemon
-left behind. `relay daemon status` and `relay daemon stop` use the same lock to tell whether a
+left behind. When it stops, the daemon first refuses new connections, so a client that connects
+then gets "connection refused", and lets a checkpoint or switch that is running finish and answer:
+a git command is never cut off. `relay daemon status` and `relay daemon stop` use the same lock to tell whether a
 daemon is alive, so they never trust a pid file alone. They never take the lock on Linux: they
 read `/proc/locks`, which lists each lock with the process that holds it, and check that this
 process has `daemon.lock` open. macOS has no such list, so there they take the lock for an instant
@@ -169,11 +191,78 @@ You can talk to the daemon yourself with `curl`:
 
 ```
 $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/version
-{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","hooks"],"agents_running":[]}
+{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","jobs.checkpoint","jobs.switch","hooks"],"agents_running":[]}
 ```
 
 `capabilities` lists the groups of endpoints the daemon offers. Clients check it, not the version
 number, before they use an endpoint. `docs/api.md` describes every endpoint.
+
+## Starting on demand
+
+```mermaid
+flowchart TD
+  cmd["relay run or relay switch,<br/>after its checks, before it starts an agent"] --> ask{"Does GET /v1/version answer<br/>within 300 ms?"}
+  ask -- yes --> same{"Same version as the command?"}
+  same -- no --> notice["Print once: The relay daemon is running version x;<br/>this command is version y. Restart it with: relay daemon restart"]
+  same -- yes --> go["Start the agent"]
+  notice --> go
+  ask -- no --> spawn["Start relay daemon run detached, in its own session,<br/>standard input /dev/null, output to logs/daemon.stderr.log"]
+  spawn --> poll{"Does it answer within 3 seconds?"}
+  poll -- yes --> go
+  poll -- no --> warn["relay could not start its background service.<br/>Details are in ~/.relay/logs/daemon.log."]
+  warn --> go
+```
+
+The diagram shows how the commands that start agents make sure the daemon runs, so the agent's
+hooks have a receiver. The daemon they start is not their child in any way that matters: it leads
+its own session, so it keeps running after the command and the terminal end. When it cannot start,
+for example because the runtime directory is not private, the command says so and goes on: `relay
+run` and `relay switch` work without the daemon, and the hooks then write to the spool, which the
+daemon reads when it next starts. `relay status` never starts the daemon. Under the test preload
+(`RELAY_TEST=1`), the commands start a daemon only when a test asks for one with
+`RELAY_TEST_START_DAEMON=1`, so the many tests of `relay run` and `relay switch` leave no daemon
+behind.
+
+## Checkpoints and switches through the daemon
+
+```mermaid
+flowchart TD
+  req["POST /v1/jobs/{job}/checkpoint or /switch<br/>(body: a message, or an account and confirm_new_provider)"] --> job{"Is the job in the index,<br/>and its folder still there?"}
+  job -- no --> nojob["404 job_not_found or 409 project_missing"]
+  job -- yes --> one{"Is another checkpoint or switch<br/>of this job running in the daemon?"}
+  one -- yes --> busy["409 operation_in_progress"]
+  one -- no --> place{"Is the folder still the job's repository,<br/>with this job in .relay/state.json?"}
+  place -- no --> nojob
+  place -- checkpoint --> save["saveCheckpoint, kind manual,<br/>under the job lock"]
+  save --> created["201 with the checkpoint"]
+  place -- switch --> pre["The switch preflight of relay switch,<br/>without a terminal"]
+  pre -- "new account, not confirmed" --> confirm["409 confirmation_required<br/>(the question as the message)"]
+  pre -- "agents run in a terminal,<br/>or another question" --> terminal["409 interactive_start_required"]
+  pre -- "relay run holds the agent" --> handover["Hand the switch to that relay run,<br/>as relay switch does"]
+  pre -- "no relay process holds it" --> perform["performHandoff in the daemon;<br/>the next agent starts headless<br/>as a child of the daemon"]
+  handover --> done["200 with the handoff and the new worker"]
+  perform --> done
+```
+
+The diagram shows what happens to a checkpoint or switch request. Both use the engines of the
+command-line tool, through `src/daemon/engines.ts`, so the daemon has no second implementation of
+either. A request names only the job, a message, an account and `confirm_new_provider`; the project
+folder always comes from the index, and the daemon checks that the folder is still the job's
+repository before an engine runs. The daemon runs one operation per job at a time, and the engines
+take the job lock as in a terminal, so a `relay checkpoint` or `relay switch` running at the same
+moment makes the request fail with `409 operation_in_progress` too.
+
+A switch through the daemon is `relay switch` without a terminal. Every question the switch would
+ask in a terminal is refused before anything is stopped, except one: the first handoff to an
+account that is not on the project's allow list, which the client answers with
+`confirm_new_provider: true` after it showed the person the question. relay records that answer
+with `"how": "api"`. Jobs whose agents run in the person's terminal get
+`409 interactive_start_required`, because the daemon has no terminal to start the next agent in.
+When a `relay run` in a terminal holds the job's agent, the daemon hands the switch to it, and the
+next agent runs under that command. Otherwise the daemon runs the switch, and the next agent runs
+headless under the daemon: it is listed in `agents_running`, its output goes to
+`logs/workers/<job>-<worker>.log`, `relay switch` from a terminal hands later switches to the
+daemon the same way, and `relay daemon stop` refuses without `--force` while it runs.
 
 ## The index and how it stays current
 
@@ -296,13 +385,17 @@ $ jq -c 'select(.level == "warn" or .level == "error")' ~/.relay/logs/daemon.log
 The main messages are `daemon_started` (with `socket` and `schema_version`), `daemon_stopping`
 (with the `signal`), `daemon_stopped`, `daemon_refused` (with the `reason` printed on standard
 error), `peer_rejected` (a warning with the connecting `uid`), `Rebuilt the index from <n>
-projects.`, `job_rebuilt`, `project_indexed`, `invalid_event_line` and `config_reloaded` (after a
-`SIGHUP`, which makes the daemon read the accounts in `config.toml` again). The log never holds environment
+projects.`, `job_rebuilt`, `project_indexed`, `invalid_event_line`, `config_reloaded` (after a
+`SIGHUP`, which makes the daemon read the accounts in `config.toml` again),
+`operation_still_running` (a checkpoint or switch still runs 30 seconds after a stop signal) and
+`worker_still_running` (an agent did not end within 30 seconds of the stop). The log never holds environment
 variables, request bodies or headers, or hook fields outside the hook allow list.
 
 ## The security limit
 
 The socket keeps out web pages and other users, but not programs that run as you. Any program
 running under your user account can connect to the socket and use the API, just as it can read
-your files. No local API can protect against such a program, so do not run software you do not
+your files. Such a program can also ask for a checkpoint or a switch, and can answer the question
+about a new account with `confirm_new_provider`, just as it could run `relay switch --yes`; relay
+records that answer as given through the API. No local API can protect against such a program, so do not run software you do not
 trust under your account (`docs/research/security.md`, section 1).

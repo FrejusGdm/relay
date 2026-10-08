@@ -73,6 +73,9 @@ export async function startDaemon(opts: StartOptions): Promise<StartResult> {
 // sure a daemon answers, so the agent's hooks have a receiver. When none can be started, it says
 // so once and returns false; the command goes on without the daemon.
 export async function ensureDaemon(opts: StartOptions): Promise<boolean> {
+  // Under the test preload (RELAY_TEST=1) only a test that sets RELAY_TEST_START_DAEMON=1 gets a
+  // daemon, so the many tests of relay run and relay switch do not each leave one running.
+  if (process.env.RELAY_TEST === "1" && opts.env.RELAY_TEST_START_DAEMON !== "1") return true;
   try {
     const result = await startDaemon(opts);
     if (result.state === "running" || result.state === "started") return true;

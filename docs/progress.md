@@ -128,15 +128,17 @@ Tasks 1.5, 2.3 and 3.5 wait for `relay run` (pull request #19). Task groups 5 to
 | 4. Live state in SQLite | 5 | 0 |
 | 5. Read endpoints | 2 | 0 |
 | 6. The event stream | 1 | 0 |
-| 7. Checkpoint and switch through the API | 0 | 2 |
-| 8. Provider hooks | 0 | 3 |
-| 9. Starting the daemon from the command-line tool | 0 | 2 |
-| 10. relay status | 0 | 3 |
-| 11. Integration check | 0 | 1 |
+| 7. Checkpoint and switch through the API | 2 | 0 |
+| 8. Provider hooks | 3 | 0 |
+| 9. Starting the daemon from the command-line tool | 2 | 0 |
+| 10. relay status | 3 | 0 |
+| 11. Integration check | 1 | 0 |
 
-Pull request #18 builds task groups 9 and 10. Its description says tasks 9.1 and 9.2 stay open
-until `relay run` and `relay switch` exist. Task groups 7, 8 and 11 are not in a pull request yet;
-task group 7 needs the switch engine of `add-relay-switch`.
+Update: task groups 8 and 10 are on `main`. The pull request "feat: checkpoint and switch through
+the daemon, and the integration check" builds task groups 7, 9 and 11, the last ones of the change:
+`POST /v1/jobs/{job}/checkpoint` and `POST /v1/jobs/{job}/switch` through the engines of `relay
+checkpoint` and `relay switch`, the daemon started by `relay run` and `relay switch`, and the
+end-to-end test of the whole path.
 
 ### add-handoff-evaluation (phase 6): being built
 

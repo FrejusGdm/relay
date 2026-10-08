@@ -12,6 +12,14 @@ export interface DaemonVersion {
   daemon_version: string;
   pid: number;
   started_at: string;
+  // The headless agents the daemon started and that still run (design.md decision 7, step 4).
+  agents_running: RunningAgent[];
+}
+
+export interface RunningAgent {
+  worker: string;
+  target: string;
+  job: string;
 }
 
 // A runtime directory or socket that another user could have placed. The message is written to
@@ -37,7 +45,7 @@ export async function getVersion(runDir: string, timeoutMs: number): Promise<Dae
   const response = await request(runDir, "/v1/version", timeoutMs);
   try {
     if (response?.status !== 200) return null;
-    const body = (await response.json()) as Partial<DaemonVersion> & { api?: unknown };
+    const body = (await response.json()) as Partial<Omit<DaemonVersion, "agents_running">> & { api?: unknown; agents_running?: unknown[] };
     if (
       body?.api !== "v1" ||
       typeof body.daemon_version !== "string" ||
@@ -47,10 +55,16 @@ export async function getVersion(runDir: string, timeoutMs: number): Promise<Dae
     ) {
       return null;
     }
-    return { daemon_version: body.daemon_version, pid: body.pid!, started_at: body.started_at };
+    const agents = Array.isArray(body.agents_running) ? body.agents_running.filter(isRunningAgent) : [];
+    return { daemon_version: body.daemon_version, pid: body.pid!, started_at: body.started_at, agents_running: agents };
   } catch {
     return null;
   }
+}
+
+function isRunningAgent(value: unknown): value is RunningAgent {
+  const agent = value as Partial<RunningAgent> | null;
+  return typeof agent?.worker === "string" && typeof agent.target === "string" && typeof agent.job === "string";
 }
 
 // GET /v1/jobs: the project root of each indexed job, or null without an answer. Throws

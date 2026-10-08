@@ -1,7 +1,7 @@
 // relay daemon <start|stop|restart|status|run> (design.md decision 7, the daemon-lifecycle spec).
 // Whether a daemon runs is decided by its lock: a held daemon.lock means a daemon process is alive.
 // stop signals only the process that daemon.pid and the daemon's own answer name and, on Linux,
-// that holds the lock.
+// that holds the lock. Without --force, stop refuses while the daemon runs agents it started.
 import { join } from "node:path";
 import { checkRuntimeDir, getVersion, UntrustedRuntime } from "../../client/api-client";
 import { couldNotStartMessage, startDaemon } from "../../client/ensure-daemon";
@@ -93,6 +93,15 @@ export async function stopDaemon(ctx: CommandContext, quiet = false): Promise<nu
   if (answer === null) return notResponding(ctx, runDir);
   if (file === null || file.pid !== answer.pid) {
     ctx.io.err("relay found a pid file that does not match the running daemon. Run relay daemon status.\n");
+    return ExitCode.Failed;
+  }
+  const agents = answer.agents_running;
+  if (agents.length > 0 && ctx.values.force !== true) {
+    const list = agents.map((agent) => `${printable(agent.target)} on job ${printable(agent.job)}`).join(", ");
+    ctx.io.err(
+      `relay daemon is running ${agents.length} ${agents.length === 1 ? "agent" : "agents"} (${list}). ` +
+        `Stopping the daemon stops ${agents.length === 1 ? "it" : "them"} too. Run relay daemon stop --force to continue.\n`,
+    );
     return ExitCode.Failed;
   }
   // The lock is checked again just before the signal. On Linux relay also checks that the process

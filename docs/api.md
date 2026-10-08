@@ -1,8 +1,8 @@
 # The local API
 
 The relay daemon answers HTTP requests with JSON on a private Unix socket, never on a network
-port. relay's own commands use it, and the Mac app will. This page lists every endpoint built so
-far, with a `curl` example and a sample answer. `docs/daemon.md` explains the socket, the checks on
+port. relay's own commands use it, and the Mac app will. This page lists every endpoint, with a
+`curl` example and a sample answer. `docs/daemon.md` explains the socket, the checks on
 every connection and how to start the daemon. The design is in
 `openspec/changes/add-daemon-api-and-status/design.md`, decisions 13 to 16.
 
@@ -35,9 +35,9 @@ renamed, so clients must ignore fields they do not know. A client checks `capabi
 | `accounts` | `GET /v1/providers`, `GET /v1/accounts`, `GET /v1/accounts/{target}` |
 | `jobs` | `GET /v1/jobs`, `GET /v1/jobs/{job}`, `.../workers`, `.../checkpoints` |
 | `events.sse` | `GET /v1/events` |
+| `jobs.checkpoint` | `POST /v1/jobs/{job}/checkpoint` |
+| `jobs.switch` | `POST /v1/jobs/{job}/switch` |
 | `hooks` | `POST /v1/hooks/{provider}/{event}` |
-
-Later work adds `jobs.checkpoint` and `jobs.switch`.
 
 ## Endpoints
 
@@ -45,8 +45,13 @@ Later work adds `jobs.checkpoint` and `jobs.switch`.
 
 ```
 $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/version
-{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","hooks"],"agents_running":[]}
+{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","jobs.checkpoint","jobs.switch","hooks"],"agents_running":[]}
 ```
+
+`agents_running` lists the agents that the daemon itself started through `POST
+/v1/jobs/{job}/switch` and that still run, each as `{"worker": "…", "target": "codex:personal",
+"job": "3f9a2c1d"}`. `relay daemon stop` reads it. An agent that runs under `relay run` in a
+terminal is not listed, because it belongs to that command.
 
 `stream_epoch` changes whenever the daemon rebuilds its index. A rebuilt index numbers its events
 from the time it was built, in microseconds since 1970, so its numbers are above every number the
@@ -154,6 +159,65 @@ The daemon keeps the newest 10,000 events for resuming. It reads the events for 
 the client has read what it was sent, so a client that stops reading slows only its own stream. A comment line `: ping` arrives every
 15 seconds. At most 32 streams can be open at once; the next one gets `503 too_many_streams`.
 
+### POST /v1/jobs/{job}/checkpoint
+
+Saves a checkpoint of the job's project, as `relay checkpoint` does, with the kind `manual`. The
+body is empty or `{"message": "…"}`, with a message of at most 500 characters. No other field is
+accepted, so a request cannot name a folder, a file or a command: the daemon takes the project
+folder from its index and checks that it still holds the job.
+
+```
+$ curl -s --unix-socket ~/.relay/run/relay.sock -X POST http://relay/v1/jobs/3f9a2c1d/checkpoint \
+    -d '{"message":"before refactor"}'
+{"checkpoint":{"number":8,"commit":"5be1c0e2…","ref":"refs/relay/jobs/3f9a2c1d/checkpoints/8","kind":"manual","created_at":"2026-10-08T14:05:00.000Z","message":"before refactor"}}
+```
+
+The answer is `201` with the new checkpoint. When nothing changed since the latest checkpoint, the
+answer is `200` with that checkpoint. The checkpoint also reaches the event stream as a
+`checkpoint` event. The checkpoint engine's refusals become `422 secret_found` (a possible secret
+in a file), `422 untracked_secret_file` (an untracked file whose name looks like it holds secrets),
+`409 git_changes_not_accepted` (the git settings or hooks changed since the job started) and `409
+operation_in_progress`, each with the engine's own message.
+
+### POST /v1/jobs/{job}/switch
+
+Hands the job to another account, as `relay switch` does without a terminal. The body is
+`{"target": "codex:personal", "confirm_new_provider": false}`; `confirm_new_provider` may be left
+out and then counts as `false`. No other field is accepted.
+
+```
+$ curl -s --unix-socket ~/.relay/run/relay.sock -X POST http://relay/v1/jobs/3f9a2c1d/switch \
+    -d '{"target":"codex:personal","confirm_new_provider":false}'
+{"error":{"code":"confirmation_required","message":"This sends the repository and the job notes to OpenAI through the account codex:personal. Continue?"}}
+$ curl -s --unix-socket ~/.relay/run/relay.sock -X POST http://relay/v1/jobs/3f9a2c1d/switch \
+    -d '{"target":"codex:personal","confirm_new_provider":true}'
+{"handoff":{"handoff_id":2,"checkpoint_sha":"5be1c0e2…","prompt_path":"…/handoffs/2/prompt.md","to_worker_id":"9b2f71c4","outcome":"started","notes_source":"agent","mismatches":0},"worker":{"id":"9b2f71c4","job_id":"3f9a2c1d","target":"codex:personal","mode":"headless","state":"running","pid":5120,"provider_session_id":"019a…","from_handoff":true,"started_at":"…","ended_at":null,"exit_code":null,"end_reason":null}}
+```
+
+The answer is `200` once the next agent has started: `handoff` is the result that `relay switch
+--json` prints, and `worker` the new worker. A switch can take minutes, because relay may ask the
+outgoing agent for notes and runs the job's checks, so clients wait for the answer.
+
+These answers refuse the switch before anything is stopped:
+
+- `409 confirmation_required`: the account is not on the project's allow list yet, so the switch
+  would send the code to a company it has not gone to before. The message is the question
+  `relay switch` asks in a terminal. Send the request again with `"confirm_new_provider": true` to
+  answer yes; relay records the answer with `"how": "api"`.
+- `409 interactive_start_required`, with the message `This switch needs a terminal. Run relay
+  switch codex:personal in the project.`: the job's agents run in the person's terminal, or the
+  switch asks a question the API cannot answer, such as moving work from a work account to a
+  personal one, or files that tell agents what to do that changed.
+- `409 operation_in_progress`: a checkpoint or another switch of the job is running.
+- `404 target_not_found`, `400 invalid_target` and `400 bad_request` for the account name.
+
+When `relay run` in a terminal holds the job's agent, the daemon hands the switch to it, as `relay
+switch` does, and the next agent runs under that `relay run`. Otherwise the daemon runs the
+switch itself, and the next agent runs as a child of the daemon, with its output in
+`logs/workers/<job>-<worker>.log`, and appears in `agents_running`. Any other refusal of the
+switch engine is `500 engine_failed` with the engine's message, which says where the work is
+saved.
+
 ### POST /v1/hooks/{provider}/{event}
 
 `relay hook` sends each hook event here (`docs/hooks.md`). The body is the event as one line of
@@ -192,14 +256,19 @@ $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/jobs/ffffffff
 | 404 | `job_not_found` | No indexed job has this ID. |
 | 404 | `target_not_found` | No account has this name. |
 | 405 | `method_not_allowed` | The path does not accept this method. |
+| 409 | `operation_in_progress` | A checkpoint or switch of the job is already running, here or in a relay command. |
+| 409 | `interactive_start_required` | The switch needs the person at a terminal. |
+| 409 | `confirmation_required` | The switch sends the code to a new account; the message is the question. |
+| 409 | `git_changes_not_accepted` | The git settings or hooks changed since the job started. |
 | 409 | `project_missing` | The job's project folder is not where relay last saw it. |
 | 411 | `length_required` | A body was sent without `Content-Length`. |
 | 413 | `payload_too_large` | The body is larger than 64 KiB. |
+| 422 | `secret_found` | The checkpoint found a possible secret; the message names the file and line. |
+| 422 | `untracked_secret_file` | An untracked file's name looks like it holds secrets. |
 | 431 | `headers_too_large` | The request head is larger than 16 KiB. |
+| 500 | `engine_failed` | The checkpoint or switch engine stopped; the message is its own. |
 | 500 | `internal_error` | A bug in relay; details are in the daemon log. |
 | 503 | `shutting_down` | The daemon is stopping. |
 | 503 | `too_many_streams` | 32 event streams are already open. |
 | 503 | `hook_queue_full` | 1,000 hook events are already waiting. |
 
-The design lists more codes (`operation_in_progress`, `confirmation_required` and others) for the
-checkpoint and switch endpoints, which later work adds.

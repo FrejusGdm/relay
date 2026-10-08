@@ -7,13 +7,14 @@ import { basename, dirname } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import { appendTable, editConfig, type ConfigContext } from "../core/config/edit";
+import { validateConfig } from "../core/config/validate";
 import type { Account, Project, RelayConfig } from "../core/config/types";
 import { expandPath } from "../core/paths";
 import type { Repository } from "../git/repo";
 import { parseToml } from "../platform/toml";
 import { policyOf } from "../policies/load";
 import { accountLabel } from "./account";
-import { isYes, type AnswerHow, type Asker } from "./ask";
+import { isYes, PersonNeeded, type AnswerHow, type Asker } from "./ask";
 
 interface AllowRequest {
   asker: Asker;
@@ -59,7 +60,7 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
   if (!entry?.allow.includes(to.id)) {
     const question = `This sends the repository and the job notes to ${company} through the account ${to.id}. Continue? [y/N]`;
     const how = asker.preset?.newAccount ?? await answer(asker, question, [`${to.id} has not worked on this project before. Sending the repository to ${company} needs your yes.`, hint], nothingChanged,
-      request.from?.provider === to.provider ? [policyOf(to.provider).ownAccountsNote] : []);
+      request.from?.provider === to.provider ? [policyOf(to.provider).ownAccountsNote] : [], true);
     result.allowed = { account: to.id, company, how };
     result.confirmations.push({ question, how });
   }
@@ -70,13 +71,14 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
     result.confirmations.push({ question: warning, how });
   }
   // Written only once every question has its yes, so a "no" leaves config.toml as it was.
-  if (result.allowed !== null) addToAllowList(request, entry);
+  if (result.allowed !== null) addToAllowList(request);
   return result;
 }
 
 // The lines in `before` (a policy note or a warning) are printed also when --yes answers.
-async function answer(asker: Asker, question: string, needsYes: string[], refusal: string, before: string[]): Promise<AnswerHow> {
-  if (!asker.yes && !asker.terminal) throw new CommandError(ExitCode.NeedsPerson, needsYes);
+// `newAccount` marks the question that the local API's confirm_new_provider answers.
+async function answer(asker: Asker, question: string, needsYes: string[], refusal: string, before: string[], newAccount = false): Promise<AnswerHow> {
+  if (!asker.yes && !asker.terminal) throw new PersonNeeded(ExitCode.NeedsPerson, needsYes, newAccount ? question : null);
   for (const line of before) asker.say(line);
   if (asker.yes) return "flag";
   if (isYes(await asker.ask(question))) return "terminal";
@@ -84,12 +86,17 @@ async function answer(asker: Asker, question: string, needsYes: string[], refusa
 }
 
 // Adds the account to the entry's allow list through the one writer of config.toml, which keeps every
-// other line as it was. A project without an entry gets one, with the outgoing account too.
-function addToAllowList(request: AllowRequest, entry: Project | null): void {
+// other line as it was. A project without an entry gets one, with the outgoing account too. The
+// entry is looked for again in the file as it is under the config lock, because another relay
+// process may have changed it since this one read config.toml: a relay switch that handed the switch
+// to a relay run, or the daemon, has already added the account.
+function addToAllowList(request: AllowRequest): void {
   const { to, configContext } = request;
   editConfig(
     configContext,
     (text) => {
+      const entry = projectEntry(validateConfig(parseToml(text), configContext).config, request.repo);
+      if (entry?.allow.includes(to.id)) return text;
       if (entry === null) {
         const accounts = [...(request.from === null ? [] : [request.from.id]), to.id].map((id) => JSON.stringify(id));
         return appendTable(text, `[[projects]]\npath = ${JSON.stringify(request.repo.worktreeRoot)}\nallow = [${accounts.join(", ")}]\n`);

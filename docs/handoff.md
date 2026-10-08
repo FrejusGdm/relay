@@ -284,7 +284,9 @@ of `config.toml`, which keeps every other line. A second account of the same pro
 the provider's note on moving work between one's own accounts. A move from an account marked
 `kind = "work"` to one marked `personal` asks every time. Without a terminal, relay waits for no
 answer and needs `--yes`, which answers only relay's own questions and is recorded as given by the
-flag.
+flag. A switch through the daemon's API (`docs/api.md`) answers only the first of these questions,
+with `confirm_new_provider`, recorded as `"how": "api"`; every other question makes it answer
+`409 interactive_start_required`.
 
 ## What relay cannot protect against
 
@@ -300,7 +302,8 @@ flag.
 - A program that runs as the same user can edit `config.toml`, `handoff-settings.json` and every
   other file relay keeps, and so can add an account to the allow list or change the checks.
 - `--yes` used by a script, or by an agent with a shell, approves a new account without the person.
-  relay records such answers with `"how": "flag"`.
+  relay records such answers with `"how": "flag"`. A program that sends `confirm_new_provider` to
+  the daemon's socket can do the same; relay records it with `"how": "api"`.
 - Checks run code that agents wrote, outside any sandbox, as the person. That is what the person
   would otherwise do by hand; relay only limits their time and their environment.
 - The claim rules are simple and miss most false claims; the next agent checks the rest and writes

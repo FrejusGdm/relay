@@ -3,12 +3,13 @@
 // Start-up: private runtime directory, the daemon lock, removal of a stale socket and pid file,
 // the index (rebuilt from the files when relay.db is missing, damaged or old), the API listener,
 // the pid file, then following the job files. Shutdown on SIGTERM or SIGINT: stop accepting
-// connections, end the event streams with a shutdown event, let open requests finish and queued
-// hook events be processed, checkpoint the database's write-ahead log, remove the socket and the
-// pid file, release the lock.
-// Operations and headless workers join these sequences in later task groups.
+// connections, end the event streams with a shutdown event, let running checkpoints and switches
+// finish, stop the headless agents the daemon started, let open requests finish and queued hook
+// events be processed, checkpoint the database's write-ahead log, remove the socket and the pid
+// file, release the lock.
 import { chmodSync, lstatSync, rmSync, unlinkSync } from "node:fs";
 import { createRouter } from "../api/router";
+import { actionRoutes } from "../api/routes/actions";
 import { accountRoutes } from "../api/routes/accounts";
 import { eventRoutes } from "../api/routes/events";
 import { hookRoutes } from "../api/routes/hooks";
@@ -27,6 +28,8 @@ import { openDatabase, SCHEMA_VERSION } from "../state/db";
 import { buildIndex, syncTargets } from "../state/index-builder";
 import { readProjects } from "../state/projects-list";
 import { Follower } from "./follow";
+import { Operations } from "./operations";
+import { HeadlessWorkers } from "./workers";
 import { openDaemonLog } from "./log";
 import { checkSocketPathLength, DaemonStartError, prepareRuntimeDir, removeStaleSocket, runtimeDir, socketPath } from "./paths";
 import { pidPath, readPidFile, removeOwnPidFile, takeDaemonLock, writePidFile } from "./singleton";
@@ -110,12 +113,16 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     const follower = new Follower({ db, relayHome: opts.relayHome, stream, log });
     const hooks = new HookQueue({ db, relayHome: opts.relayHome, homedir: opts.homedir, stream, log, catchUp: () => follower.check() });
     const spool = new SpoolDrain({ relayHome: opts.relayHome, queue: hooks, log });
+    const operations = new Operations();
+    const workers = new HeadlessWorkers(log);
+    const engines = { relayHome: opts.relayHome, homedir: opts.homedir, env: opts.env, workers };
     const started_at = new Date().toISOString();
     const router = createRouter([
-      versionRoute({ pid: process.pid, started_at, schema_version: SCHEMA_VERSION }, db),
+      versionRoute({ pid: process.pid, started_at, schema_version: SCHEMA_VERSION }, db, () => workers.running()),
       ...providerRoutes(db),
       ...accountRoutes(db),
       ...jobRoutes(db),
+      ...actionRoutes({ db, operations, engines, catchUp: () => follower.check() }),
       ...eventRoutes(stream),
       ...hookRoutes(hooks, () => spool.poke()),
     ]);
@@ -128,7 +135,10 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
 
     const signal = await stopSignal;
     log.info("daemon_stopping", { signal });
+    server.refuse();
     stream.shutdown();
+    await operations.finish(log);
+    await workers.stopAll();
     await server.stop();
     await spool.stop();
     await hooks.idle();
@@ -154,6 +164,9 @@ function nextStopSignal(onHangup: () => void): Promise<NodeJS.Signals> {
     }
     process.removeAllListeners("SIGHUP");
     process.on("SIGHUP", onHangup);
+    // relay switch signals the process that holds a job's agent with SIGUSR1 (src/run/control.ts).
+    // A job supervisor in the daemon listens for it; without one, the signal must not end the daemon.
+    process.on("SIGUSR1", () => {});
   });
 }
 

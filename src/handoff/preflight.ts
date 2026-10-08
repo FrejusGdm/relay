@@ -18,7 +18,7 @@ import { checkAgentReady } from "../run/ready";
 import { readWorkerRecords, type WorkerRecord } from "../run/worker-record";
 import { accountLabel, resolveAccount } from "./account";
 import { checkAllowList } from "./allow-list";
-import type { AnswerHow, Asker } from "./ask";
+import { PersonNeeded, type AnswerHow, type Asker } from "./ask";
 import { changedInstructionFiles, confirmInstructionFiles } from "./instruction-files";
 import { nextStart } from "./permission";
 import { readHandoffSettings, type HandoffSettings } from "./settings";
@@ -109,7 +109,7 @@ export async function preflight(handoffEnv: HandoffEnv, input: PreflightInput): 
   const settings = readHandoffSettings(relayHome, job.id) ?? initialSettings(job.id, newest);
   const next = nextStart(settings, { startMode: input.startMode, permission: input.permission, outgoingLevel: newest?.permission ?? null });
   if (next.mode === "interactive" && !input.asker.terminal && input.held === null && supervisor === null) {
-    throw new CommandError(ExitCode.NeedsPerson, [`This switch needs a terminal. Run relay ${input.command} ${to.id} in the project.`]);
+    throw new PersonNeeded(ExitCode.NeedsPerson, [`This switch needs a terminal. Run relay ${input.command} ${to.id} in the project.`]);
   }
   // 8. The git trust check, before the agent is stopped, so a planted command never runs.
   const opened = await openJob(repo, relayHome, input.command);

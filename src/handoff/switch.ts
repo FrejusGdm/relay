@@ -65,6 +65,9 @@ interface HandoffRun {
   restoreTerminal(): void;
   // Step 12: starts the next agent and reports, after the start check, whether it started.
   start(plan: StartPlan): Promise<StartOutcome>;
+  // False in the daemon: Control-C does not interrupt the switch there, because the daemon's own
+  // SIGINT handler waits for running switches before it stops (add-daemon-api-and-status, decision 7).
+  signals?: boolean;
 }
 
 export interface HandoffResult {
@@ -132,7 +135,7 @@ export async function performHandoff(run: HandoffRun): Promise<HandoffResult> {
 
   // Control-C after the agent is stopped: relay finishes the step it is in, then rolls back.
   let interrupted = false;
-  const restoreSignal = takeInterrupt(() => { interrupted = true; });
+  const restoreSignal = run.signals === false ? () => {} : takeInterrupt(() => { interrupted = true; });
   const checkInterrupt = () => {
     if (interrupted || wasInterrupted()) throw new HandoffFailure(ExitCode.Interrupted, ["The switch was interrupted."]);
   };

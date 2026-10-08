@@ -13,6 +13,7 @@ import { readAccountRecord, updateAccountRecord } from "../accounts/record";
 import { findAccount, isProvider } from "../accounts/registry";
 import { deleteOldWorkerLogs } from "../adapters/process";
 import { createAdapterRegistry, type AdapterRegistry } from "../adapters/registry";
+import { ensureDaemon } from "../client/ensure-daemon";
 import { tomlString } from "../adapters/text";
 import type {
   Availability, FailureReason, Mode, PermissionLevel, ProviderAdapter, StopResult, WorkerEvent, WorkerHandle,
@@ -161,6 +162,8 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
   };
 
   if (options.checks !== null) say(checksLine(options.checks));
+  // The agent's hooks need a receiver (add-daemon-api-and-status, design decision 6).
+  await ensureDaemon({ relayHome: ctx.relayHome, env: ctx.env, err: ctx.io.err });
   const supervisor = new JobSupervisor(ctx, job, registry, say, options.json);
   try {
     // A job with earlier work continues through a handoff, unless the person resumes a session.
@@ -198,7 +201,11 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
   }
 }
 
-export function handoffEnv(ctx: CommandContext, registry: AdapterRegistry): HandoffEnv {
+// What a job supervisor needs of the command that runs it. The daemon gives its own
+// (add-daemon-api-and-status, design decision 17).
+export type SupervisorContext = Pick<CommandContext, "relayHome" | "homedir" | "env" | "config" | "io">;
+
+export function handoffEnv(ctx: SupervisorContext, registry: AdapterRegistry): HandoffEnv {
   return { relayHome: ctx.relayHome, homedir: ctx.homedir, uid: process.getuid!(), env: ctx.env, config: ctx.config, registry };
 }
 
@@ -381,10 +388,13 @@ interface Worker {
   held: HeldWorker;
   // Whether a switch stopped the agent.
   isSwitched(): boolean;
+  // Stops the agent as SIGTERM to relay would.
+  terminate(): void;
 }
 
 // The relay process that supervises the job's agents, one after another: it holds the worker lock,
-// takes switch requests, and when an agent exits saves a checkpoint and gives the exit code.
+// takes switch requests, and when an agent exits saves a checkpoint and gives the exit code. In the
+// daemon, `signals` is false: the daemon keeps its own signal handlers and stops agents itself.
 export class JobSupervisor {
   exitCode: number = ExitCode.Ok;
   private lock: WorkerLock | null = null;
@@ -393,12 +403,27 @@ export class JobSupervisor {
   private switching: Promise<Worker | null> | null = null;
   private current: Worker | null = null;
   constructor(
-    private readonly ctx: CommandContext,
+    private readonly ctx: SupervisorContext,
     private readonly job: JobRef,
     private readonly registry: AdapterRegistry,
     private readonly say: (line: string) => void,
     private readonly json: boolean,
+    private readonly signals = true,
   ) {}
+
+  // The worker whose agent runs now, or null.
+  runningRecord(): WorkerRecord | null {
+    const record = this.current?.record;
+    return record !== undefined && record.ended_at === null ? record : null;
+  }
+
+  // Stops the running agent as SIGTERM would and waits until relay has recorded its end.
+  async stopRunning(): Promise<void> {
+    const worker = this.current;
+    if (worker === null) return;
+    worker.terminate();
+    await worker.ended.catch(() => {});
+  }
 
   close(): void {
     this.stopListening?.();
@@ -429,7 +454,7 @@ export class JobSupervisor {
     let result: HandoffResult;
     try {
       result = await performHandoff({
-        pre, env: handoffEnv(this.ctx, this.registry), asker, progress: this.say, restoreTerminal: () => {},
+        pre, env: handoffEnv(this.ctx, this.registry), asker, progress: this.say, restoreTerminal: () => {}, signals: this.signals,
         start: async (plan) => {
           next = await this.begin(this.planFrom(plan));
           return next.started;
@@ -528,7 +553,7 @@ export class JobSupervisor {
         plan, record, logPath, started: Promise.resolve({ ok: false, reason }),
         ended: Promise.resolve({ switched: false, startFailed: true, interrupted: false, terminated: false, permission: null, lastTurn: null, status }),
         held: { record, stop: async () => ({ how: "already_exited", exitCode: null, alive: false }), lastFailure: () => null },
-        isSwitched: () => false,
+        isSwitched: () => false, terminate: () => {},
       };
     }
     const record = this.newRecord(plan, workerId, startedAt, handle);
@@ -583,7 +608,7 @@ export class JobSupervisor {
         interruptTimer = setTimeout(() => stop(), INTERRUPT_WAIT_MS);
       } else stop();
     };
-    const restoreSignals = takeSignals(onSignal);
+    const restoreSignals = this.signals ? takeSignals(onSignal) : () => {};
 
     let resolveStarted!: (outcome: StartOutcome) => void;
     const started = new Promise<StartOutcome>((done) => { resolveStarted = done; });
@@ -694,7 +719,7 @@ export class JobSupervisor {
         return { how: result.how, exitCode: result.exitCode, alive: false };
       },
     };
-    const worker: Worker = { plan, record, logPath, started, ended, held, isSwitched: () => switched };
+    const worker: Worker = { plan, record, logPath, started, ended, held, isSwitched: () => switched, terminate: () => onSignal("SIGTERM") };
     this.current = worker;
     return worker;
   }
@@ -776,7 +801,7 @@ export class JobSupervisor {
     });
     let next: Worker | null = null;
     const result = await performHandoff({
-      pre, env, asker, progress: print,
+      pre, env, asker, progress: print, signals: this.signals,
       restoreTerminal: () => {
         if (worker.plan.mode === "interactive") restoreTerminal(this.ctx);
       },
@@ -823,7 +848,7 @@ export function switchJson(result: HandoffResult): Record<string, unknown> {
 
 // The closing lines and the exit code (the agent-runs spec, "Headless exit codes" and
 // "Interactive runs").
-function outcome(ctx: CommandContext, worker: Worker, result: Ended, say: (line: string) => void): number {
+function outcome(ctx: SupervisorContext, worker: Worker, result: Ended, say: (line: string) => void): number {
   const { adapter, account } = worker.plan;
   const err = (line: string) => ctx.io.err(`${line}\n`);
   const { lastTurn, status } = result;
@@ -886,7 +911,7 @@ function newUnusedWorkerId(relayHome: string, jobId: string): string {
 
 // After an interactive agent, relay puts the terminal back in its usual state before printing,
 // in case the agent ended without doing so.
-function restoreTerminal(ctx: CommandContext): void {
+function restoreTerminal(ctx: SupervisorContext): void {
   if (!ctx.io.isTerminal) return;
   ctx.io.out(RESTORE_TERMINAL);
   try {
@@ -908,7 +933,7 @@ class Facts {
   private chain: Promise<unknown> = Promise.resolve();
 
   constructor(
-    private readonly ctx: CommandContext,
+    private readonly ctx: SupervisorContext,
     private readonly job: JobRef,
     private readonly account: Account,
     private readonly record: WorkerRecord,

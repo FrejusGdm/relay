@@ -371,7 +371,7 @@ export const COMMANDS: CommandDef[] = [
       "relay starts it by itself when a command needs it.",
     ],
     examples: ["relay daemon status"],
-    options: [],
+    options: [{ name: "force", description: "With stop or restart: also stop the agents the service started" }],
     minArgs: 1,
     maxArgs: 1,
     quiet: false,

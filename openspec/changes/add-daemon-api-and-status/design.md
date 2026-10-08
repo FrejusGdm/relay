@@ -638,6 +638,58 @@ function changes one file.
   CLI process, because the next agent usually runs in the person's terminal. They call
   `ensureDaemon()` first (switch only) so the new agent's hooks have a receiver.
 
+Decisions added while building task groups 7, 9 and 11:
+
+- **The switch endpoint is `relay switch` without a terminal.** `src/daemon/engines.ts` calls the
+  preflight of `add-relay-switch` with start mode `headless` and a person who cannot answer, then
+  `performHandoff` through the `JobSupervisor` of `src/run/run.ts`; there is no second switch
+  implementation. Where the two changes disagree, the steps follow `add-relay-switch` and the
+  answers follow this design:
+  - `add-relay-switch` hands a switch to the `relay run` that holds the job's agent (its decision
+    15). This design did not cover that case. The daemon does the same as `relay switch`, so the
+    next agent then runs under that `relay run`, not as a child of the daemon, and is not in
+    `agents_running`. When the daemon's own job supervisor holds the agent, the request reaches it
+    the same way.
+  - `add-relay-switch` refuses a headless start of a job whose agents run in a terminal with exit
+    code 32 and its own sentence. The API answers `409 interactive_start_required` with the
+    sentence of the local-api spec instead. The engine's refusals that need a person now throw
+    `PersonNeeded` (`src/handoff/ask.ts`), a `CommandError` with the same code and lines, so the
+    terminal output is unchanged and the API tells them apart without reading message text.
+  - The allow list of `add-relay-switch` is per account, not per provider, so
+    `confirm_new_provider` answers its question for any account not on the list, also a second
+    account of the same provider. The answer is recorded with `"how": "api"`, a third value next to
+    `terminal` and `flag`. The other questions (work code moving to a personal account, changed
+    files that instruct agents) have no field in the request and get `409
+    interactive_start_required`.
+- **Checkpoint answers.** When nothing changed since the latest checkpoint, the answer is `200` with
+  that checkpoint instead of `201`. The two `422` codes share the engine's exit code 4 and are told
+  apart by the engine's first line.
+- **Request bodies.** A field other than `message` (checkpoint) or `target` and
+  `confirm_new_provider` (switch) gets `400 bad_request`, so no request can carry a folder or a
+  command. The project folder comes from the index and is checked, before an engine runs, to be the
+  worktree root of a repository whose `.relay/state.json` names the job (`409 project_missing`
+  otherwise). Engine refusals without a row in decision 13 are `500 engine_failed` with the
+  engine's message; a usage refusal of the engine, such as an account that already works on the
+  job, is `400 bad_request`.
+- **Signals in the daemon.** `JobSupervisor` and `performHandoff` replace the process's signal
+  handlers while an agent or a switch runs, as a command in a terminal must. In the daemon they get
+  `signals: false` and keep the daemon's handlers, so `SIGTERM` and `SIGINT` always start the
+  shutdown of decision 7, which waits for the switch. The daemon also ignores `SIGUSR1`, which
+  `relay switch` sends to the process that holds a job's agent.
+- **Settings.** The daemon reads `config.toml` for each request, and a job supervisor in the daemon
+  reads it whenever it needs it, because the allow list and the accounts change while the daemon
+  runs. Building this found a bug in `add-relay-switch`: a switch handed to a `relay run` added a
+  new account to the allow list twice, once in each process, and the second write failed its own
+  check. The allow list edit now looks for the entry again in the file under the config lock.
+- **Shutdown order.** Step 1 only stops accepting connections; open connections, including the one
+  of a running checkpoint or switch, stay open until steps 3 and 4 are done, and then get up to 10
+  seconds to finish.
+- **`relay daemon stop --force`** is a new option of `relay daemon`; `restart` passes it on to
+  `stop`.
+- **Tests.** Under the test preload (`RELAY_TEST=1`), `relay run` and `relay switch` start the
+  daemon only when the test sets `RELAY_TEST_START_DAEMON=1`, so the many tests of those commands
+  leave no daemon running; the tests of task groups 9 and 11 set it and stop the daemon afterwards.
+
 ### 18. `relay hook <provider> <event>`
 
 From `docs/research/architecture.md` section 6 ("install hooks as a command ... works when the
