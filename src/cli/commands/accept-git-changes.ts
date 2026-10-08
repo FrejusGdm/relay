@@ -1,11 +1,10 @@
 // relay accept-git-changes (the git-safety spec, design.md decision 11): the person, at a terminal,
 // trusts the git configuration and hooks as they are now. relay shows what changed since the
-// trust record and rewrites the record only after the answer yes. A missing or damaged record can
-// be rewritten the same way.
+// trust record and rewrites the record only after the answer yes, and only when nothing changed
+// while it waited. A missing or damaged record can be rewritten the same way.
 import { join } from "node:path";
 import { findJob } from "../../checkpoint/save";
 import { onInterrupt } from "../../core/cleanup";
-import { printable } from "../../core/quote";
 import { openRepository, RepositoryError } from "../../git/repo";
 import { changedFiles, reviewTrust, trustReport } from "../../git/trust";
 import { appendEvent } from "../../job/events";
@@ -31,22 +30,20 @@ export async function acceptGitChanges(ctx: CommandContext): Promise<number> {
         ctx.io.out(text(["Nothing changed in the git configuration or hooks."]));
         return ExitCode.Ok;
       }
-      if (review.problem === null) {
-        // The refusal report without its last two lines, which tell the person to run this command.
-        ctx.io.out(text(trustReport(review.changes, repo).slice(0, -2)));
-        ctx.io.out("Trust these changes? Type yes to continue: ");
-      } else {
-        ctx.io.out(text([
-          printable(review.problem.message),
-          "relay cannot tell what changed in the git configuration or hooks since this job started.",
-        ]));
-        ctx.io.out("Trust the current git configuration and hooks? Type yes to continue: ");
-      }
+      ctx.io.out(text(review.lines));
+      ctx.io.out(review.problem === null
+        ? "Trust these changes? Type yes to continue: "
+        : "Trust the current git configuration and hooks? Type yes to continue: ");
       if ((await ctx.io.readLine())?.trim() !== "yes") {
         ctx.io.err(text(["Cancelled. Nothing changed."]));
         return ExitCode.NeedsPerson;
       }
-      review.accept();
+      if (!(await review.accept())) {
+        ctx.io.err(text([
+          "The git settings or hooks changed while relay was waiting. Nothing was trusted. Run relay accept-git-changes again.",
+        ]));
+        return ExitCode.NeedsPerson;
+      }
       await appendEvent(job, "git_changes_accepted", {
         changed: changedFiles(review.changes),
         ...(review.problem === null ? {} : { trust_record: review.problem.problem }),

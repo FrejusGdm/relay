@@ -5,7 +5,7 @@
 // With RELAY_DOC_SAMPLES=1 the tests print each command and its exact output, for
 // docs/checkpoints.md.
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from "bun:test";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { events, personState, relay, relayRefs, setUpJob } from "../helpers/job";
 import { plainGit, type ScratchRepo } from "../helpers/scratch-repo";
@@ -36,6 +36,18 @@ function plantHook(name: string): void {
   writeFileSync(join(scratch.repo, ".git", "hooks", name), `#!/bin/sh\nexec '${planted(name)}'\n`, { mode: 0o755 });
 }
 
+// Runs plain git, without relay's protections, and checks that it runs the planted program
+// `marker`; then removes the marker, so a later check sees only what relay runs.
+function provePlantedRuns(marker: string, args: string[], env: Record<string, string> = {}): void {
+  plainGit(scratch.repo, args, env);
+  expect(markersMade()).toContain(marker);
+  rmSync(markers(), { recursive: true });
+  mkdirSync(markers());
+}
+
+// git 2.54 and newer run hooks defined in the settings; older versions ignore those keys.
+const runsConfigHooks = () => !/^git version 2\.([0-4]\d|5[0-3])\./.test(scratch.git("version").trim());
+
 // A job with checkpoint 2, and a file changed since, so both a checkpoint and a rollback have
 // work to do.
 async function jobWithWork(): Promise<void> {
@@ -46,32 +58,39 @@ async function jobWithWork(): Promise<void> {
   scratch.write("src/auth.ts", "export const login = 2;\n");
 }
 
-const TAMPERING: [string, () => void, string[]][] = [
+// Each change, the report relay prints, and the plain git command that shows the planted
+// program runs (none for info/attributes, which only names a filter).
+const TAMPERING: [string, () => void, string[], [string, string[]] | null][] = [
   [
     "core.fsmonitor set in .git/config",
     () => scratch.git("config", "core.fsmonitor", planted("fsmonitor")),
     ["Stopped: .git/config changed since this job started.", "  added  core.fsmonitor (can run commands)"],
+    ["fsmonitor", ["status"]],
   ],
   [
     "a pre-commit hook added",
     () => plantHook("pre-commit"),
     ["Stopped: the git hooks changed since this job started.", "  added  pre-commit"],
+    ["pre-commit", ["hook", "run", "pre-commit"]],
   ],
   [
     "info/attributes created",
     () => writeFileSync(join(scratch.repo, ".git", "info", "attributes"), "* filter=planted\n"),
     ["Stopped: .git/info/attributes changed since this job started."],
+    null,
   ],
   [
     "~/.gitconfig changed",
     () => writeFileSync(join(scratch.home, ".gitconfig"), `[core]\n\tfsmonitor = ${planted("global-fsmonitor")}\n`),
     ["Stopped: ~/.gitconfig changed since this job started.", "  added  core.fsmonitor (can run commands)"],
+    ["global-fsmonitor", ["status"]],
   ],
 ];
 
-test.each(TAMPERING)("%s stops relay checkpoint and relay rollback with exit code 5", async (_name, tamper, report) => {
+test.each(TAMPERING)("%s stops relay checkpoint and relay rollback with exit code 5", async (_name, tamper, report, proof) => {
   await jobWithWork();
   tamper();
+  if (proof !== null) provePlantedRuns(...proof);
   const before = { person: personState(scratch.repo), refs: relayRefs(scratch) };
   const refusal = { code: 5, stdout: "", stderr: [...report, ...CLOSING, ""].join("\n") };
   expect(await relay(scratch, ["checkpoint"])).toEqual(refusal);
@@ -95,7 +114,18 @@ test("after the person accepts planted hooks and settings, checkpoints and rollb
     scratch.git("config", `hook.planted-${event}.command`, planted(`config-${event}`));
     scratch.git("config", `hook.planted-${event}.event`, event);
   }
-  expect(markersMade()).toEqual([]);
+  // Plain git runs every planted program.
+  provePlantedRuns("fsmonitor", ["status"]);
+  provePlantedRuns("pre-commit", ["hook", "run", "pre-commit"]);
+  const otherTree = mkdtempSync(join(scratch.root, "tree-"));
+  const otherIndex = { GIT_INDEX_FILE: join(scratch.root, "proof.index") };
+  provePlantedRuns("post-checkout", ["--work-tree", otherTree, "checkout", "HEAD", "--", "README.md"], otherIndex);
+  provePlantedRuns("post-index-change", ["add", "-A"], otherIndex);
+  if (runsConfigHooks()) provePlantedRuns("config-post-index-change", ["add", "-A"], otherIndex);
+  provePlantedRuns("reference-transaction", ["update-ref", "refs/proof/one", "HEAD"]);
+  if (runsConfigHooks()) provePlantedRuns("config-reference-transaction", ["update-ref", "refs/proof/two", "HEAD"]);
+  provePlantedRuns("reference-transaction", ["update-ref", "-d", "refs/proof/one"]);
+  if (runsConfigHooks()) provePlantedRuns("reference-transaction", ["update-ref", "-d", "refs/proof/two"]);
 
   const accepted = await relay(scratch, ["accept-git-changes"], { terminal: { answer: "yes" } });
   expect(accepted.code).toBe(0);
@@ -109,8 +139,4 @@ test("after the person accepts planted hooks and settings, checkpoints and rollb
   expect(rolledBack.code).toBe(0);
   expect(rolledBack.stdout).toContain("Rolled back to checkpoint 3 · ");
   expect(markersMade()).toEqual([]);
-
-  // Without relay's protections, plain git runs the planted hook, so the hooks above were real.
-  expect(plainGit(scratch.repo, ["update-ref", "refs/heads/sanity", "HEAD"])).toBe(0);
-  expect(markersMade()).toContain("reference-transaction");
 });

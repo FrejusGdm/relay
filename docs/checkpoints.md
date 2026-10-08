@@ -753,12 +753,12 @@ paths of the changed files. Undoing the change, so that the file has its recorde
 makes relay work again.
 
 If you made the change yourself, run `relay accept-git-changes` in your terminal. It shows the
-same report and asks before it trusts anything; only the answer `yes` rewrites the record and
-appends a `git_changes_accepted` event:
+same report, without the word "Stopped:" and the last two lines, and asks before it trusts
+anything; only the answer `yes` rewrites the record and appends a `git_changes_accepted` event:
 
 ```
 $ relay accept-git-changes
-Stopped: the git hooks changed since this job started.
+The git hooks changed since this job started.
   added  pre-commit
 Trust these changes? Type yes to continue: yes
 Trusted the current git configuration and hooks.
@@ -769,14 +769,26 @@ Any other answer changes nothing:
 
 ```
 $ relay accept-git-changes
-Stopped: .git/config changed since this job started.
+.git/config changed since this job started.
   added  core.fsmonitor (can run commands)
 Trust these changes? Type yes to continue: no
 Cancelled. Nothing changed.
 (exit code 7)
 ```
 
-An agent cannot accept a change for you, because agents run commands without a terminal:
+After `yes`, relay reads the settings and hooks again. If anything changed while it waited for
+the answer, it trusts nothing and you run the command again:
+
+```
+$ relay accept-git-changes
+The git hooks changed since this job started.
+  added  pre-commit
+Trust these changes? Type yes to continue: yes
+The git settings or hooks changed while relay was waiting. Nothing was trusted. Run relay accept-git-changes again.
+(exit code 7)
+```
+
+The command refuses to run without a terminal, because agents usually run commands without one:
 
 ```
 $ relay accept-git-changes
@@ -786,10 +798,25 @@ relay accept-git-changes must be run by you in a terminal.
 
 When the trust record itself is missing or damaged, `relay checkpoint` stops with exit code 5 and
 "The git trust record <path> is missing." (or "is damaged."). `relay accept-git-changes` then
-says that it cannot tell what changed, and asks "Trust the current git configuration and hooks?
-Type yes to continue:". Check `.git/config`, `~/.gitconfig` and `.git/hooks/` yourself before you
-answer `yes`. When nothing changed, the command prints
-`Nothing changed in the git configuration or hooks.` and exits with code 0.
+says that it cannot tell what changed, and lists the settings that can run commands and the hooks
+that exist now, before it asks:
+
+```
+$ relay accept-git-changes
+The git trust record <path> is missing.
+relay cannot tell what changed in the git configuration or hooks since this job started.
+These settings can run commands or change where git writes files:
+  core.fsmonitor (can run commands)
+These hooks exist:
+  pre-commit
+Trust the current git configuration and hooks? Type yes to continue: no
+Cancelled. Nothing changed.
+(exit code 7)
+```
+
+Check `.git/config`, `~/.gitconfig` and `.git/hooks/` yourself before you answer `yes`. When
+nothing changed, the command prints `Nothing changed in the git configuration or hooks.` and exits
+with code 0.
 
 Even after you accept a change, relay runs every git command with hooks and the file-system
 monitor turned off, so a hook or a `core.fsmonitor` program you accepted still never runs when
@@ -804,7 +831,7 @@ planted `pre-commit`, `post-checkout`, `post-index-change` and `reference-transa
 | 3 | No job here, or a damaged `state.json` | `relay is not set up here. Run relay init first.` |
 | 5 | A checkpoint, a list or a rollback found a change since `relay init` | `Stopped: .git/config changed since this job started.` |
 | 6 | Another relay command holds the job lock | `Another relay command is working on this job (...). Try again when it finishes.` |
-| 7 | `relay accept-git-changes` without a terminal, or an answer other than `yes` | `relay accept-git-changes must be run by you in a terminal.`, `Cancelled. Nothing changed.` |
+| 7 | `relay accept-git-changes` without a terminal, an answer other than `yes`, or a change while relay waited | `relay accept-git-changes must be run by you in a terminal.`, `Cancelled. Nothing changed.` |
 
 ## What relay cannot protect against
 
@@ -813,7 +840,8 @@ hooks, and from git commands that would change the branch, the index or files re
 It cannot protect against a program that runs as the same user without a sandbox. Such a program
 can do anything relay can do: it can change the trust record in `RELAY_HOME`, the files in
 `.relay/`, and the git settings and hooks, and it can change them back before relay looks. It can
-also answer relay's questions if it controls a terminal. The trust record and the terminal check
+also answer relay's questions: relay asks at a terminal, but a program running as you with its
+own pseudo-terminal could answer. The trust record and the terminal check
 stop an agent that can write only inside the project and runs commands without a terminal; they
 do not stop a program that has the person's full rights. Run agents in a sandbox, or in a separate
 account, when you do not trust them with your files.

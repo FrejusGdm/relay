@@ -3,14 +3,13 @@
 // order: read state.json, compare the git trust record, take the job lock, build the snapshot
 // tree, stop on unapproved secret-like file names, compare with the latest checkpoint, scan for
 // secrets, commit, write the refs, then append the event and update state.json.
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import { printable, shellWord } from "../core/quote";
 import type { Repository } from "../git/repo";
 import { git } from "../git/run";
-import { changedFiles, compareTrust, TrustRecordError, trustReport } from "../git/trust";
+import { changedFiles, compareTrust, TrustRecordError, trustRecordOwner, trustReport } from "../git/trust";
 import { appendEvent, type JobRef } from "../job/events";
 import { takeJobLock } from "../job/lock";
 import { readState, StateFileError, writeState, type JobState } from "../job/state";
@@ -200,13 +199,10 @@ export function findJob(repo: Repository, relayHome: string): { state: JobState;
 // Returns the job ID.
 function checkJobBelongsHere(repo: Repository, state: JobState, relayHome: string): string {
   let belongs = state.repository.worktree_root === repo.worktreeRoot;
-  let record: { job_id?: unknown; worktree_root?: unknown } | undefined;
-  try {
-    record = JSON.parse(readFileSync(join(relayHome, "jobs", state.job_id, "git-trust.json"), "utf8"));
-  } catch {
-    // A missing or damaged trust record is reported by the trust check that follows.
-  }
-  if (record !== undefined) belongs &&= record.job_id === state.job_id && record.worktree_root === repo.worktreeRoot;
+  // A missing or damaged trust record is reported by the trust check, or rewritten by
+  // relay accept-git-changes; only a readable record can name another checkout.
+  const owner = trustRecordOwner(join(relayHome, "jobs", state.job_id));
+  if (owner !== null) belongs &&= owner.jobId === state.job_id && owner.worktreeRoot === repo.worktreeRoot;
   if (!belongs) {
     throw new CommandError(ExitCode.NotPossibleHere, [
       `.relay/state.json names job ${state.job_id}, which relay init did not set up in this checkout. relay changed nothing.`,

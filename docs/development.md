@@ -96,8 +96,12 @@ future `src/client/` folder, which reaches relay's own Unix socket, may only cal
 of `package.json` for the machine it runs on, writes it to a temporary folder, and runs it as a
 separate process on a scratch repository: `relay init`, a checkpoint, the list, a refused change
 to `core.fsmonitor`, a rollback and its undo. With `RELAY_TEST_GIT_LOG=1`, the program writes
-every git command it runs to `$RELAY_HOME/logs/git-calls.jsonl`; the test checks that each one
-starts with relay's settings, is a command the runner allows, and never contacts a remote. It
+every git command it runs to `$RELAY_HOME/logs/git-calls.jsonl`. The runner writes a call there
+only after its allow list accepted it, so the log cannot show a refused call. The test therefore
+pins the exact set of git commands a whole job uses, none of which contacts a remote, so a new
+command fails the test until someone reviews it. It also checks that each call starts with
+relay's settings, that refs are written only through `update-ref --stdin`, and that every ref
+under `refs/relay/` belongs to the job. It
 needs git and gitleaks on `PATH`, like the other checkpoint tests.
 
 ## Continuous integration

@@ -149,7 +149,7 @@ or secrets.
 | `checkpoint_saved` | `add-checkpoint-engine` (`saveCheckpoint`, for every kind) | `number`, `commit`, `kind` (`baseline`, `manual`, `pre_rollback`, `handoff` or `auto`), `message`, `parent`, `head`, `branch`, `files_changed`, `left_out` |
 | `checkpoint_refused` | `add-checkpoint-engine` | `command`, `reason` (`secret_found`, `secret_like_file` or `git_changed`), and `findings`, `files` or `changed` depending on the reason |
 | `rollback` | `add-checkpoint-engine` | `to_checkpoint`, `to_commit`, `undo_checkpoint`, `files_written`, `files_deleted` |
-| `git_changes_accepted` | `add-checkpoint-engine` | `changed` |
+| `git_changes_accepted` | `add-checkpoint-engine` | `changed`, and `trust_record` (`missing` or `damaged`) when a record relay could not read was rewritten |
 | `worker_started` | `add-provider-adapters`; `add-relay-switch` sets `from_handoff` | `worker_id`, `target`, `provider`, `mode`, `transport`, `provider_version`, `permission`, `pid`, `provider_session_id`, `argv` (with the instructions and prompt replaced by placeholders), `resumed_from`, `from_handoff`, `start_checkpoint` |
 | `worker_session_identified` | `add-provider-adapters` | `worker_id`, `provider_session_id`, `model`, `source` |
 | `command_ran` | `add-provider-adapters` | `worker_id`, `command` (redacted), `exit_code`, `status` |

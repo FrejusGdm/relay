@@ -13,13 +13,13 @@ import { makeScratchRepo, type ScratchRepo } from "../helpers/scratch-repo";
 import { requireGitleaks } from "../helpers/secrets";
 
 const ROOT = join(import.meta.dir, "..", "..");
-// The git commands the runner allows (design.md decision 8), and those that contact a remote.
-const ALLOWED = new Set([
-  "version", "rev-parse", "status", "ls-files", "symbolic-ref", "config", "for-each-ref", "cat-file", "rev-list", "diff",
-  "diff-tree", "log", "show", "hash-object", "add", "read-tree", "write-tree", "checkout-index", "update-index",
-  "commit-tree", "update-ref",
-]);
-const REMOTE = ["push", "fetch", "pull", "ls-remote", "remote"];
+// Every git command a whole job uses. The runner logs a call only after its allow list accepted
+// it, so the log cannot show a refused call; instead this list is pinned, and a command added to
+// the job's flow (for example one that contacts a remote) fails the test until it is reviewed.
+const JOB_COMMANDS = [
+  "add", "cat-file", "checkout-index", "commit-tree", "config", "diff-tree", "for-each-ref", "ls-files", "read-tree",
+  "rev-parse", "symbolic-ref", "update-ref", "version", "write-tree",
+];
 
 let scratch: ScratchRepo;
 let buildDir: string;
@@ -121,10 +121,16 @@ test("the built program sets up a job, saves, lists, refuses a tampered setting 
     .trimEnd()
     .split("\n")
     .map((line) => JSON.parse(line) as string[]);
-  expect(calls.length).toBeGreaterThan(10);
+  expect([...new Set(calls.map(commandOf))].sort()).toEqual(JOB_COMMANDS);
   for (const argv of calls) {
     expect(argv.slice(0, 5)).toEqual(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"]);
-    expect(ALLOWED.has(commandOf(argv))).toBe(true);
-    expect(REMOTE).not.toContain(commandOf(argv));
+    // Refs are written only in one transaction read from standard input, never named on the
+    // command line.
+    if (commandOf(argv) === "update-ref") expect(argv.slice(argv.indexOf("update-ref"))).toEqual(["update-ref", "--no-deref", "--stdin"]);
   }
+  // Those transactions wrote only this job's refs; refs outside refs/relay/ are compared above.
+  const jobId = JSON.parse(readFileSync(join(scratch.repo, ".relay", "state.json"), "utf8")).job_id;
+  const relayRefs = scratch.git("for-each-ref", "--format=%(refname)", "refs/relay/").trim().split("\n");
+  expect(relayRefs.length).toBeGreaterThan(0);
+  for (const ref of relayRefs) expect(ref).toStartWith(`refs/relay/jobs/${jobId}/`);
 });
