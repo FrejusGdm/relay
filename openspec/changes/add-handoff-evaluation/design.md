@@ -94,6 +94,9 @@ it; none of them needs a new relay command.
 The `handoff` event and `verify.md` come from `architecture.md`, section 5, "Making the next agent
 check the previous agent's claims" (layers 2 and 3).
 
+The prompt the harness gives the first agent is `Do the task described in .relay/task.md. Run the
+tests before you finish.` (`PROMPT` in `eval/handoff/src/runner.ts`).
+
 ### 3. Four fixture tasks
 
 Each task takes an agent roughly 15 to 30 minutes, touches several files, and has a plan with more
@@ -339,6 +342,11 @@ defensively"). After the baseline, the snapshots at `round(0.25 N)`, `round(0.5 
 exactly as it does from a handoff checkpoint. A snapshot can catch a file half written; this is
 accepted and noted in Risks.
 
+Snapshot 0 is taken before `relay run` starts, in baselines and handoffs alike. It holds the
+starting tree with the person's uncommitted line in `NOTES.md`, and the rework diffs of decision 7
+start from it instead of the base commit, so that line never counts as one an agent added. Both
+rework diffs leave out relay's job files in `.relay/`.
+
 ### 7. Measurements
 
 | Measure | How it is computed |
@@ -528,6 +536,7 @@ otherwise stops with `Less than 1 GB free in <path>. Free space before running.`
 }
 ```
 
+A failed handoff also records relay's error text in `handoff.relay_error` (null otherwise).
 A baseline has `to_target`, `interrupt_point` and `handoff` set to null, one segment, and
 `control_points`, a list of three objects (`point`, `step`, `snapshot_sha`, `acceptance_at_point`,
 `regressions`, `lines_added_before`, `lines_reverted`, `rework_ratio`, `files_reworked`).
@@ -539,7 +548,7 @@ A baseline has `to_target`, `interrupt_point` and `handoff` set to null, one seg
 | `completed` | The run ended normally | Yes |
 | `finished_before_interrupt` | The first agent ended before the interrupt point | Reported separately, excluded |
 | `handoff_failed` | `relay switch` exited with a non-zero code | Yes, as a failed handoff and unsolved |
-| `agent_failed` | A worker's last turn failed with a reason other than `usage_limit` or `rate_limit` (from `turn_failed`), or its `relay run` exited with code 24 | Yes, unsolved |
+| `agent_failed` | A worker's last turn failed with a reason other than `usage_limit` or `rate_limit` (from `turn_failed`), its `relay run` exited with code 24, or the harness stopped it because of a permission bypass flag | Yes, unsolved |
 | `timed_out` | A segment passed `max_minutes_per_segment`; the harness stopped it by interrupting its `relay run` process | Yes, unsolved |
 | `contaminated` | An event referred to the fixture sources | Excluded, listed |
 | `limit_reached`, `stopped_by_person`, `harness_error` | The run did not measure the handoff | Saved as `attempt-<n>.json`; the run stays pending (`harness_error` runs again only with `--retry-errors`) |
