@@ -79,8 +79,8 @@ thread, relay's message comes first, and T3's guarded recovery then does nothing
 
 ### 3. The MCP client and the sign-in
 
-relay uses the official MCP TypeScript SDK (`@modelcontextprotocol/sdk`): its Streamable HTTP
-client transport, and its OAuth client support for discovery, dynamic client registration and
+relay uses the official MCP v2 TypeScript client (`@modelcontextprotocol/client`, runtime): its
+Streamable HTTP client transport, and its OAuth client support for discovery, dynamic client registration and
 PKCE. relay implements only the SDK's `OAuthClientProvider` interface, which says where to keep
 the client information and token (decision 4) and how to open the browser (`open` on macOS,
 `xdg-open` on Linux).
@@ -235,9 +235,11 @@ src/limits/notify.ts      decision 10
 ### 12. Tests
 
 No test talks to a real T3. A fake T3 server (`test/fakes/fake-t3.ts`) is built with the MCP
-SDK's own server classes on a random `127.0.0.1` port. It serves the tools of decision 1 with
-scripted threads, records every call, implements the OAuth endpoints with a fixed pairing code,
-and can answer `401` or stop answering. The fake `claude` prints recorded `/usage` output from
+v2 test package (`@modelcontextprotocol/server`, tests only), using `McpServer` and
+`createMcpHandler` on a random `127.0.0.1` port, with an in-process `fetch` path too. It serves
+the tools of decision 1 with scripted threads, records every call, and can answer `401` or stop
+answering. Task 4.3 adds the OAuth endpoints with a fixed pairing code. The fake `claude` prints
+recorded `/usage` output from
 `test/fixtures/usage/`. All timers use phase 5's injectable clock.
 
 ## Risks / Trade-offs
