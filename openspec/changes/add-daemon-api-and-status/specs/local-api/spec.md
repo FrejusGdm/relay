@@ -63,6 +63,10 @@ Every error response SHALL have a JSON body `{"error": {"code": <string>, "messa
 - **WHEN** a client sends `DELETE /v1/jobs/3f9a2c1d`
 - **THEN** the response is `405` with error code `method_not_allowed` and an `Allow` header
 
+#### Scenario: Hook queue full
+- **WHEN** 1,000 hook events wait in the daemon's queue and `relay hook` sends another one to `POST /v1/hooks/claude/Stop`
+- **THEN** the response is `503` with error code `hook_queue_full`, and `relay hook` writes the event to the spool
+
 ### Requirement: Versioning
 `GET /v1/version` SHALL return `api`, `daemon_version`, `pid`, `started_at`, `schema_version`, a `stream_epoch` that changes whenever the index is rebuilt (the Mac app needs it to tell a rebuilt event stream from a restart), and a `capabilities` array. A request for any other major version path SHALL return `404` with code `unsupported_version` and `supported: ["v1"]`. Within `/v1`, fields SHALL only be added, never removed or renamed.
 

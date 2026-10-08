@@ -9,7 +9,7 @@ import { readWorkerRecords, type WorkerRecord } from "../../src/run/worker-recor
 import type { Scenario } from "../fakes/scenario";
 import { MAIN, runRelayInProcess, type RelayResult } from "../helpers/cli";
 import { fakeEnv } from "../helpers/fake-programs";
-import { events, jobId, setUpJob } from "../helpers/job";
+import { events, FAKE_SCANNER, jobId, setUpJob } from "../helpers/job";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
 export const ACCOUNTS = '[accounts."claude:work"]\n\n[accounts."codex:personal"]\n';
@@ -42,7 +42,8 @@ async function stopRunning(): Promise<void> {
 // A job in a scratch repository, with config.toml holding `config` and account records that say the
 // person has seen the current policies, so no policy notice is printed.
 export async function runFixture(config = ACCOUNTS, kind: "full" | "empty" = "full"): Promise<RunFixture> {
-  const scratch = await setUpJob(kind);
+  // relay run never scans for secrets, so the job is set up with the fake scanner.
+  const scratch = await setUpJob(kind, undefined, FAKE_SCANNER);
   writeFileSync(join(scratch.relayHome, "config.toml"), config, { mode: 0o600 });
   for (const [provider, name] of [["claude", "work"], ["codex", "personal"]] as const) {
     startAccountRecord(scratch.relayHome, { id: `${provider}:${name}`, provider, name }, { policy_checked_on_seen: policyOf(provider).checkedOn });

@@ -11,7 +11,7 @@
   "scripts": {
     "relay": "bun --no-env-file src/cli/main.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p site/e2e",
-    "test": "bun test",
+    "test": "bun test --parallel",
     "eval:handoff": "bun run eval/handoff/src/main.ts",
     "site:fonts": "sh site/scripts/fetch-fonts.sh",
     "site:test": "bun test site/test",

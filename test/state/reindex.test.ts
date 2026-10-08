@@ -4,7 +4,7 @@ import { appendFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { appendEvent } from "../../src/job/events";
 import { runRelay } from "../helpers/cli";
-import { jobId, setUpJob } from "../helpers/job";
+import { FAKE_SCANNER, jobId, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, spawnDaemon, stopDaemon, testSocket, waitForDaemon } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 async function job(): Promise<ScratchRepo> {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   cleanups.push(() => scratch.cleanup());
   return scratch;
 }
@@ -35,7 +35,9 @@ test("with the daemon running, relay doctor --reindex rebuilds from 2 projects a
   expect(result).toEqual({ code: 0, stdout: "Rebuilt the index from .relay/ files in 2 projects.\n", stderr: "" });
   expect(await daemon.exited).toBe(0);
   const after = daemonPid(first.relayHome);
-  cleanups.push(() => void runRelay(["daemon", "stop"], { env: { RELAY_HOME: first.relayHome } }));
+  // Awaited, so the daemon has stopped before its relay folder is removed; otherwise it would keep
+  // running after the test.
+  cleanups.push(() => runRelay(["daemon", "stop"], { env: { RELAY_HOME: first.relayHome } }));
   expect(after).not.toBe(before);
   expect((await waitForDaemon(first.relayHome)).pid).toBe(after);
 }, 60_000);

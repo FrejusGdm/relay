@@ -1,8 +1,9 @@
 // Interactive Codex workers in the person's terminal. The session ID comes from relay's
 // SessionStart hook, so it stays unknown until the person trusts relay's hooks in Codex. The prompt
 // comes after "--", so Codex never reads it as an option or a subcommand.
+import { join } from "node:path";
 import type { Account } from "../../core/config/types";
-import { readSpool } from "../../hooks/spool";
+import { HookFeed } from "../../hooks/feed";
 import { now } from "../../platform/clock";
 import { startInteractive } from "../process";
 import { findProgram } from "../program";
@@ -24,22 +25,13 @@ export async function startCodexInteractive(
   if (prompt !== undefined) args.push("--", prompt);
   const queue = new EventQueue();
   const home = request.env.RELAY_HOME!;
-  const seen = new Map<string, number>();
-  for (const line of readSpool(home)) {
-    const key = JSON.stringify(line);
-    seen.set(key, (seen.get(key) ?? 0) + 1);
-  }
+  const feed = new HookFeed(home, join(request.cwd, ".relay", "events.jsonl"));
   const startedAt = now().getTime();
   let sessionSeen = false;
   let turnEnded = false;
   const child = startInteractive({ path, args, cwd: request.cwd, env: request.env });
   const poll = () => {
-    const counts = new Map<string, number>();
-    for (const line of readSpool(home)) {
-      const key = JSON.stringify(line);
-      const count = (counts.get(key) ?? 0) + 1;
-      counts.set(key, count);
-      if (count <= (seen.get(key) ?? 0)) continue;
+    for (const line of feed.fresh()) {
       if (!(Date.parse(line.received_at) >= startedAt) || line.provider !== "codex" || line.relay_worker !== request.workerId) continue;
       for (const event of codexHookEvents(line)) {
         if (event.kind === "session_started") {
@@ -51,7 +43,6 @@ export async function startCodexInteractive(
         queue.push(event);
       }
     }
-    for (const [key, count] of counts) seen.set(key, Math.max(count, seen.get(key) ?? 0));
   };
   const timer = setInterval(poll, 1000);
   const wait = child.exited.then((status) => {

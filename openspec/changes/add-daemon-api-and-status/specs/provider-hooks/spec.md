@@ -37,6 +37,21 @@ When the daemon does not accept the event in time, `relay hook` SHALL append it 
 - **WHEN** no daemon is running and `relay hook claude StopFailure` receives `{"error":"rate_limit", ...}` from a worker with `RELAY_TARGET=claude:work`
 - **THEN** the spool holds the event, and after the daemon starts, `claude:work` shows `rate_limited`
 
+#### Scenario: Spooled while the daemon runs
+- **WHEN** the daemon runs but did not answer a hook within 150 ms, so the hook spooled its event
+- **THEN** the daemon processes the line within a few seconds, after the next hook event it accepts or its next 2-second check, without waiting for a restart
+
+### Requirement: Interactive workers see their hook events
+An interactive worker SHALL see the hook events of its session whether or not the daemon runs: it SHALL read the spool and the `hook` events of its job's `events.jsonl`, which keep `received_at`, `relay_worker`, the provider, the event and the allowed fields, and SHALL handle an event that moved from the spool to `events.jsonl` once.
+
+#### Scenario: Limit with the daemon running
+- **WHEN** an interactive Claude Code worker's agent hits a rate limit and its `StopFailure` hook is accepted by the daemon
+- **THEN** the worker reports `turn_failed` with reason `rate_limit`, and the spool holds no line for it
+
+#### Scenario: Limit without the daemon
+- **WHEN** the same happens with no daemon running
+- **THEN** the worker reports `turn_failed` with reason `rate_limit` from the spool line
+
 ### Requirement: Only allow-listed fields are kept
 The hook SHALL keep only the input fields `session_id`, `cwd`, `hook_event_name`, `error`, `notification_type`, `reason`, `source`, `model` and `turn_id` (the list of `add-provider-adapters`), plus `RELAY_JOB`, `RELAY_TARGET`, `RELAY_WORKER` and the `profile` (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`, or `default`). It SHALL NOT keep `error_type`, which Claude Code does not document. All other fields SHALL be dropped before the event is sent, spooled or logged.
 

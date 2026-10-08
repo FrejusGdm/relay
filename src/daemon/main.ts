@@ -3,13 +3,15 @@
 // Start-up: private runtime directory, the daemon lock, removal of a stale socket and pid file,
 // the index (rebuilt from the files when relay.db is missing, damaged or old), the API listener,
 // the pid file, then following the job files. Shutdown on SIGTERM or SIGINT: stop accepting
-// connections, end the event streams with a shutdown event, let open requests finish, checkpoint
-// the database's write-ahead log, remove the socket and the pid file, release the lock.
+// connections, end the event streams with a shutdown event, let open requests finish and queued
+// hook events be processed, checkpoint the database's write-ahead log, remove the socket and the
+// pid file, release the lock.
 // Operations and headless workers join these sequences in later task groups.
 import { chmodSync, lstatSync, rmSync, unlinkSync } from "node:fs";
 import { createRouter } from "../api/router";
 import { accountRoutes } from "../api/routes/accounts";
 import { eventRoutes } from "../api/routes/events";
+import { hookRoutes } from "../api/routes/hooks";
 import { jobRoutes } from "../api/routes/jobs";
 import { providerRoutes } from "../api/routes/providers";
 import { versionRoute } from "../api/routes/version";
@@ -20,6 +22,7 @@ import { loadConfig } from "../core/config/load";
 import type { LogLevel, RelayConfig } from "../core/config/types";
 import { printable } from "../core/quote";
 import { VERSION } from "../core/version";
+import { HookQueue } from "../hooks/mapping";
 import { openDatabase, SCHEMA_VERSION } from "../state/db";
 import { buildIndex, syncTargets } from "../state/index-builder";
 import { readProjects } from "../state/projects-list";
@@ -27,6 +30,7 @@ import { Follower } from "./follow";
 import { openDaemonLog } from "./log";
 import { checkSocketPathLength, DaemonStartError, prepareRuntimeDir, removeStaleSocket, runtimeDir, socketPath } from "./paths";
 import { pidPath, readPidFile, removeOwnPidFile, takeDaemonLock, writePidFile } from "./singleton";
+import { SpoolDrain } from "./spool";
 
 const PID_WAIT_MS = 1000;
 
@@ -104,6 +108,8 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
 
     const stream = new EventStream(db);
     const follower = new Follower({ db, relayHome: opts.relayHome, stream, log });
+    const hooks = new HookQueue({ db, relayHome: opts.relayHome, homedir: opts.homedir, stream, log, catchUp: () => follower.check() });
+    const spool = new SpoolDrain({ relayHome: opts.relayHome, queue: hooks, log });
     const started_at = new Date().toISOString();
     const router = createRouter([
       versionRoute({ pid: process.pid, started_at, schema_version: SCHEMA_VERSION }, db),
@@ -111,17 +117,21 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
       ...accountRoutes(db),
       ...jobRoutes(db),
       ...eventRoutes(stream),
+      ...hookRoutes(hooks, () => spool.poke()),
     ]);
     const server = startApiServer({ socketPath: socket, router, log });
     chmodSync(socket, 0o600);
     writePidFile(runDir, { pid: process.pid, started_at, version: VERSION, socket });
     log.info("daemon_started", { pid: process.pid, version: VERSION, socket, schema_version: SCHEMA_VERSION });
     follower.start();
+    spool.start();
 
     const signal = await stopSignal;
     log.info("daemon_stopping", { signal });
     stream.shutdown();
     await server.stop();
+    await spool.stop();
+    await hooks.idle();
     await follower.stop();
     db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     db.close();

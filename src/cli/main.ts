@@ -7,6 +7,10 @@ import { runInterruptActions } from "../core/cleanup";
 import { resolveHomedir } from "../core/paths";
 import { stopGitProcesses } from "../git/run";
 
+// relay hook ends 500 ms after the process started, whatever happens, so it never holds up an agent
+// (add-daemon-api-and-status, design decision 18, step 1).
+if (process.argv[2] === "hook") setTimeout(() => process.exit(0), Math.max(0, 500 - performance.now()));
+
 let log: Logger | undefined;
 // relay first removes what the interrupted command registered with onInterrupt. git runs in its own
 // process group, so Control-C does not reach it; relay stops it before exiting.
