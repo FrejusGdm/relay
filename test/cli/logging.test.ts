@@ -53,7 +53,7 @@ describe("Log file locations", () => {
     expect(readdirSync(join(relayHome, "logs"))).toEqual(["hook.log"]);
     expect(statSync(join(relayHome, "logs", "hook.log")).mode & 0o777).toBe(0o600);
     expect(entries(relayHome, "hook.log")).toContainEqual(
-      expect.objectContaining({ msg: "hook ignored: not built yet", provider: "claude", event: "Stop" }),
+      expect.objectContaining({ msg: "hook received", provider: "claude", event: "Stop" }),
     );
   });
 
@@ -341,10 +341,10 @@ describe("What logs never contain", () => {
 
     expect(messages(relayHome).length).toBeGreaterThan(0);
     expect(entries(relayHome, "hook.log")).toContainEqual(
-      expect.objectContaining({ msg: "hook ignored: not built yet", provider: null, event: null }),
+      expect.objectContaining({ msg: "hook received", provider: null, event: null }),
     );
     expect(entries(relayHome, "hook.log")).toContainEqual(
-      expect.objectContaining({ msg: "hook ignored: not built yet", provider: "claude", event: null }),
+      expect.objectContaining({ msg: "hook received", provider: "claude", event: null }),
     );
     expect(messages(badSettings)).toContain("settings invalid");
     expect(entries(goodSettings)).toContainEqual(expect.objectContaining({ msg: "settings loaded", projects: 1 }));
@@ -359,7 +359,7 @@ describe("What logs never contain", () => {
       stdin: JSON.stringify({ session_id: sessionId }),
     });
     expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
-    expect(messages(relayHome, "hook.log")).toContain("hook ignored: not built yet");
+    expect(messages(relayHome, "hook.log")).toContain("hook received");
     expect(allLogs(relayHome)).not.toContain(sessionId);
   });
 });
@@ -377,7 +377,7 @@ describe("Hook event names", () => {
     const relayHome = makeRelayHome();
     await runRelayInProcess(["hook", provider, event], { relayHome });
     expect(entries(relayHome, "hook.log")).toContainEqual(
-      expect.objectContaining({ msg: "hook ignored: not built yet", provider: loggedProvider, event: loggedEvent }),
+      expect.objectContaining({ msg: "hook received", provider: loggedProvider, event: loggedEvent }),
     );
   });
 
@@ -385,7 +385,7 @@ describe("Hook event names", () => {
     const relayHome = makeRelayHome();
     const word = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => String.fromCharCode(97 + (byte % 26))).join("");
     await runRelayInProcess(["hook", "claude", word], { relayHome });
-    expect(messages(relayHome, "hook.log")).toContain("hook ignored: not built yet");
+    expect(messages(relayHome, "hook.log")).toContain("hook received");
     expect(allLogs(relayHome)).not.toContain(word);
   });
 });

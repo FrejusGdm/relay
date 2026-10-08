@@ -16,12 +16,11 @@ What exists today: the interface in `src/adapters/types.ts`, the registry in
 `src/adapters/lines.ts`, reset-time reading in `src/adapters/reset-time.ts`, TOML string encoding in
 `src/adapters/text.ts`, the agent environment in `src/accounts/environment.ts`, the redaction of
 facts in `src/secrets/redact.ts`, and the clock in `src/platform/clock.ts`. The Claude Code and
-Codex adapters in `src/adapters/claude/adapter.ts` and `src/adapters/codex/adapter.ts` can so far
-find their program, read its version and sign-in state, name its login command, and declare their
-capabilities, policy and hooks; `src/adapters/program.ts` holds the part they share. Starting
-workers and reading availability come in later tasks of the same change; until then `start()` and
-`availability()` fail with a "not built yet" message. `docs/accounts.md` describes the accounts
-that use these adapters.
+Codex adapters are in `src/adapters/claude/` and `src/adapters/codex/`; `src/adapters/program.ts`
+finds their programs, `src/adapters/mapper.ts` and `src/adapters/worker.ts` hold the parts their
+workers share. The sections "The Claude Code adapter" and "The Codex adapter" below describe how
+each one drives its program. `docs/accounts.md` describes the accounts that use these adapters, and
+`docs/hooks.md` the hooks and the status line.
 
 ## Words used on this page
 
@@ -288,6 +287,16 @@ relay. Instructions go only through the tool's system channel, and text written 
 as `.relay/checkpoint.md`, never goes there. For Codex's `-c developer_instructions=<value>`,
 `tomlString()` in `src/adapters/text.ts` encodes the text as a TOML basic string.
 
+A prompt on a command line always comes last, after `--`, so neither program reads it as an
+option: a prompt such as `--dangerously-bypass-approvals-and-sandbox` stays a prompt. Codex reads
+every argument after `--` as a positional argument. Claude Code's argument parser still runs a
+subcommand whose name equals the first argument after `--`, so relay adds a space at the end of a
+one-word prompt (`update` becomes `update `), and `codex exec`, which reads standard input when the
+prompt is `-`, gets `- ` instead. A session ID reaches a command line only when it is a UUID
+(`isSessionId()` in `src/adapters/worker.ts`); relay refuses to resume any other ID, and ignores a
+`SessionStart` hook line whose `session_id` is not a UUID, because any program can write to the
+spool.
+
 Facts that relay writes to the job's event log, such as the commands an agent ran, pass through
 `redact()` in `src/secrets/redact.ts` first. It replaces common token formats (Anthropic, OpenAI,
 GitHub, Slack and AWS keys, and JSON web tokens), the value after `Bearer `, the value of a
@@ -359,3 +368,116 @@ release-binary check or the smoke test. relay itself does not refuse a future da
 so that a computer with a wrong clock can still run it.
 `mayAutoSwitch(from, to)` in `src/policies/switching.ts` answers no, with the reason, whenever both
 accounts belong to the same provider, and no setting changes that.
+
+## The Claude Code adapter
+
+The adapter runs the `claude` program you installed, never the Agent SDK (design decision 3).
+
+**Headless** (`claude-print`): relay runs
+
+```
+claude -p --input-format stream-json --output-format stream-json --verbose --session-id <uuid>
+  --permission-mode acceptEdits --permission-prompts none --append-system-prompt <instructions> [--model <name>]
+```
+
+with `--permission-mode dontAsk` for `read-only`. relay chooses the session ID (a random UUID
+version 4) before the start, so it is known before Claude Code prints anything; when the `init`
+event names another ID, relay keeps that one and notes the difference in the worker log. Each
+message goes to standard input as one line
+`{"type":"user","message":{"role":"user","content":…},"parent_tool_use_id":null}`, and relay closes
+standard input when a turn has finished and no message is waiting, so Claude Code exits. To
+interrupt, relay sends `SIGINT`; when no `result` follows within 10 seconds it sends `SIGTERM`, and
+`SIGKILL` 5 seconds later. A resume passes `--resume <id>` in place of `--session-id` and every
+other flag again, because Claude Code does not restore them.
+
+```mermaid
+sequenceDiagram
+  participant relay
+  participant claude as claude -p
+  relay->>claude: start with --session-id, flags, instructions
+  relay->>claude: {"type":"user",…} (the prompt)
+  claude-->>relay: system/init (session_id)
+  claude-->>relay: assistant, user, rate_limit_event …
+  claude-->>relay: result
+  alt no message waiting
+    relay->>claude: close standard input
+    claude-->>relay: exit
+  else relay interrupts
+    relay->>claude: SIGINT
+    claude-->>relay: result (interrupted), keeps running
+  end
+```
+
+The diagram shows one headless turn. `src/adapters/claude/stream.ts` turns each line into worker
+events (decision 8), and the worker records limit readings and finished turns in the account's
+`availability.json`.
+
+**Interactive** (`claude-interactive`): relay runs `claude --session-id <uuid> --append-system-prompt
+<instructions> [-- <prompt>]` in your terminal, with no permission flag, and learns what happens from
+relay's hooks: every second it reads the spool lines of this worker or this session.
+`StopFailure` gives `turn_failed` with the hook's `error`, `Stop` gives `turn_completed`, and
+`Notification` with `quota_auto_resume_fired` marks the account available again. relay never
+changes Claude Code's `autoContinueAtUsageLimit`.
+
+**Availability** comes only from readings relay recorded before: headless streams, hooks and the
+status line. The adapter never calls a web address and never reads Claude Code's own files.
+
+## The Codex adapter
+
+**App server** (`codex-app-server`, the default for headless workers): relay starts one
+`codex app-server` per worker and speaks JSON-RPC over its standard input and output
+(`src/adapters/codex/rpc.ts`): `initialize` with `clientInfo` `relay`, the `initialized`
+notification, `thread/start` with `cwd`, `sandbox` (`workspace-write` or `read-only`),
+`approvalPolicy` `never` and `developerInstructions`, then `turn/start` with the prompt. The
+thread's ID is the session ID. A message during a turn goes as `turn/steer` with `expectedTurnId`,
+an interrupt as `turn/interrupt`, and a resume as `thread/resume` with every setting again. After a
+turn fails with `usageLimitExceeded`, relay reads `account/rateLimits/read` once and takes the reset
+time from the windows at 100 percent. relay never answers an approval request: it reports
+`approval_needed` and sends no decision.
+
+```mermaid
+sequenceDiagram
+  participant relay
+  participant server as codex app-server
+  relay->>server: initialize (clientInfo relay)
+  server-->>relay: answer
+  relay->>server: initialized
+  relay->>server: thread/start (cwd, sandbox, approvalPolicy never, developerInstructions)
+  server-->>relay: thread (id = session ID)
+  relay->>server: turn/start (prompt)
+  server-->>relay: item/started, item/completed, …
+  server-->>relay: turn/completed
+  opt failed with usageLimitExceeded
+    relay->>server: account/rateLimits/read
+    server-->>relay: windows and reset times
+  end
+  relay->>server: close standard input
+```
+
+The diagram shows one headless Codex turn. `src/adapters/codex/app-server.ts` turns the server's
+messages into worker events.
+
+**Fallback** (`codex-exec`): when the app server exits before answering `initialize`, gives no
+answer within 15 seconds, or answers `thread/start` with method-not-found, relay uses
+`codex exec --json -C <root> -s <sandbox> -c developer_instructions=<TOML string> -- <prompt>` with
+standard input at end of file, and notes in the worker log that reset times are not available.
+`RELAY_CODEX_TRANSPORT=exec` forces this transport. A resume is
+`codex exec resume <id> --json -c sandbox_mode="<sandbox>" -c developer_instructions=<…> -- <prompt>`.
+In this mode a usage limit is read from the message text, "You've hit your usage limit … try again
+at <time>".
+
+**Interactive** (`codex-interactive`): `codex -C <root> -c developer_instructions=<…> [-- <prompt>]` in
+your terminal. The session ID comes from the first `SessionStart` hook event of this worker, so it
+stays unknown until you trust relay's hooks in Codex.
+
+**Availability** is read live: relay starts `codex app-server` with the account's environment, asks
+`account/rateLimits/read` and stops it within 10 seconds. `ordinaryUsageAllowed` true gives
+`available`, false or a `rateLimitReachedType` gives `quota_exhausted`, and null gives `unknown`.
+The error Codex sends when no account is signed in ("authentication required to read rate limits")
+gives `unavailable` with "Codex is not signed in on this account." Any other error gives `unknown`
+and leaves the earlier reading in place. These short sessions share one worker log per account,
+`logs/workers/availability-codex-<name>.log`, which relay empties when it is larger than 1 MiB.
+
+Before relay is used with a new Codex version, `bun run scripts/check-codex-protocol.ts` checks
+that every method, field and value in `src/adapters/codex/protocol-used.json` still exists
+(`docs/testing-adapters.md`).
