@@ -137,10 +137,10 @@ describe("Argument count checking", () => {
   });
 
   test("three arguments for account are accepted", async () => {
-    expect(await runRelayInProcess(["account", "add", "codex", "work"])).toEqual({
-      code: 69,
+    expect(await runRelayInProcess(["account", "status", "codex", "work"])).toEqual({
+      code: 21,
       stdout: "",
-      stderr: notBuilt("account"),
+      stderr: "codex:work is not one of your accounts. See relay account list.\n",
     });
   });
 

@@ -1,0 +1,11 @@
+{"dir":"client","msg":{"method":"initialize","id":1,"params":{"clientInfo":{"name":"relay","title":"relay","version":"0.1.0"},"capabilities":{"experimentalApi":false,"requestAttestation":false}}}}
+{"dir":"server","msg":{"id":1,"result":{"userAgent":"codex_cli_rs/0.160.0"}}}
+{"dir":"client","msg":{"method":"initialized"}}
+{"dir":"client","msg":{"method":"thread/start","id":2,"params":{"cwd":"/home/user/project","sandbox":"workspace-write","approvalPolicy":"never","developerInstructions":"<instructions>"}}}
+{"dir":"server","msg":{"id":2,"result":{"thread":{"id":"0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31","preview":"","modelProvider":"openai","createdAt":1791460800,"updatedAt":1791460800,"path":null,"cwd":"/home/user/project","cliVersion":"0.160.0","source":"appServer","gitInfo":null,"turns":[]},"model":"gpt-6.1-sol","modelProvider":"openai","cwd":"/home/user/project","approvalPolicy":"never","sandbox":{"type":"workspaceWrite"},"reasoningEffort":null}}}
+{"dir":"server","msg":{"method":"thread/started","params":{"thread":{"id":"0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31","preview":"","modelProvider":"openai","createdAt":1791460800,"updatedAt":1791460800,"path":null,"cwd":"/home/user/project","cliVersion":"0.160.0","source":"appServer","gitInfo":null,"turns":[]}}}}
+{"dir":"client","msg":{"method":"turn/start","id":3,"params":{"threadId":"0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31","input":[{"type":"text","text":"<prompt>","text_elements":[]}]}}}
+{"dir":"server","msg":{"id":3,"result":{"turn":{"id":"turn_1","items":[],"status":"inProgress","error":null}}}}
+{"dir":"server","msg":{"method":"turn/started","params":{"threadId":"0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31","turn":{"id":"turn_1","items":[],"status":"inProgress","error":null}}}}
+{"dir":"server","msg":{"method":"error","params":{"error":{"message":"unexpected status 401 Unauthorized","codexErrorInfo":"unauthorized","additionalDetails":null},"willRetry":false,"threadId":"0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31","turnId":"turn_1"}}}
+{"dir":"server","msg":{"method":"turn/completed","params":{"threadId":"0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31","turn":{"id":"turn_1","items":[],"status":"failed","error":{"message":"unexpected status 401 Unauthorized","codexErrorInfo":"unauthorized","additionalDetails":null}}}}}

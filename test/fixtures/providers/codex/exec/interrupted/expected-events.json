@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "session_started",
+    "providerSessionId": "0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31",
+    "source": "stream"
+  },
+  {
+    "kind": "message",
+    "text": "I will run the tests.",
+    "partial": false
+  },
+  {
+    "kind": "turn_failed",
+    "reason": "interrupted",
+    "message": "The agent stopped before the turn ended.",
+    "source": "none"
+  }
+]

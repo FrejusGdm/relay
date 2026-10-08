@@ -68,6 +68,7 @@ in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 | [docs/cli.md](docs/cli.md) | The `relay` command line: commands, output and exit codes |
 | [docs/daemon.md](docs/daemon.md) | The background service: its files, the `relay daemon` commands and the private socket |
 | [docs/adapters.md](docs/adapters.md) | How relay starts, watches and stops Claude Code and Codex, and the events adapters report |
+| [docs/accounts.md](docs/accounts.md) | Adding, checking and removing accounts, profile folders, and what relay never stores |
 | [docs/testing-adapters.md](docs/testing-adapters.md) | The fake agents and scenario files that tests use instead of real providers |
 | `DESIGN.md`, `docs/design/` | The design direction and its working preview |
 | `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |

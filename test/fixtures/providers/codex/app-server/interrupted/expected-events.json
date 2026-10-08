@@ -1,0 +1,25 @@
+[
+  {
+    "kind": "session_started",
+    "providerSessionId": "0199a3c2-7d4e-7b10-9c1a-2f5e8d6b4a31",
+    "source": "stream",
+    "model": "gpt-6.1-sol",
+    "providerVersion": "0.160.0"
+  },
+  {
+    "kind": "message",
+    "text": "I will run the tests.",
+    "partial": true
+  },
+  {
+    "kind": "message",
+    "text": "I will run the tests.",
+    "partial": false
+  },
+  {
+    "kind": "turn_failed",
+    "reason": "interrupted",
+    "message": "Interrupted.",
+    "source": "stream_event"
+  }
+]

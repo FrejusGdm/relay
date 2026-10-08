@@ -277,3 +277,49 @@ export function deleteOldWorkerLogs(relayHome: string): void {
     }
   }
 }
+
+export interface ShortCommandOptions {
+  path: string;
+  args: string[];
+  env: Record<string, string>;
+  timeoutMs: number;
+}
+
+// Runs a short provider command, such as `claude --version` or `codex login status`, with its input
+// at end of file, and returns its exit code and up to 1 MiB of its standard output. Its standard
+// error is discarded. A command still running at the time limit is killed through the held child.
+export function runShortCommand(options: ShortCommandOptions): Promise<{ code: number | null; stdout: string }> {
+  const limit = 1_048_576;
+  return new Promise((done, fail) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(options.path, options.args, { env: options.env, stdio: ["ignore", "pipe", "ignore"] });
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    child.stdout!.on("data", (chunk: Buffer) => {
+      if (size < limit) chunks.push(chunk.subarray(0, limit - size));
+      size += chunk.length;
+    });
+    const timer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, options.timeoutMs);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      fail(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      done({ code, stdout: Buffer.concat(chunks).toString("utf8") });
+    });
+  });
+}
+
+// Runs a provider command attached to the person's terminal, such as `claude auth login`, and
+// waits for it. relay does not read the terminal while it runs.
+export async function runInTerminal(options: InteractiveOptions): Promise<ExitStatus> {
+  return startInteractive(options).exited;
+}

@@ -11,5 +11,5 @@ test("an override replaces one provider and leaves the other", () => {
   const registry = createAdapterRegistry({ claude: fake });
   expect(registry.get("claude")).toBe(fake);
   expect(registry.providers()).toEqual(["claude", "codex"]);
-  expect(() => registry.get("codex")).toThrow("The Codex adapter is not built yet.");
+  expect(registry.get("codex").displayName).toBe("Codex");
 });
