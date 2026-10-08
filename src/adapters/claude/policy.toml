@@ -1,0 +1,40 @@
+# relay's notes on the Claude Code terms (add-provider-adapters, design decision 12).
+# Check them again before checked_on is older than max_age_days; scripts/check-policies.ts lists stale ones.
+provider = "claude"
+display_name = "Claude Code"
+checked_on = "2026-10-07"
+max_age_days = 90
+sign_in_methods = [
+  "Claude Code's own login (claude auth login) in the unmodified claude program",
+  "Your own Anthropic API key, in an environment variable you name",
+]
+unattended_subscription_use = "unclear"
+same_provider_automatic_switching = "off"
+usage_signals = [
+  "rate_limit_event in claude -p stream JSON",
+  "the error value rate_limit on assistant events and in the StopFailure hook",
+  "rate_limits in the status-line input (Pro and Max plans only)",
+  "the limit messages on Claude Code's errors page, as a last resort",
+]
+summary = """
+relay starts the Claude Code program you installed, signed in to your own account through \
+Anthropic's own login. relay never sees, stores or passes on your login. Anthropic says Pro and \
+Max limits assume ordinary, individual use, and its usage policy forbids using several accounts \
+to get around product limits. relay never moves a job between two of your Claude accounts on its own."""
+unclear = """
+No Anthropic page says whether long unattended runs on a subscription count as ordinary, \
+individual use, or whether one person may move work between two of their own paid accounts \
+when one reaches its limit."""
+
+[[terms]]
+title = "Claude Code legal and compliance"
+url = "https://code.claude.com/docs/en/legal-and-compliance"
+[[terms]]
+title = "Anthropic Consumer Terms"
+url = "https://www.anthropic.com/legal/consumer-terms"
+[[terms]]
+title = "Anthropic Usage Policy"
+url = "https://www.anthropic.com/legal/aup"
+[[terms]]
+title = "Claude Code: several accounts"
+url = "https://code.claude.com/docs/en/authentication#log-in-with-multiple-accounts"

@@ -3,7 +3,8 @@
 This page describes the `relay` command: its commands, where its output goes, and its exit codes.
 The source is in `src/cli/`. In this version every command shows its help and checks its
 arguments. `relay init` and `relay checkpoint` do their real work, which `docs/checkpoints.md`
-describes; the other commands do not yet. The change named in the "Built by" column builds each one.
+describes, and so do `relay account`, `relay providers` and `relay policy show`, which
+`docs/accounts.md` describes; the other commands do not yet. The change named in the "Built by" column builds each one.
 
 ## Commands
 
@@ -18,7 +19,7 @@ describes; the other commands do not yet. The change named in the "Built by" col
 | `switch` | `relay switch <provider[:account]>` | 1 | `add-relay-switch` |
 | `status` | `relay status` | none | `add-daemon-api-and-status` |
 | `account` | `relay account <list\|add\|status\|login\|remove> [<provider> <name> \| <provider:name>]` | 1 to 3 | `add-provider-adapters` |
-| `providers` | `relay providers` | none | `add-provider-adapters` |
+| `providers` | `relay providers [--json]` | none | `add-provider-adapters` |
 | `policy` | `relay policy show <provider>` | 2 | `add-provider-adapters` |
 | `hooks` | `relay hooks <install\|remove\|status> <provider:name>` | 2 | `add-provider-adapters` |
 | `hook` | `relay hook <provider> <event>` | 2 | `add-provider-adapters`, extended by `add-daemon-api-and-status` |
@@ -60,7 +61,8 @@ reading settings or writing any file. For a valid command line, relay then finds
 creates it if it is missing, checks that it is private, and loads and checks `config.toml`.
 `docs/config.md` describes these checks with their own diagram. Any problem there prints a
 settings error and exits with code 78. When the settings load, the command's handler runs, which
-in this version is the "not built yet" handler for every command except `hook` and `init`. When a handler
+in this version is the "not built yet" handler for every command except `hook`, `init`,
+`checkpoint`, `account`, `providers` and `policy`. When a handler
 throws an error that it does not handle, relay prints the error and exits with code 70. Once the
 relay folder has passed its checks, relay records each of these steps in a log file, as the next
 section describes.
@@ -231,7 +233,10 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 6 | `Busy` | Another relay command is working on the job. |
 | 7 | `NeedsPerson` | relay needs the person: a question without a terminal and without `--yes`, a "no", or a command that must be run at a terminal. |
 | 8 | `UnsavedFiles` | A rollback would overwrite or delete files relay has not saved. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 10 by `add-daemon-api-and-status`, 20 to 25 by `add-provider-adapters`, 31 to 33 by `add-relay-switch`. The other numbers are free. |
+| 20 | `ProviderMissing` | The provider's program is not installed, or older than the oldest version relay was tested with. |
+| 21 | `NoSuchAccount` | The account is not in `config.toml`. |
+| 22 | `NotSignedIn` | The account is not signed in, or its sign-in did not finish. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 10 by `add-daemon-api-and-status`, 23 to 25 by `add-provider-adapters`, 31 to 33 by `add-relay-switch`. The other numbers are free. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |

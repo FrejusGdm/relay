@@ -28,9 +28,9 @@ variable `RELAY_HOME` names another folder. An empty `RELAY_HOME` counts as unse
   `relay: you cannot read, write and open <folder>. Run "chmod 700 <folder>" and try again.` A path
   that is not a folder gives `relay: <folder> is not a folder.`
 
-In this version the folder holds `config.toml`, your settings, which relay only reads, and
-`logs/`, relay's log files (see `docs/cli.md`). Later changes add `profiles/` (the default profile
-folder of each account), `accounts/`, `jobs/`, `locks/`, `tmp/`, `spool/`, `run/`,
+In this version the folder holds `config.toml`, your settings, `logs/`, relay's log files (see
+`docs/cli.md`), `profiles/` (the default profile folder of each account) and `accounts/` (relay's
+records about each account; see `docs/accounts.md`). Later changes add `jobs/`, `locks/`, `tmp/`, `spool/`, `run/`,
 `projects.list` and `relay.db`, and describe them in their own documents.
 
 The settings live in your relay folder and never inside a project, so a repository cannot add
@@ -145,6 +145,10 @@ provider's own program keeps its sign-in.
 
 An account with no settings, `[accounts."claude:personal"]` alone, is valid.
 
+`relay account add` appends an account's table to this file and `relay account remove` removes it,
+keeping every other line and comment as it was (`docs/accounts.md`). They are the only commands
+that write `config.toml`, through `src/core/config/edit.ts`, and they never write a credential.
+
 ### `[[projects]]`
 
 Each `[[projects]]` table lists the accounts allowed to work on one project. Handing work to an
@@ -248,8 +252,10 @@ repeating the system's message, for example
 `the system reported <code>` for any other error code. A symbolic link named `config.toml` that
 leads nowhere is such an error, not a missing file.
 
-relay only reads `config.toml` in this version. Later versions change it only to add or remove
-accounts and allow-list entries, through one module, and never write a credential to it.
+relay changes `config.toml` only to add or remove accounts (and, in a later version, allow-list
+entries), through one module, `src/core/config/edit.ts`, and never writes a credential to it. It
+keeps every other byte, checks the result like any loaded file, and writes it to a temporary file
+with mode 0600 that it renames over the old one, so a failed change leaves the file as it was.
 
 ## Problem messages
 

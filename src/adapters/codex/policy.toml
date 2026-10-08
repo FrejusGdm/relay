@@ -1,0 +1,37 @@
+# relay's notes on the Codex terms (add-provider-adapters, design decision 12).
+# Check them again before checked_on is older than max_age_days; scripts/check-policies.ts lists stale ones.
+provider = "codex"
+display_name = "Codex"
+checked_on = "2026-10-07"
+max_age_days = 90
+sign_in_methods = [
+  "Codex's own login (codex login) in the unmodified codex program",
+  "Your own OpenAI API key, in an environment variable you name",
+]
+unattended_subscription_use = "allowed"
+same_provider_automatic_switching = "off"
+usage_signals = [
+  "account/rateLimits/read and account/rateLimits/updated in the Codex app server",
+  "the error code usageLimitExceeded on failed turns",
+  "the usage-limit message of codex exec, as a last resort",
+]
+summary = """
+relay starts the Codex program you installed, signed in through OpenAI's own login. relay never \
+sees, stores or passes on your login. OpenAI's Terms of Use forbid getting around rate limits. \
+relay never moves a job between two of your Codex accounts on its own."""
+unclear = """
+OpenAI's terms do not mention one person holding several accounts. Moving to a second Codex \
+account because the first reached its limit could be read as getting around rate limits."""
+
+[[terms]]
+title = "OpenAI Terms of Use"
+url = "https://openai.com/policies/terms-of-use/"
+[[terms]]
+title = "Using Codex with your ChatGPT plan"
+url = "https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan"
+[[terms]]
+title = "Codex authentication"
+url = "https://learn.chatgpt.com/docs/auth"
+[[terms]]
+title = "Codex advanced configuration (CODEX_HOME)"
+url = "https://learn.chatgpt.com/docs/config-file/config-advanced"

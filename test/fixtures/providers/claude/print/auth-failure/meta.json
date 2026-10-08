@@ -1,0 +1,16 @@
+{
+  "provider": "claude",
+  "transport": "claude-print",
+  "tool_version": "2.1.282",
+  "recorded_at": "2026-10-08T12:00:00.000Z",
+  "source": "documentation",
+  "command": [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose"
+  ],
+  "redactions": []
+}

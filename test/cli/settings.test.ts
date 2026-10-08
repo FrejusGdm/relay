@@ -16,8 +16,8 @@ describe("Commands that are not built yet", () => {
   const readSettings = COMMANDS.filter((def) => def.name !== "hook");
   const unbuilt = readSettings.filter((def) => !def.built);
 
-  test("there are thirteen of them", () => {
-    expect(unbuilt).toHaveLength(13);
+  test("there are ten of them", () => {
+    expect(unbuilt).toHaveLength(10);
   });
 
   test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(

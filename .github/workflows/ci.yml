@@ -58,6 +58,8 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: Every provider policy was checked within its max_age_days
+        run: bun run scripts/check-policies.ts
       - run: bun run build:${{ matrix.target }}
       - run: bash scripts/check-release-binary.sh
       - if: runner.os == 'macOS'
