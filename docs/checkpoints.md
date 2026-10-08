@@ -1,10 +1,10 @@
 # Jobs and checkpoints
 
-This page describes how relay sets up a job in a git checkout, how it saves checkpoints, and how it
-checks for secrets before it saves anything. The behaviour comes from the OpenSpec change
-`add-checkpoint-engine` (`openspec/changes/add-checkpoint-engine/`). Today `relay init`,
-`relay checkpoint` and the secret scan are built. Listing and rolling back checkpoints come with
-the next tasks of that change, and each one adds its own section here.
+This page describes how relay sets up a job in a git checkout, how it saves, lists and rolls back
+checkpoints, and how it checks for secrets before it saves anything. The behaviour comes from the
+OpenSpec change `add-checkpoint-engine` (`openspec/changes/add-checkpoint-engine/`). Today
+`relay init`, `relay checkpoint`, `relay checkpoints`, `relay rollback` and the secret scan are
+built. `relay accept-git-changes` comes with a later task of that change.
 
 ## Setting up a job
 
@@ -171,8 +171,8 @@ relay checkpoint [-m <text>] [--include <path>]... [--json]
 ```
 
 `relay init` (for the baseline) and `relay checkpoint` both call one function,
-`saveCheckpoint` in `src/checkpoint/save.ts`. Later changes call the same function for the
-checkpoint saved before a rollback and for the checkpoint of a handoff.
+`saveCheckpoint` in `src/checkpoint/save.ts`. `relay rollback` calls the same function for the
+checkpoint it saves before a rollback, and a later change calls it for the checkpoint of a handoff.
 
 ```mermaid
 sequenceDiagram
@@ -250,7 +250,8 @@ Relay-Version: 0.1.0
 
 The message given with `-m` becomes one line: newlines and tabs become spaces, other control
 characters and invisible characters are removed, and it is cut to 200 characters. `Relay-Kind` is `baseline` for the first checkpoint of a
-job and `manual` for `relay checkpoint`; later changes add `pre_rollback`, `handoff` and `auto`.
+job, `manual` for `relay checkpoint` and `pre_rollback` for the checkpoint `relay rollback` saves
+first; a later change adds `handoff` and `auto`.
 `Relay-Head` is the commit `HEAD` pointed to (`none` without commits), and `Relay-Branch` is the
 branch name, or `(detached)`. The author and committer are your `user.name` and `user.email`, or
 `relay` and `relay@localhost` when they are not set. A checkpoint commit is never signed, even
@@ -385,6 +386,324 @@ Each saved checkpoint appends a `checkpoint_saved` event with `number`, `commit`
 `latest_checkpoint`, `checkpoint_count` and `updated_at` in `state.json`. A checkpoint stopped by
 the trust check, a secret-like file name or the secret scan appends a `checkpoint_refused` event
 with the reason `git_changed`, `secret_like_file` or `secret_found`.
+
+## Listing checkpoints
+
+`relay checkpoints` lists the job's checkpoints, newest first. It reads them with one
+`git for-each-ref` call over `refs/relay/jobs/<job>/checkpoints/`, and takes the kind, the commit
+`HEAD` pointed to and the left-out files from the trailers of each commit. It only reads: it
+takes no lock, appends no event and changes no file. Like `relay checkpoint`, it first checks the
+git trust record, and stops with exit code 5 when the git settings or hooks changed.
+
+```
+relay checkpoints [--json]
+```
+
+Each row shows the number, the short commit, the kind, how long ago the checkpoint was saved, and
+the message given with `-m`. The kind `pre_rollback` is shown as `before rollback`.
+
+```
+$ relay checkpoints
+Job 3712730d · main
+
+3  f36427a  before rollback  1 second ago   Before rolling back to checkpoint 2
+2  7d0b08a  manual           2 seconds ago  Login form done
+1  a639714  baseline         3 seconds ago
+(exit code 0)
+```
+
+With `--json`, relay prints one JSON array with the fields `number`, `commit`, `ref`, `kind`,
+`message` (null without `-m`), `created_at`, `head` (null in a repository without commits) and
+`left_out`:
+
+```
+$ relay checkpoints --json
+[{"number":1,"commit":"ae5e9936d58952dd658e130d0b211ed080a0d8ed","ref":"refs/relay/jobs/8d117bdd/checkpoints/1","kind":"baseline","message":null,"created_at":"2026-10-08T03:09:03.000Z","head":null,"left_out":[]}]
+(exit code 0)
+```
+
+## Rolling back
+
+`relay rollback` returns the job's files to an earlier checkpoint. It is the only relay command
+that writes the person's files, so it shows what will change first, saves the current files as a
+new checkpoint before it changes anything, and never touches a file whose content relay has not
+saved.
+
+```
+relay rollback [<checkpoint>] [--yes] [--dry-run]
+```
+
+The checkpoint is a number, or the beginning of its commit (at least 7 hexadecimal characters)
+when that matches exactly one checkpoint of the job. Without one, relay uses the newest checkpoint
+that was not saved before a rollback, so running `relay rollback` twice does not undo the first
+rollback.
+
+```mermaid
+flowchart TD
+  start["relay rollback"] --> trust{"Do the git settings and hooks<br/>match the trust record?"}
+  trust -- no --> stop5["Exit code 5"]
+  trust -- yes --> lock["Take the job lock, or exit code 6"]
+  lock --> target{"Which checkpoint?"}
+  target -- "unknown or ambiguous" --> stop2["Exit code 2"]
+  target -- found --> snapshot["Build a tree of the current files<br/>on a copy of the index"]
+  snapshot --> plan["Compare it with the checkpoint:<br/>the files to modify, add and delete,<br/>outside .relay/"]
+  plan --> unsaved{"Would the plan write or delete<br/>a file relay has not saved?"}
+  unsaved -- yes --> stop8["Exit code 8"]
+  unsaved -- no --> empty{"Is the plan empty?"}
+  empty -- yes --> nothing["Nothing to roll back, exit code 0"]
+  empty -- no --> show["Print the plan"]
+  show --> ask{"--dry-run, --yes,<br/>or the person's answer"}
+  ask -- "--dry-run" --> dry["Exit code 0"]
+  ask -- "no terminal, or not y" --> stop7["Exit code 7"]
+  ask -- "--yes, or y" --> undo["Save the current files as the<br/>undo checkpoint, after the secret scan"]
+  undo -- "a secret, or the files<br/>changed meanwhile" --> stopped["Exit code 4 or 7"]
+  undo -- saved --> delete["Delete the planned files and<br/>the folders they leave empty"]
+  delete --> write["Write the planned files with read-tree<br/>and checkout-index on a temporary index"]
+  write --> check{"Do the files now match<br/>the checkpoint?"}
+  check -- no --> fail["Exit code 1 and the undo command"]
+  check -- yes --> done["Append the rollback event, update<br/>state.json, print the undo command"]
+```
+
+The diagram shows one rollback, from top to bottom. Every step down to the question changes
+nothing: at each exit on the way, the files, the refs and the event log are as they were. relay
+first checks the git trust record and takes the job lock, which it holds until the end, so no
+other relay command saves a checkpoint while the person reads the plan. It builds a tree of the
+current files the same way a checkpoint does, and compares it with the checkpoint's tree. `.relay/`
+is never part of the plan. If a path in the plan holds a file relay has not saved, relay stops
+with exit code 8 before it asks anything.
+
+After the person agrees, relay saves the current files as a checkpoint of kind `pre_rollback`
+with the message `Before rolling back to checkpoint <n>`. This is the undo checkpoint. When the
+files equal the latest checkpoint apart from `.relay/state.json` and `.relay/events.jsonl`, the
+latest checkpoint is the undo checkpoint and nothing new is saved. The undo checkpoint goes
+through the secret scan like any other; when the scan finds something, relay stops before any
+file changes. relay also checks that the files it just saved are the ones the plan was made from;
+if they changed while relay was waiting for the answer, it stops with exit code 7 and asks the
+person to run the command again.
+
+Only then does relay change files. It deletes the planned files with `unlink`, and removes the
+folders that became empty, walking up from each deleted file and stopping at the first folder
+that still holds something. It reads the checkpoint into a temporary index file under
+`RELAY_HOME/tmp` with `git read-tree`, and writes the planned files from it with
+`git checkout-index -f -z --stdin`, which applies the person's line-ending and filter settings
+like a normal checkout. Last, it builds a tree of the files again and compares it with the
+checkpoint. A file that could not be written shows up here.
+
+### What you see
+
+relay prints the plan, then asks. `--dry-run` prints the plan and stops:
+
+```
+$ relay rollback 2 --dry-run
+Roll back to checkpoint 2 · cb15386 (1 second ago, "Login form done")
+
+  modify  src/auth.ts
+  delete  src/new-helper.ts
+  add     src/session.ts
+
+3 files will change. Your branch, commits and staged changes stay as they are.
+relay saves your current files as a checkpoint first, so you can undo this.
+(exit code 0)
+```
+
+In a terminal, relay asks `Roll back? [y/N]`. Only `y` or `yes` rolls back; any other answer
+prints `Cancelled. Nothing changed.` and exits with code 7.
+
+```
+$ relay rollback
+Roll back to checkpoint 2 · 7e781fa (0 seconds ago, "Notes done")
+
+  modify  notes.txt
+
+1 file will change. Your branch, commits and staged changes stay as they are.
+relay saves your current files as a checkpoint first, so you can undo this.
+Roll back? [y/N] y
+Saved checkpoint 3 · d059f61 (before rollback)
+Rolled back to checkpoint 2 · 7e781fa
+1 file changed
+To undo: relay rollback 3
+(exit code 0)
+```
+
+A program, such as an agent, runs relay without a terminal. Without `--yes`, relay prints the
+plan, changes nothing and exits with code 7:
+
+```
+$ relay rollback 2
+Roll back to checkpoint 2 · b92905e (1 second ago, "Login form done")
+
+  modify  src/auth.ts
+  delete  src/new-helper.ts
+  add     src/session.ts
+
+3 files will change. Your branch, commits and staged changes stay as they are.
+relay saves your current files as a checkpoint first, so you can undo this.
+Run again with --yes to roll back.
+(exit code 7)
+```
+
+With `--yes`, relay prints the plan and rolls back without asking. Here a file lost its
+executable bit (`run.sh`) and a symbolic link was replaced by a regular file (`link-to-readme`);
+both come back as they were:
+
+```
+$ relay rollback 2 --yes
+Roll back to checkpoint 2 · a2c3c95 (1 second ago, "Login form done")
+
+  delete  gone/only.txt
+  delete  keep/new.txt
+  add     lib/a.ts
+  modify  link-to-readme
+  modify  run.sh
+  modify  src/app.ts
+  delete  src/new.ts
+
+7 files will change. Your branch, commits and staged changes stay as they are.
+relay saves your current files as a checkpoint first, so you can undo this.
+
+Saved checkpoint 3 · 33bb125 (before rollback)
+Rolled back to checkpoint 2 · a2c3c95
+7 files changed
+To undo: relay rollback 3
+(exit code 0)
+```
+
+### Undoing a rollback
+
+The last line names the undo checkpoint. Rolling back to it returns every file the rollback
+changed to what it was before, byte for byte, and saves another undo checkpoint on the way:
+
+```
+$ relay rollback 3 --yes
+Roll back to checkpoint 3 · 33bb125 (1 second ago, "Before rolling back to checkpoint 2")
+
+  add     gone/only.txt
+  add     keep/new.txt
+  delete  lib/a.ts
+  modify  link-to-readme
+  modify  run.sh
+  modify  src/app.ts
+  add     src/new.ts
+
+7 files will change. Your branch, commits and staged changes stay as they are.
+relay saves your current files as a checkpoint first, so you can undo this.
+
+Saved checkpoint 4 · 4831d51 (before rollback)
+Rolled back to checkpoint 3 · 33bb125
+7 files changed
+To undo: relay rollback 4
+(exit code 0)
+```
+
+When Control-C or `SIGTERM` stops relay while it writes files, relay stops git, removes its
+temporary index and the job lock, and prints the undo command, because the undo checkpoint was
+saved before the first file changed:
+
+```
+relay was stopped before the rollback finished.
+To undo: relay rollback 3
+```
+
+### What a rollback never changes
+
+A rollback writes and deletes only files in the working tree, outside `.relay/`. It never runs
+`git checkout`, `git reset`, `git restore`, `git clean` or `git stash`, and the only index it
+writes is its own temporary one. So:
+
+- Your branch and `HEAD` stay where they are, and so do your commits. When you committed after
+  the checkpoint, the restored files show as uncommitted changes, and relay says so:
+
+  ```
+  $ relay rollback 2 --yes
+  Roll back to checkpoint 2 · 0ad441d (1 second ago)
+
+    delete  one.txt
+    delete  two.txt
+
+  2 files will change. Your branch, commits and staged changes stay as they are.
+  relay saves your current files as a checkpoint first, so you can undo this.
+
+  Saved checkpoint 3 · ffb59d9 (before rollback)
+  Rolled back to checkpoint 2 · 0ad441d
+  2 files changed
+  Your branch still points to 48f317a. The restored files show as uncommitted changes.
+  To undo: relay rollback 3
+  (exit code 0)
+  ```
+
+- Your staged changes (the index), your stash, your tags and your reflogs stay as they are.
+- `.relay/` stays as it is: the task and the decisions describe the job, not the code, and the
+  event log only grows. The rollback appends a `rollback` event with `to_checkpoint`,
+  `to_commit`, `undo_checkpoint`, `files_written` and `files_deleted` (numbers, never file
+  contents), and `state.json` records the same values in `last_rollback`.
+- Files relay has not saved stay as they are: ignored files such as `node_modules/` or `.env`,
+  files left out for their size, untracked files with secret-like names that you have not
+  included, files you marked with `git update-index --assume-unchanged` or `--skip-worktree`
+  (a checkpoint holds their index version, not what is on disk), folders that hold a git
+  repository of their own, and submodules. When the plan would write or delete one of them,
+  relay changes nothing and exits with code 8:
+
+  ```
+  $ relay rollback 2 --yes
+  Rolling back would overwrite files relay has not saved: config/local.json. Move them or delete them yourself, then try again.
+  (exit code 8)
+  ```
+
+relay never writes or deletes through a symbolic link. When a file or a symbolic link stands where
+the checkpoint has a folder, relay deletes it first only if it is saved in the undo checkpoint;
+otherwise it stops with exit code 8 and names it. A path in a checkpoint that leads outside the
+project or into `.git` stops the rollback before anything changes.
+
+### Output and exit codes
+
+```
+$ relay rollback 2 --yes
+Nothing to roll back. Your files already match checkpoint 2.
+(exit code 0)
+
+$ relay rollback 9
+Checkpoint 9 does not exist. See relay checkpoints.
+(exit code 2)
+
+$ relay rollback 9366907
+9366907 matches more than one checkpoint. Use the checkpoint number.
+(exit code 2)
+```
+
+When a file could not be written, for example because its folder is read-only, relay reports it
+after the check and names the undo checkpoint:
+
+```
+$ relay rollback 2 --yes
+Roll back to checkpoint 2 · a45dc82 (0 seconds ago)
+
+  modify  locked/a.txt
+
+1 file will change. Your branch, commits and staged changes stay as they are.
+relay saves your current files as a checkpoint first, so you can undo this.
+
+Saved checkpoint 3 · 534f541 (before rollback)
+Rollback finished, but these files do not match checkpoint 2: locked/a.txt
+To undo: relay rollback 3
+(exit code 1)
+```
+
+| Exit code | When | Message |
+|---|---|---|
+| 0 | Rolled back, nothing to roll back, or `--dry-run` | `Rolled back to checkpoint <n> · <short commit>` |
+| 1 | A file does not match the checkpoint afterwards, or git failed | `Rollback finished, but these files do not match checkpoint <n>: <paths>` |
+| 2 | An unknown checkpoint, an ambiguous commit prefix, or a wrong argument | `Checkpoint 9 does not exist. See relay checkpoints.` |
+| 3 | No job here, a damaged `state.json`, or a job without any checkpoint | `relay is not set up here. Run relay init first.` |
+| 4 | The undo checkpoint was stopped by the secret scan | `relay could not save your current files before rolling back, so it changed nothing.`, then the secret-scan message |
+| 5 | The git settings or hooks changed since `relay init` | `Stopped: .git/config changed since this job started.` |
+| 6 | Another relay command holds the job lock | `Another relay command is working on this job (relay checkpoint, process 4121). Try again when it finishes.` |
+| 7 | No terminal and no `--yes`, an answer other than `y`, or the files changed while relay waited | `Run again with --yes to roll back.`, `Cancelled. Nothing changed.` |
+| 8 | The plan would write or delete a file relay has not saved | `Rolling back would overwrite files relay has not saved: <paths>. Move them or delete them yourself, then try again.` |
+| 130 | Control-C or `SIGTERM` stopped relay | `relay was stopped before the rollback finished.` and the undo command |
+
+A rollback while an agent is still writing files in the same checkout would race with it. Agents
+are not managed yet; the change that starts agents (`add-provider-adapters`) must stop the agent
+before a rollback.
 
 ## The secret scan
 

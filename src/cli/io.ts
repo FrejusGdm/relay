@@ -1,10 +1,15 @@
 import { writeSync } from "node:fs";
+import { createInterface } from "node:readline";
 
 export interface Io {
   out(text: string): void;
   err(text: string): void;
   stdinIsTTY: boolean;
   readStdinToEnd(): Promise<string>;
+  // Whether a person can answer a question: standard input and standard output are both terminals.
+  isTerminal: boolean;
+  // One line of standard input without its line ending, or null at the end of the input.
+  readLine(): Promise<string | null>;
 }
 
 export function processIo(): Io {
@@ -16,6 +21,16 @@ export function processIo(): Io {
       const chunks: Buffer[] = [];
       for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
       return Buffer.concat(chunks).toString("utf8");
+    },
+    isTerminal: process.stdin.isTTY === true && process.stdout.isTTY === true,
+    async readLine() {
+      const lines = createInterface({ input: process.stdin, terminal: false });
+      try {
+        for await (const line of lines) return line;
+        return null;
+      } finally {
+        lines.close();
+      }
     },
   };
 }

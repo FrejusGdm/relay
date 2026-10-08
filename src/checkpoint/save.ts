@@ -34,6 +34,9 @@ export interface SaveOptions {
   trailers?: [string, string][];
   // The caller already holds the job lock.
   lockHeld?: boolean;
+  // Untracked files with secret-like names that the person has not approved are left out instead
+  // of stopping the checkpoint. relay rollback uses it, and never changes those files.
+  leaveOutSecretLike?: boolean;
 }
 
 // What the second line of the output compares with.
@@ -51,9 +54,11 @@ export type SaveResult =
       leftOut: LeftOutFile[];
       // Approved untracked files saved for the first time.
       included: string[];
+      tree: string;
+      secretLike: string[];
     }
   // Nothing changed; files left out are still reported, since a new one is not saved.
-  | { saved: false; latest: number; leftOut: LeftOutFile[] };
+  | { saved: false; latest: number; leftOut: LeftOutFile[]; tree: string; secretLike: string[] };
 
 // These two files change after every checkpoint, so they alone never make a new one.
 const ALWAYS_CHANGING = new Set([".relay/state.json", ".relay/events.jsonl"]);
@@ -62,9 +67,8 @@ const decoder = new TextDecoder();
 
 export async function saveCheckpoint(repo: Repository, options: SaveOptions): Promise<SaveResult> {
   const relayDir = join(repo.worktreeRoot, ".relay");
-  const jobId = checkJobBelongsHere(repo, readJobState(relayDir), options.relayHome);
-  const job: JobRef = { id: jobId, worktreeRoot: repo.worktreeRoot, relayHome: options.relayHome };
-  await checkTrust(repo, job, options.command);
+  const { job } = await openJob(repo, options.relayHome, options.command);
+  const jobId = job.id;
 
   const release = options.lockHeld ? () => {} : takeJobLock(options.relayHome, jobId, options.command);
   try {
@@ -79,7 +83,7 @@ export async function saveCheckpoint(repo: Repository, options: SaveOptions): Pr
       approved: [...state.approved_paths, ...include],
     });
 
-    if (snapshot.secretLike.length > 0) {
+    if (snapshot.secretLike.length > 0 && options.leaveOutSecretLike !== true) {
       await appendEvent(job, "checkpoint_refused", { command: options.command, reason: "secret_like_file", files: snapshot.secretLike });
       throw new CommandError(ExitCode.SecretFound, snapshot.secretLike.flatMap((path) => [
         `Stopped: ${printable(path)} is not ignored by git and may hold secrets.`,
@@ -94,7 +98,9 @@ export async function saveCheckpoint(repo: Repository, options: SaveOptions): Pr
     if (refs.latest !== null) {
       compared = { with: "checkpoint", number: refs.highest };
       changed = (await changedPaths(repo, latestTree, snapshot.tree)).filter((path) => !ALWAYS_CHANGING.has(path));
-      if (changed.length === 0) return { saved: false, latest: refs.highest, leftOut: snapshot.leftOut };
+      if (changed.length === 0) {
+        return { saved: false, latest: refs.highest, leftOut: snapshot.leftOut, tree: snapshot.tree, secretLike: snapshot.secretLike };
+      }
     } else {
       // The job files are new to the person's commit, so only the person's files are counted.
       compared = repo.head.sha === null ? { with: "nothing" } : { with: "commit", commit: repo.head.sha };
@@ -114,7 +120,10 @@ export async function saveCheckpoint(repo: Repository, options: SaveOptions): Pr
     }
 
     const kind: CheckpointKind = refs.latest === null ? "baseline" : options.kind;
-    const leftOut = snapshot.leftOut.map((file) => file.path);
+    const leftOut = [
+      ...snapshot.leftOut.map((file) => file.path),
+      ...(options.leaveOutSecretLike === true ? snapshot.secretLike : []),
+    ];
     const saved = await commitCheckpoint(
       repo,
       { jobId, tree: snapshot.tree, kind, message, leftOut, trailers: options.trailers ?? [] },
@@ -154,10 +163,27 @@ export async function saveCheckpoint(repo: Repository, options: SaveOptions): Pr
       compared,
       leftOut: snapshot.leftOut,
       included,
+      tree: snapshot.tree,
+      secretLike: snapshot.secretLike,
     };
   } finally {
     release();
   }
+}
+
+// Reads state.json, checks that its job was set up in this checkout, and compares the git trust
+// record, before any git command other than rev-parse and config runs. `command` names the
+// command in the checkpoint_refused event of a refusal; relay checkpoints passes null, because
+// listing appends no event.
+export async function openJob(
+  repo: Repository,
+  relayHome: string,
+  command: SaveOptions["command"] | null,
+): Promise<{ state: JobState; job: JobRef }> {
+  const state = readJobState(join(repo.worktreeRoot, ".relay"));
+  const job: JobRef = { id: checkJobBelongsHere(repo, state, relayHome), worktreeRoot: repo.worktreeRoot, relayHome };
+  await checkTrust(repo, job, command);
+  return { state, job };
 }
 
 // The job named in state.json must be the one relay init set up in this checkout: the job ID is
@@ -191,7 +217,7 @@ function readJobState(relayDir: string): JobState {
 }
 
 // Stops with exit code 5 when the git settings or hooks changed since relay init.
-async function checkTrust(repo: Repository, job: JobRef, command: SaveOptions["command"]): Promise<void> {
+async function checkTrust(repo: Repository, job: JobRef, command: SaveOptions["command"] | null): Promise<void> {
   let changes;
   try {
     changes = await compareTrust(repo, join(job.relayHome, "jobs", job.id));
@@ -201,7 +227,7 @@ async function checkTrust(repo: Repository, job: JobRef, command: SaveOptions["c
   }
   if (changes.length === 0) return;
   const changed = [...new Set(changes.flatMap((change) => (change.kind === "order" ? [] : [change.path])))];
-  await appendEvent(job, "checkpoint_refused", { command, reason: "git_changed", changed });
+  if (command !== null) await appendEvent(job, "checkpoint_refused", { command, reason: "git_changed", changed });
   throw new CommandError(ExitCode.GitChanged, trustReport(changes, repo));
 }
 

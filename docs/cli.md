@@ -2,8 +2,8 @@
 
 This page describes the `relay` command: its commands, where its output goes, and its exit codes.
 The source is in `src/cli/`. In this version every command shows its help and checks its
-arguments. `relay init` and `relay checkpoint` do their real work, which `docs/checkpoints.md`
-describes; the other commands do not yet. The change named in the "Built by" column builds each one.
+arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
+real work, which `docs/checkpoints.md` describes; the other commands do not yet. The change named in the "Built by" column builds each one.
 
 ## Commands
 
@@ -12,8 +12,8 @@ describes; the other commands do not yet. The change named in the "Built by" col
 | `init` | `relay init [--title <text>]` | none | `add-checkpoint-engine` |
 | `run` | `relay run [<provider[:account]>]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
 | `checkpoint` | `relay checkpoint [-m <text>] [--include <path>]... [--json]` | none | `add-checkpoint-engine` |
-| `checkpoints` | `relay checkpoints` | none | `add-checkpoint-engine` |
-| `rollback` | `relay rollback [<checkpoint>]` | 0 or 1 | `add-checkpoint-engine` |
+| `checkpoints` | `relay checkpoints [--json]` | none | `add-checkpoint-engine` |
+| `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
 | `accept-git-changes` | `relay accept-git-changes` | none | `add-checkpoint-engine` |
 | `switch` | `relay switch <provider[:account]>` | 1 | `add-relay-switch` |
 | `status` | `relay status` | none | `add-daemon-api-and-status` |
@@ -60,7 +60,8 @@ reading settings or writing any file. For a valid command line, relay then finds
 creates it if it is missing, checks that it is private, and loads and checks `config.toml`.
 `docs/config.md` describes these checks with their own diagram. Any problem there prints a
 settings error and exits with code 78. When the settings load, the command's handler runs, which
-in this version is the "not built yet" handler for every command except `hook` and `init`. When a handler
+in this version is the "not built yet" handler for every command except `hook`, `init`,
+`checkpoint`, `checkpoints` and `rollback`. When a handler
 throws an error that it does not handle, relay prints the error and exits with code 70. Once the
 relay folder has passed its checks, relay records each of these steps in a log file, as the next
 section describes.

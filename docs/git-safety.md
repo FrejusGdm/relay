@@ -22,7 +22,7 @@ runner, the preload and the test helpers names it.
 
 ```mermaid
 flowchart LR
-  callers["relay code<br/>src/git/repo.ts, src/git/trust.ts,<br/>and later checkpoints and rollback"]
+  callers["relay code<br/>src/git/repo.ts, src/git/trust.ts,<br/>src/checkpoint/ and src/secrets/scan.ts"]
   subgraph runner["git() in src/git/run.ts"]
     check["1. Check the arguments<br/>only allowed commands, each with<br/>rules for its options"]
     links["2. For update-ref only<br/>refuse symbolic links on the way<br/>to the ref under refs/relay/"]
@@ -244,8 +244,9 @@ again and compares them with the record. To find the files, it runs only `git co
 `git rev-parse`, which start no hooks and no file-system monitor. If nothing changed, the command
 goes on. If something changed, relay prints what changed and stops with exit code 5. The person
 can then look at the change and, if they made it themselves, run `relay accept-git-changes` in a
-terminal, which writes a new record. (The commands and `relay accept-git-changes` come in later
-task groups of the same change; task group 2 adds the record, the comparison and the text.)
+terminal, which writes a new record. `relay checkpoint` and `relay rollback` also append a
+`checkpoint_refused` event with the reason `git_changed`; `relay checkpoints` only reads, so it
+appends no event. (`relay accept-git-changes` comes in a later task group of the same change.)
 
 A comparison finds a file that git now reads but did not read before, such as a new
 `~/.gitconfig`, a file that git no longer reads, and a file whose bytes changed. Restoring a file
