@@ -109,12 +109,25 @@ T3's `codex app-server`, since T3 does not turn them off, but no test proves it.
 `apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts`,
 `apps/server/src/provider/codexLaunchArgs.ts`.
 
+## Checked later
+
+- **Loopback redirects are accepted** (checked in `apps/server/src/auth/McpOAuth.ts` at the same
+  commit, 2026-10-08). An outside program may register `http://localhost`, `http://127.0.0.1` or
+  `http://[::1]` redirect addresses, or any `https` address. Loopback redirects match on
+  everything except the port, as RFC 8252 section 7.3 describes for command-line programs, so
+  relay can listen on any free port. A client may register at most 5 redirect addresses of at
+  most 512 characters, and the client ID T3 returns is signed, so T3 keeps no state for it.
+
+- **`claude -p "/usage"` spends no usage** (checked on the Linux build machine with Claude Code
+  2.1.282 on 2026-10-08). It answered while the account's 5-hour session was at 100 percent,
+  and the saved session holds no model reply, so it is a local command. Its text has one line
+  per window in a stable form, for example
+  `Current week (all models): 91% used · resets Oct 12, 7:59am (UTC)`, with the person's time
+  zone in parentheses. The reset minute can move by one between runs (7:59am, then 8am). With
+  `--no-session-persistence` no session file is written; without it, each run saves one. A
+  cleaned example is `test/fixtures/usage/claude-usage.txt`.
+
 ## What I could not verify
 
-- Whether T3's approval page accepts a redirect to a temporary address on `127.0.0.1`, which
-  a command-line program needs to finish the OAuth sign-in.
-- Whether `claude -p "/usage"` spends any usage, and whether its text includes the weekly
-  percentage in a stable form. The Claude docs say `/usage` works in `-p` mode, but not
-  what it prints there.
 - Whether a Codex hook really runs inside a T3 session.
 - How long nightly-only features take to reach a stable release.

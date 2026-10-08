@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import { T3_TOOLS } from "../../src/t3/client";
@@ -26,9 +26,13 @@ export interface FakeT3Options {
   instances?: { providerInstanceId: string; driverKind: "claude" | "codex" | "cursor"; models: string[] }[];
   token?: string;
   omitTools?: string[];
+  pairingCode?: string;
+  expiresIn?: number;
+  echoTokenError?: boolean;
 }
 export interface FakeT3 {
   url: string;
+  pairingCode: string;
   fetch: (url: string | URL, init?: RequestInit) => Promise<Response>;
   calls: { tool: string; args: Record<string, unknown>; authorization: string | null }[];
   threads: FakeThread[];
@@ -41,6 +45,10 @@ const ACTIVE = new Set(["preparing", "queued", "starting", "running", "waiting"]
 
 export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> {
   const token = options.token ?? `fake-token-${randomBytes(16).toString("hex")}`;
+  const pairingCode = options.pairingCode ?? "relay-pairing";
+  const issuedTokens = new Set<string>();
+  const registrations = new Map<string, string[]>();
+  const codes = new Map<string, { clientId: string; redirectUri: string; challenge: string }>();
   const threads = options.threads ?? [];
   const calls: FakeT3["calls"] = [];
   const authorization = new AsyncLocalStorage<string>();
@@ -126,29 +134,101 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
     return server;
   };
   const handler = createMcpHandler(buildServer);
-  const handle = (request: Request): Promise<Response> => {
+  const handle = async (request: Request): Promise<Response> => {
     if (mode === "down") return Promise.reject(new Error("The fake T3 server is not answering."));
+    const target = new URL(request.url);
+    const issuer = target.origin;
+    const json = (value: unknown, status = 200) => Response.json(value, { status });
+    if (request.method === "GET" && ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"].includes(target.pathname)) {
+      return json({ resource: `${issuer}/mcp`, authorization_servers: [issuer], bearer_methods_supported: ["header"] });
+    }
+    if (request.method === "GET" && ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"].includes(target.pathname)) {
+      return json({
+        issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`,
+        registration_endpoint: `${issuer}/register`, response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code"], code_challenge_methods_supported: ["S256"],
+        token_endpoint_auth_methods_supported: ["none"], authorization_response_iss_parameter_supported: true,
+      });
+    }
+    if (request.method === "POST" && target.pathname === "/register") {
+      let metadata: { redirect_uris?: unknown; client_name?: string };
+      try { metadata = await request.json() as typeof metadata; }
+      catch { return json({ error: "invalid_client_metadata" }, 400); }
+      const redirects = metadata.redirect_uris;
+      if (!Array.isArray(redirects) || redirects.length === 0 || redirects.some((value) => !loopbackRedirect(value))) {
+        return json({ error: "invalid_redirect_uri" }, 400);
+      }
+      const clientId = crypto.randomUUID();
+      registrations.set(clientId, redirects as string[]);
+      return json({ client_id: clientId, client_name: metadata.client_name, redirect_uris: redirects,
+        token_endpoint_auth_method: "none", grant_types: ["authorization_code"], response_types: ["code"] }, 201);
+    }
+    if (request.method === "GET" && target.pathname === "/authorize") {
+      const params = target.searchParams;
+      const clientId = params.get("client_id");
+      const redirectUri = params.get("redirect_uri");
+      const challenge = params.get("code_challenge");
+      const state = params.get("state");
+      if (params.get("pairing_code") !== pairingCode || params.get("response_type") !== "code"
+        || params.get("code_challenge_method") !== "S256" || !clientId || !redirectUri || !challenge || !state
+        || !registrations.get(clientId)?.some((registered) => sameLoopbackRedirect(registered, redirectUri))) {
+        return json({ error: "invalid_request" }, 400);
+      }
+      const code = randomBytes(24).toString("hex");
+      codes.set(code, { clientId, redirectUri, challenge });
+      const callback = new URL(redirectUri);
+      callback.searchParams.set("code", code);
+      callback.searchParams.set("state", state);
+      callback.searchParams.set("iss", issuer);
+      return new Response(null, { status: 302, headers: { Location: callback.toString() } });
+    }
+    if (request.method === "POST" && target.pathname === "/token") {
+      const params = new URLSearchParams(await request.text());
+      const code = params.get("code");
+      const grant = code === null ? undefined : codes.get(code);
+      // Codes are single-use, even after a failed exchange.
+      if (code !== null) codes.delete(code);
+      const verifier = params.get("code_verifier");
+      if (options.echoTokenError) {
+        return json({ error: "invalid_grant", error_description: `${verifier ?? ""} ${code ?? ""}` }, 400);
+      }
+      if (params.get("grant_type") !== "authorization_code" || !grant || !verifier
+        || params.get("client_id") !== grant.clientId || params.get("redirect_uri") !== grant.redirectUri
+        || createHash("sha256").update(verifier).digest("base64url") !== grant.challenge) {
+        return json({ error: "invalid_grant" }, 400);
+      }
+      const accessToken = `t3tok_${randomBytes(24).toString("hex")}`;
+      issuedTokens.add(accessToken);
+      return json({ access_token: accessToken, token_type: "Bearer", expires_in: options.expiresIn ?? 2_592_000 });
+    }
+    if (target.pathname !== "/mcp") return new Response(null, { status: 404 });
     const header = request.headers.get("Authorization");
-    if (mode === "unauthorized" || header !== `Bearer ${token}`) return Promise.resolve(new Response(null, { status: 401 }));
+    if (mode === "unauthorized" || (header !== `Bearer ${token}` && !issuedTokens.has(header?.replace(/^Bearer /, "") ?? ""))) {
+      return new Response(null, { status: 401, headers: {
+        "WWW-Authenticate": `Bearer resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+      } });
+    }
+    if (header === null || !header.startsWith("Bearer ")) return new Response(null, { status: 401 });
     if (forgetSession) {
       forgetSession = false;
-      return Promise.resolve(new Response("Session not found", { status: 404 }));
+      return new Response("Session not found", { status: 404 });
     }
     return authorization.run(header, () => handler.fetch(request));
   };
-  let listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handle });
+  const safeError = () => new Response(null, { status: 500 });
+  let listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handle, error: safeError });
   // Keep the first port, so the address stays the same after the server comes back from "down".
   const port = listener.port;
   const url = `http://127.0.0.1:${port}/mcp`;
   let stopped = false;
   return {
-    url,
+    url, pairingCode,
     fetch: (target, init) => handle(new Request(target.toString(), init)),
     calls, threads,
     forgetSessionOnce() { forgetSession = true; },
     setMode(next) {
       if (next === "down") void listener.stop(true);
-      else if (mode === "down" && !stopped) listener = Bun.serve({ hostname: "127.0.0.1", port, fetch: handle });
+      else if (mode === "down" && !stopped) listener = Bun.serve({ hostname: "127.0.0.1", port, fetch: handle, error: safeError });
       mode = next;
     },
     async stop() {
@@ -157,6 +237,25 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
       await listener.stop(true);
     },
   };
+}
+
+function loopbackRedirect(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
+      && !url.username && !url.password && !url.hash;
+  } catch { return false; }
+}
+
+function sameLoopbackRedirect(registered: string, candidate: string): boolean {
+  if (!loopbackRedirect(candidate)) return false;
+  const left = new URL(registered);
+  const right = new URL(candidate);
+  // RFC 8252: loopback redirect registrations match independently of the chosen port.
+  left.port = "";
+  right.port = "";
+  return left.href === right.href;
 }
 
 function statusOf(thread: FakeThread): FakeThreadRun["status"] | "idle" {

@@ -151,14 +151,15 @@ hook with `rate_limit`, attributed to an account through its profile folder (pha
 
 - **Codex:** phase 3's reading through `codex app-server`. Windows of 300 and 10080 minutes are
   named `five_hour` and `seven_day`.
-- **Claude:** `claude -p "/usage"`. The research could not confirm whether it spends usage,
-  whether it saves a session transcript (which would appear in the person's session lists), or
-  what it prints. Task 1.2 answers all three on the Omarchy machine with a signed-in account,
-  records the output in `test/fixtures/usage/`, and picks the parser. The command runs in
-  `RELAY_HOME/run/usage` so a saved transcript, if any, lands under that folder rather than
-  under a project, and with `--no-session-persistence` if the installed Claude Code supports it.
-  If `/usage` costs usage or prints no weekly percentage, Claude readings are dropped from this
-  change and Claude rules show "not measured".
+- **Claude:** `claude -p "/usage" --no-session-persistence`, run in `RELAY_HOME/run/usage`.
+  Task 1.2 confirmed on 2026-10-08 that it spends no usage, saves no session with that flag,
+  and prints one line per window (`docs/research/t3-outside-access.md`, "Checked later"). The
+  parser reads only the lines that start with `Current session:` (`five_hour`) and
+  `Current week (all models):` (`seven_day`), each `<n>% used · resets <date and time>
+  (<time zone>)`, and converts the reset time with the time zone named in parentheses. Any
+  other line is ignored, and a line it cannot read gives no window rather than a guess. Because
+  the reset minute can move by one between runs, the crossing engine updates an active
+  crossing's reset time instead of starting a new crossing.
 
 A reading older than 15 minutes counts as not measured: three missed readings in a row. 5
 minutes is a balance: at the weekly scale a 5-minute delay costs little of a 10 percent reserve,

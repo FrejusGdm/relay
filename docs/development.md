@@ -84,13 +84,16 @@ start git only through that runner. `test/git/only-runner.test.ts` reads `src/`,
 `eval/` and fails if any other file names the variable, so the exception is limited to that one
 file. The check that only `src/git/run.ts` starts git inside `src/` is unchanged.
 
-`test/build/no-network.test.ts` fails when code under `src/` could open a network connection,
-because relay opens none. It parses each file with the TypeScript compiler, so comments and the
+`test/build/no-network.test.ts` fails when code under `src/` could open a network connection
+that relay's rules do not allow. It parses each file with the TypeScript compiler, so comments and the
 text inside strings never count. It looks for the name `fetch`, imports of the modules `net`,
 `http`, `https`, `http2`, `dgram` and `tls` (with or without the `node:` prefix), `Bun.connect`,
 `Bun.listen`, `Bun.serve`, `Bun.udpSocket`, `XMLHttpRequest`, `EventSource` and `WebSocket`. The
 future `src/client/` folder, which reaches relay's own Unix socket, may only call `fetch` and
-`Bun.connect` with an object argument that has a `unix` property.
+`Bun.connect` with an object argument that has a `unix` property. Two files may also reach T3 Code
+on this computer (`add-t3-limit-rules`): `src/t3/client.ts` may use `fetch`, and `src/t3/oauth.ts`
+may use `fetch` and `Bun.serve` for the sign-in listener on `127.0.0.1`. The settings only accept
+a T3 address on `127.0.0.1` or `localhost`. Any other network use under `src/t3/` fails the check.
 
 ## Continuous integration
 

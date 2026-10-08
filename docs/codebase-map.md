@@ -129,7 +129,8 @@ each settings file in a new relay folder from `makeRelayHome`, or read one from
 `test/fixtures/config/`. A credential value in a test is built at run time, so none is committed.
 
 `test/build/no-network.test.ts` searches every file under `src/` and fails when relay's code could
-open a network connection. `scripts/smoke-test.sh` runs a built `relay` program and checks its
+open a network connection, other than to relay's own socket (`src/client/`) or to T3 Code on this
+computer (`src/t3/client.ts` and `src/t3/oauth.ts`). `scripts/smoke-test.sh` runs a built `relay` program and checks its
 version, its help, its exit code and its log file. The workflow in `.github/workflows/ci.yml`
 runs the type check and the tests, builds the program for Linux and macOS, runs the smoke test on
 each, and scans the dependencies and the git history. `.github/dependabot.yml` asks GitHub to

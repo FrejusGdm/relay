@@ -29,7 +29,7 @@ For a Codex account the daemon SHALL use phase 3's Codex availability reading (`
 - **THEN** the reading has `five_hour` 62 and `seven_day` 91 with `resets_at` `2026-10-12T16:00:00.000Z`, and source `provider_api`
 
 ### Requirement: Claude readings
-For a Claude account the daemon SHALL run `claude -p "/usage"` with the account's `CLAUDE_CONFIG_DIR`, the credential environment rules of phase 3, standard input at end of file, a working folder of `RELAY_HOME/run/usage`, and a 30-second time limit, and SHALL read the session and weekly percentages and reset times from its output with the parser chosen in task 1.2. The weekly window for all models SHALL be named `seven_day`; per-model weekly windows SHALL be ignored.
+For a Claude account the daemon SHALL run `claude -p "/usage" --no-session-persistence` with the account's `CLAUDE_CONFIG_DIR`, the credential environment rules of phase 3, standard input at end of file, a working folder of `RELAY_HOME/run/usage`, and a 30-second time limit, and SHALL read the session and weekly percentages and reset times from its output with the parser chosen in task 1.2. The weekly window for all models SHALL be named `seven_day`; per-model weekly windows SHALL be ignored.
 
 #### Scenario: Recorded output
 - **WHEN** the fake `claude` prints the recorded output in `test/fixtures/usage/claude-usage.txt`, which shows 34 percent of the session and 91 percent of the week

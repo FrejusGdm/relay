@@ -78,3 +78,10 @@ relay SHALL treat the connection as expired 30 days after it was made or as soon
 #### Scenario: Not connected
 - **WHEN** no token is stored
 - **THEN** relay prints `relay is not connected to T3 Code. Run relay t3 connect.` and exits with code 42
+
+### Requirement: Network use stays on this computer
+Only `src/t3/client.ts` and `src/t3/oauth.ts` SHALL open network connections for T3: the client to the address in `t3.url`, which settings limit to `127.0.0.1` or `localhost`, and the sign-in to that address and to its own listener on `127.0.0.1`. The source check of `build-and-ci` SHALL allow `fetch` in those two files and `Bun.serve` in `src/t3/oauth.ts`, and nothing else under `src/t3/`.
+
+#### Scenario: Another file reaches the network
+- **WHEN** a file `src/t3/other.ts` calls `fetch`
+- **THEN** `test/build/no-network.test.ts` fails and names `src/t3/other.ts:1: fetch`

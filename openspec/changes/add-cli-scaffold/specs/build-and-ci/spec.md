@@ -66,9 +66,9 @@ Every action a workflow uses SHALL be pinned to a full 40-character commit SHA, 
 - **THEN** the pin check step prints that line and the CI run fails
 
 ### Requirement: No network use and no telemetry
-relay SHALL NOT open network connections or send usage data in this version. The only connections relay ever opens are to its own Unix socket, which `add-daemon-api-and-status` adds, through one client folder, `src/client/`.
+relay SHALL NOT open network connections or send usage data in this version. The only connections relay ever opens are to its own Unix socket, which `add-daemon-api-and-status` adds, through one client folder, `src/client/`, and, since `add-t3-limit-rules` (approved 2026-10-08), to T3 Code on this computer: `src/t3/client.ts` may call `fetch`, and `src/t3/oauth.ts` may call `fetch` and `Bun.serve` for the short sign-in listener on `127.0.0.1`.
 
 #### Scenario: Source check
 - **WHEN** the source under `src/` is searched for the word `fetch` (which also finds `globalThis.fetch`), the module names `net`, `http`, `https`, `http2`, `dgram` and `tls` with or without the `node:` prefix, `Bun.connect`, `Bun.listen`, `Bun.serve`, `Bun.udpSocket`, `XMLHttpRequest`, `EventSource` and `WebSocket`
-- **THEN** there are no matches outside `src/client/`
+- **THEN** there are no matches outside `src/client/`, except `fetch` in `src/t3/client.ts` and `fetch` and `Bun.serve` in `src/t3/oauth.ts`
 - **AND** the only matches inside `src/client/` are calls to `fetch` and `Bun.connect` that pass an object with a `unix:` key directly as an argument
