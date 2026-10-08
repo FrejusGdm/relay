@@ -63,6 +63,16 @@ jobs:
       - if: runner.os == 'macOS'
         run: codesign -dv dist/relay-darwin-arm64
       - run: sh scripts/smoke-test.sh dist/relay-${{ matrix.target }} "$(bun -p 'require("./package.json").version')"
+      # The handoff evaluation's own tests, with its end-to-end test against the relay program built
+      # above and relay's fake agents. They start no real agent; `eval:handoff run` never runs here.
+      - name: Handoff evaluation tests
+        if: runner.os == 'Linux'
+        env:
+          RELAY_BIN: dist/relay-${{ matrix.target }}
+        run: bun test ./eval/handoff/test
+      - name: Handoff evaluation fixtures
+        if: runner.os == 'Linux'
+        run: bun run eval:handoff check-fixtures
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: relay-${{ matrix.target }}

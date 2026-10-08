@@ -17,7 +17,7 @@ flowchart LR
   p3["3. Provider adapters<br/>add-provider-adapters"]:::review
   p4["4. relay switch<br/>add-relay-switch"]:::building
   p5["5. Daemon and status<br/>add-daemon-api-and-status"]:::review
-  p6["6. Handoff evaluation<br/>add-handoff-evaluation"]:::building
+  p6["6. Handoff evaluation<br/>add-handoff-evaluation"]:::review
   p7["7. Limit rules for T3 Code<br/>add-t3-limit-rules"]:::building
   mac["The Mac app<br/>add-mac-menu-bar-app"]:::review
   site["The website<br/>add-website"]:::building
@@ -138,7 +138,7 @@ Pull request #18 builds task groups 9 and 10. Its description says tasks 9.1 and
 until `relay run` and `relay switch` exist. Task groups 7, 8 and 11 are not in a pull request yet;
 task group 7 needs the switch engine of `add-relay-switch`.
 
-### add-handoff-evaluation (phase 6): being built
+### add-handoff-evaluation (phase 6): in review
 
 | Task group | Ticked | Open |
 |---|---|---|
@@ -149,10 +149,14 @@ task group 7 needs the switch engine of `add-relay-switch`.
 | 5. Talking to relay and reading events | 4 | 0 |
 | 6. Running one run and measuring it | 8 | 0 |
 | 7. Summary and verdicts | 2 | 0 |
-| 8. Real relay, documentation and CI | 0 | 3 |
+| 8. Real relay, documentation and CI | 3 | 0 |
 
-Task group 8 runs the evaluation against the real `relay` program, so it waits for `relay run` and
-`relay switch`.
+Task group 8 is in the pull request for branch `eval/final`: an end-to-end test that runs the smoke
+plan against the real `relay` program with the fake agents, the guide `eval/handoff/README.md`, and
+two CI steps on Linux. The end-to-end test found that a `relay switch --yes` handed to a running
+`relay run` stops with exit code 70 when the next account is not yet on the project's allow list,
+because both processes add the account; the test allows both accounts in advance until relay is
+fixed. What is left needs Josué's accounts (see "What needs Josué").
 
 ### add-mac-menu-bar-app (the Mac app): in review
 
@@ -248,6 +252,11 @@ These items need a person with the real tools, an account or a decision. An agen
 - **Check T3 Code by hand** (`add-t3-limit-rules` task 1.1): install the latest T3 Code nightly,
   sign relay in with a pairing code, and write down the instance IDs before and after a restart.
 - **Review and merge** pull requests #18, #19 and #20.
+- **Run the handoff evaluation** (`add-handoff-evaluation`, "Workflow follow-up"): on the Mac, run
+  `bun run eval:handoff check-fixtures`, create `~/.relay-eval/targets.toml`, run the smoke plan and
+  read both result files, then run the standard plan over several days, summarize it, copy
+  `summary.md` to `docs/evaluations/handoff-<date>.md`, and decide on phase 7 from the verdicts.
+  `eval/handoff/README.md` explains each step and the cost.
 - **Payments** (`add-lifetime-license`): approve the proposal, create a Stripe sandbox for the
   test-mode run (task group 8), and answer the proposal's open questions: which features are paid;
   the price and currency; what "lifetime" covers (all future updates, or one year of updates);

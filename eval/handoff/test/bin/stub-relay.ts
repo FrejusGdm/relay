@@ -171,6 +171,8 @@ function checkpoints(): void {
 }
 
 function status(): void {
+  // Like relay, status answers only inside a relay project.
+  if (!existsSync(join(relayDir, "state.json"))) fail(3, "This folder is not in a relay project. Run relay init here, or pass --job <id>.");
   const stub = scenario();
   const targets = [...new Set([...Object.keys(stub.workers), ...Object.keys(stub.status ?? {})])];
   const accounts = targets.map((target) => {
