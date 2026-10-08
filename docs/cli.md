@@ -62,7 +62,7 @@ creates it if it is missing, checks that it is private, and loads and checks `co
 `docs/config.md` describes these checks with their own diagram. Any problem there prints a
 settings error and exits with code 78. When the settings load, the command's handler runs, which
 in this version is the "not built yet" handler for every command except `hook`, `init`,
-`checkpoint`, `checkpoints`, `rollback`, `account`, `providers` and `policy`. When a handler
+`checkpoint`, `checkpoints`, `rollback`, `accept-git-changes`, `account`, `providers` and `policy`. When a handler
 throws an error that it does not handle, relay prints the error and exits with code 70. Once the
 relay folder has passed its checks, relay records each of these steps in a log file, as the next
 section describes.

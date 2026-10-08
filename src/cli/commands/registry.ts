@@ -1,6 +1,7 @@
 import type { RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
+import { acceptGitChanges } from "./accept-git-changes";
 import { account } from "./account";
 import { checkpoint } from "./checkpoint";
 import { checkpoints } from "./checkpoints";
@@ -150,8 +151,8 @@ export const COMMANDS: CommandDef[] = [
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: acceptGitChanges,
   },
   {
     name: "switch",

@@ -24,8 +24,9 @@ export async function runRelayInProcess(
     commands?: CommandDef[];
     uid?: number;
     cwd?: string;
-    // Simulates a terminal in which the person types `answer`.
-    terminal?: { answer: string | null };
+    // Simulates a terminal in which the person types `answer`. `beforeAnswer` runs while relay
+    // waits for it.
+    terminal?: { answer: string | null; beforeAnswer?: () => void };
   } = {},
 ): Promise<RelayResult> {
   let stdout = "";
@@ -44,7 +45,11 @@ export async function runRelayInProcess(
       stdinIsTTY: options.answers !== undefined,
       readStdinToEnd: async () => options.stdin ?? "",
       isTerminal: options.terminal !== undefined,
-      readLine: async () => (options.answers !== undefined ? options.answers.shift() ?? null : options.terminal?.answer ?? null),
+      readLine: async () => {
+        if (options.answers !== undefined) return options.answers.shift() ?? null;
+        options.terminal?.beforeAnswer?.();
+        return options.terminal?.answer ?? null;
+      },
     },
     commands: options.commands,
   });
