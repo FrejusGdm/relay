@@ -26,6 +26,7 @@ assets, `relay-darwin-arm64` and `relay-linux-x64` (see "Deploying").
 | `site/public/staticwebapp.config.json` | The headers, the 404 rule, the routes and the API runtime (`node:22`) for Azure Static Web Apps |
 | `site/public/fonts/` | The fonts, downloaded by `site/scripts/fetch-fonts.sh` and never committed |
 | `site/fonts.sha256` | The SHA-256 of each font file |
+| `site/buy-section.html`, `site/scripts/build.sh` | The buy section, and the script that builds the deployed copy of `site/public` with it (buying on) or without it (buying off); see `docs/licensing.md`, "The buy switch" |
 | `site/scripts/deploy.sh` | Deploys `site/public`, with `license-server/dist` as its API, to production or to a preview environment, then runs the smoke test against that address |
 | `site/scripts/smoke-test.sh` | Checks a running copy of the site: the page, the install commands, the headers and the 404 page |
 | `site/test/` | File checks that `bun test` runs, without a browser |
@@ -103,9 +104,11 @@ public repository, https://github.com/FrejusGdm/relay.
 
 The pricing section says that the core is free and that paid features will come later as a
 one-time payment for a lifetime license. It names no price, because the price is still Josué's
-decision. Its paid column is the buy section (`id="buy"`, added by `add-lifetime-license`): a form
-with the button "Buy a lifetime license" that posts to `/api/checkout` and sends the buyer to
-Stripe's payment page, which shows the price.
+decision. In `site/public` its paid column says "Not on sale yet". When buying is on,
+`site/scripts/build.sh` replaces that column with the buy section of `site/buy-section.html`
+(`id="buy"`, added by `add-lifetime-license`): a form with the button "Buy a lifetime license" that
+posts to `/api/checkout` and sends the buyer to Stripe's payment page, which shows the price.
+Production is deployed with buying off until live mode exists.
 
 ## The install panel
 
@@ -168,7 +171,8 @@ that the font list is exact, and that `staticwebapp.config.json` holds exactly t
 of the design. They also check the content: the links, the section order, the headline and title,
 the theme button and the olive "Get relay" in the navigation, the absence of the hero's track
 lines, of the terminal section and of tool logos, the pricing words, the absence of any price,
-the buy form as the only form that does not close a dialog, the license page's texts, `robots.txt`,
+that `index.html` has no checkout, the license page's texts, the buy switch of
+`site/scripts/build.sh` (`site/test/build.test.ts`), `robots.txt`,
 and the exact install commands.
 
 The browser checks need the fonts and Playwright's Chromium:
@@ -179,7 +183,8 @@ bunx playwright install chromium
 SITE_PORT=4280 bun run site:e2e
 ```
 
-Playwright starts Microsoft's Static Web Apps emulator on `site/public`, at the port in `SITE_PORT`
+Playwright starts Microsoft's Static Web Apps emulator on `site/public`, or on the folder in
+`SITE_ROOT` (for example a copy built by `site/scripts/build.sh`), at the port in `SITE_PORT`
 (4280 when it is not set), so the page gets the same headers and 404 rule as on Azure. The tests
 load the page at 1440, 1024 and 390 pixels wide, check that nothing sticks out of the window or out
 of a box that clips it, check the spacing, the fonts, the theme button (light by default, the dark
@@ -259,7 +264,9 @@ bash site/scripts/deploy.sh                # production
 bash site/scripts/deploy.sh license-test   # a preview environment; production is left alone
 ```
 
-The script also tests and builds the license server and deploys `license-server/dist` as the
+The script builds the deployed copy with `site/scripts/build.sh`: with buying on for a preview
+environment, and off for production unless `RELAY_LICENSE_BUY=on` is set. The smoke test then
+checks for the buy form, or its absence. The script also tests and builds the license server and deploys `license-server/dist` as the
 site's API, with the API build skipped. Azure keeps only the letters and digits of a preview
 environment's name (`license-test` becomes `licensetest`), and the script finds the preview
 address under that name.

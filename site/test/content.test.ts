@@ -43,18 +43,10 @@ describe("index.html", () => {
     expect(pricing).toContain("lifetime license");
   });
 
-  test("names no price, and calls the payment a purchase, never a donation", async () => {
+  test("names no price and has no checkout: buying is off unless site/scripts/build.sh turns it on", async () => {
     const html = await read("index.html");
     expect(html).not.toMatch(/\$\d/);
-    expect(html).not.toMatch(/donat|buy now|support relay/i);
-  });
-
-  test("has the buy section: a form that posts to /api/checkout without JavaScript", async () => {
-    const pricing = (await read("index.html")).match(/<section id="pricing">[\s\S]*?<\/section>/)?.[0] ?? "";
-    const buy = pricing.match(/<div class="price-col" id="buy">[\s\S]*?<\/div>/)?.[0] ?? "";
-    expect(buy).toContain(
-      '<form class="buy-form" method="post" action="/api/checkout"><button type="submit" class="btn btn-primary">Buy a lifetime license</button></form>',
-    );
+    expect(html).not.toMatch(/checkout|stripe|buy now|donat/i);
   });
 
   test("has one theme button in the navigation, with a moon and a sun icon, that offers the dark theme", async () => {
@@ -89,11 +81,10 @@ describe("index.html", () => {
     expect(row).not.toMatch(/<img|<svg/);
   });
 
-  test("has only forms that close a dialog, and the buy form", async () => {
+  test("has only forms that close a dialog", async () => {
     const forms = (await read("index.html")).match(/<form\b[^>]*>/gi) ?? [];
-    const other = forms.filter((form) => !form.includes('method="dialog"'));
-    expect(forms.length).toBeGreaterThan(1);
-    expect(other).toEqual(['<form class="buy-form" method="post" action="/api/checkout">']);
+    expect(forms.length).toBeGreaterThan(0);
+    for (const form of forms) expect(form).toContain('method="dialog"');
   });
 });
 

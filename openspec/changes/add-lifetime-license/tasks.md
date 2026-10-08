@@ -52,6 +52,6 @@ Edit on the Mac, but install, build and test on the Omarchy machine (`AGENTS.md`
 
 ## Workflow follow-up
 
-- Live mode is not a task. It waits for Josué's live steps in design.md ("What Josué must do", live steps 1 to 8). After live step 1, a pull request adds the `live-1` public key line to `src/license/public-keys.ts`, and a release follows.
+- Live mode is not a task. It waits for Josué's live steps in design.md ("What Josué must do", live steps 1 to 9). After live step 1, a pull request adds the `live-1` public key line to `src/license/public-keys.ts`, and a release follows.
 - When Josué decides the open questions in proposal.md, record them in `docs/ROADMAP.md` under "Decisions made". The paid features go into `PAID_FEATURES` with the gate of design decision 9.
 - Archive the change with `openspec archive add-lifetime-license` after Josué approves the merged result, and add `license` to the `cli-commands` spec's requirements "Command set", "Top-level help" and "Argument count checking" at the same time.

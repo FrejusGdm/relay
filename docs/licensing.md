@@ -171,8 +171,45 @@ key.
 
 ## The website parts
 
-The buy section of `site/public/index.html` has `id="buy"` and a form that posts to
-`/api/checkout`. `site/public/license/index.html` and `license.js` read `session_id` from the
+### The buy switch
+
+The buy form is behind one switch, so the production site never shows a button that cannot sell.
+`site/public/index.html` holds the page without it: its paid column says "Not on sale yet",
+between the comments `<!-- buy:start ... -->` and `<!-- buy:end -->`. The buy section itself is
+`site/buy-section.html`: a column with `id="buy"` and a form that posts to `/api/checkout`.
+`sh site/scripts/build.sh <output folder> on` copies `site/public` and puts the buy section in
+place of the paid column; with `off` the copy stays as it is.
+
+`site/scripts/deploy.sh` builds with buying **on** for a preview environment such as
+`license-test`, and **off** for production, unless the variable `RELAY_LICENSE_BUY=on` is set.
+After a deployment, the smoke test checks that the buy form is there, or not there, as the switch
+says. Once live mode exists (design.md of the change, "What Josué must do", live steps 1 to 9),
+turning buying on is one command on the build machine:
+
+```sh
+RELAY_LICENSE_BUY=on bash site/scripts/deploy.sh
+```
+
+Without the variable, the next production deployment turns buying off again, so set it on every
+production deployment from then on.
+
+```mermaid
+flowchart LR
+  public["site/public/index.html<br/>paid column: Not on sale yet"] --> build["site/scripts/build.sh"]
+  fragment["site/buy-section.html<br/>the buy form"] -->|"only with on"| build
+  build -->|"off: production by default"| prod["production site, no buy form"]
+  build -->|"on: preview, or production with RELAY_LICENSE_BUY=on"| preview["site with the buy form"]
+```
+
+The diagram shows where the buy form comes from. The repository's page has no buy form, so a copy
+of `site/public` deployed by any other means cannot sell either. Only the build script with `on`
+adds it, and the deployment script chooses `on` only for a preview environment or when the
+variable is set.
+
+### The license page
+
+The `/license/` page can be deployed in every environment, because only a buyer returning from
+Stripe reaches it. `site/public/license/index.html` and `license.js` read `session_id` from the
 address, ask `/api/license`, and show one of five states: loading, issued (the key, a `Copy key`
 button, the `relay license activate <key>` command and a `Copy command` button), pending, not
 found and error. Without JavaScript the page says that it needs JavaScript.

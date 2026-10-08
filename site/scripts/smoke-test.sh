@@ -1,8 +1,10 @@
 #!/bin/sh
-# Checks a running copy of the website. Usage: sh site/scripts/smoke-test.sh <base address>
+# Checks a running copy of the website. Usage: sh site/scripts/smoke-test.sh <base address> [on|off]
+# With on or off, it also checks that the home page has, or does not have, the buy form.
 set -eu
 url=${1:?usage: smoke-test.sh <base address, for example https://example.azurestaticapps.net>}
 url=${url%/}
+buy=${2:-}
 csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -16,6 +18,10 @@ grep -qF '<title>relay: never run out of limits again</title>' "$work/index.html
 for text in 'curl -fsSL -o "$HOME/.local/bin/relay"' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-linux-x64'; do
   grep -qF -- "$text" "$work/index.html" || fail "the page does not contain: $text"
 done
+case "$buy" in
+  on) grep -qF 'action="/api/checkout"' "$work/index.html" || fail "the buy form is missing, but buying is on" ;;
+  off) ! grep -qF 'action="/api/checkout"' "$work/index.html" || fail "the page has the buy form, but buying is off" ;;
+esac
 [ "$(header content-security-policy)" = "$csp" ] || fail "the Content-Security-Policy header is missing or different"
 [ "$(header x-content-type-options)" = "nosniff" ] || fail "X-Content-Type-Options is missing or different"
 [ "$(header x-frame-options)" = "DENY" ] || fail "X-Frame-Options is missing or different"

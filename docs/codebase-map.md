@@ -548,7 +548,7 @@ flowchart TD
     scripts2["scripts/<br/>build.ts, keygen.ts, verify-key.ts,<br/>smoke.sh, page-preview.ts"]
     fakestripe["test/fakes/stripe.ts: FakeStripeApi"]
   end
-  site2["site/public/<br/>index.html: the buy form<br/>license/: the license page"]
+  site2["site/<br/>buy-section.html: the buy form, added by scripts/build.sh<br/>only when buying is on<br/>public/license/: the license page"]
   command --> key
   command --> store
   command --> features

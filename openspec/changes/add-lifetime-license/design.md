@@ -543,7 +543,8 @@ No agent does these steps. Values never go into chat, the repository or a pull r
 
 6. Check that only names are visible and that no preview environment holds a live key: `az staticwebapp appsettings list --name <app> --query "keys(properties)"`, and `az staticwebapp appsettings list --name <app> --environment-name licensetest -o json | grep -c rk_live_` must print `0`.
 7. In the Dashboard, set the public support email (it appears on receipts, and the license page points buyers to it), and turn on email receipts for successful payments if you want them.
-8. Walk through Stripe's go-live checklist (https://docs.stripe.com/get-started/checklist/go-live), make one real purchase with your own card, activate the key with the released `relay`, and refund the purchase in the Dashboard.
+8. Turn buying on in production. Until this step the production site has no buy form: `site/scripts/deploy.sh` builds production with the buy switch off. On the build machine run `RELAY_LICENSE_BUY=on bash site/scripts/deploy.sh`, which deploys the page with the buy section and checks that the form is there. Set the variable on every later production deployment too; without it, the next deployment turns buying off again (`docs/licensing.md`, "The buy switch").
+9. Walk through Stripe's go-live checklist (https://docs.stripe.com/get-started/checklist/go-live), make one real purchase with your own card, activate the key with the released `relay`, and refund the purchase in the Dashboard.
 
 ## Risks / Trade-offs
 
@@ -595,6 +596,11 @@ incomplete. The code and `docs/licensing.md` follow this list.
 - **Paid features in tests.** The command is built by `licenseCommand(features)`, and the registry
   passes `PAID_FEATURES`, so a test can pass a list with one feature (license-command, "A feature
   added later") without changing the constant.
+- **The buy switch.** The production site must not show a buy button that answers 503. The repository's
+  `site/public/index.html` keeps the "Not on sale yet" column between `buy:start` and `buy:end`
+  comments, the buy section of decision 12 is `site/buy-section.html`, and `site/scripts/build.sh
+  <folder> on|off` builds the deployed copy. `deploy.sh` builds previews with buying on and
+  production with it off unless `RELAY_LICENSE_BUY=on` ("What Josué must do", live step 8).
 - **Preview server for the page.** The license page sends only `session_id`, so
   `scripts/page-preview.ts` takes the state from the request's `state` value or else from its
   `session_id` value (task 7.1).
