@@ -84,6 +84,14 @@ Every field except `version` and `turns` is optional.
 A turn ends at a `finish`, `limit` or `error` step, or after its last step. A turn that ends
 without a limit or an error ends successfully.
 
+A file can also hold one scenario per program, under the keys `claude` and `codex`, for example
+`{ "claude": { "version": 1, "turns": [] }, "codex": { "version": 1, "turns": [] } }`. A handoff
+test needs this, because the outgoing fake and the next fake read the same `RELAY_FAKE_SCENARIO`.
+`fake-claude` follows the `claude` section and `fake-codex` the `codex` section, and a program
+without a section follows the default scenario. The scenarios that the handoff tests use are in
+`test/fixtures/scenarios/`, one file per program and situation, and `test/fakes/scenarios.test.ts`
+runs each of them once against its fake.
+
 ## Steps
 
 Each step is a JSON object with one of the keys below. The examples are checked by
@@ -317,8 +325,9 @@ provider, its fake program, a factory for the adapter, and for each transport it
 its event mapper, and declares the same checks for each: the session ID comes first, failures carry
 the right reason and reset time, unknown and broken lines are tolerated, interrupt, resume and send
 behave as the declared capabilities say, and the agent gets the right standard input, working
-directory and environment without credential variables or invisible characters. The registry is
-empty until the Claude Code and Codex adapters can start workers.
+directory and environment without credential variables or invisible characters. The registry holds
+the Claude Code adapter (`claude-print`, `claude-interactive`) and the Codex adapter
+(`codex-app-server`, `codex-exec`, `codex-interactive`).
 
 A fixture is a folder `test/fixtures/providers/<provider>/<transport>/<name>/` with three files:
 `output.jsonl` (the lines the tool printed; for the app server, each message with its direction,
@@ -333,7 +342,7 @@ Each headless transport needs `normal-turn`, `usage-limit`, `auth-failure`, `int
 repository today are written from the documented shapes and say `"source": "documentation"`.
 `test/adapters/fakes-match-fixtures.test.ts` runs each fake with a scenario that matches a fixture and
 checks that the fake prints the same kinds of messages with the same fields, so the fakes and the
-fixtures cannot drift apart; once a transport has a mapper, it compares the events instead.
+fixtures cannot drift apart, and replays the fake's output through the transport's mapper.
 
 ```mermaid
 flowchart LR

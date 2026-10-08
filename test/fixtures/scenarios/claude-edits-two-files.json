@@ -1,0 +1,29 @@
+{
+  "claude": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "say": "I will add the OAuth callback and refresh Google tokens."
+          },
+          {
+            "write": "src/auth/callback.ts",
+            "content": "export function handleCallback(): string {\n  return \"ok\";\n}\n"
+          },
+          {
+            "write": "src/auth/google.ts",
+            "content": "export async function refreshToken(token: string): Promise<string> {\n  return token;\n}\n"
+          },
+          {
+            "run": "bun test",
+            "exit_code": 1
+          },
+          {
+            "say": "The callback is done. The token refresh is written but its test fails."
+          }
+        ]
+      }
+    ]
+  }
+}

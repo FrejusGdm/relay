@@ -1,0 +1,18 @@
+ RUN  v3.2.4 /home/developer/project
+
+ ✓ test/text.test.ts (100 tests) 20ms
+ ❯ test/notes.test.ts (135 tests | 1 failed | 3 skipped) 40ms
+   × reads structured notes 8ms
+     → expected '' to be 'Continue the task'
+   ✓ keeps the task description 1ms
+
+ FAIL  test/notes.test.ts > reads structured notes
+AssertionError: expected '' to be 'Continue the task'
+Expected: "Continue the task"
+Received: ""
+ ❯ test/notes.test.ts:42:22
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 231 passed | 3 skipped (235)
+   Start at  10:00:00
+   Duration  1.20s (transform 100ms, setup 0ms, collect 200ms, tests 60ms, environment 0ms, prepare 100ms)

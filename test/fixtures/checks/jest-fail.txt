@@ -1,0 +1,23 @@
+PASS test/text.test.ts
+  invisible characters
+    ✓ removes invisible characters (1 ms)
+FAIL test/notes.test.ts
+  notes
+    ✕ reads structured notes (3 ms)
+    ✓ keeps the task description (1 ms)
+    ○ skipped requests notes from a real provider
+
+  ● notes › reads structured notes
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "Continue the task"
+    Received: ""
+
+      at Object.<anonymous> (test/notes.test.ts:42:22)
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 3 skipped, 231 passed, 235 total
+Snapshots:   0 total
+Time:        1.20 s
+Ran all test suites.

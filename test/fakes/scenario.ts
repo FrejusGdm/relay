@@ -204,8 +204,23 @@ export function parseScenario(value: unknown): Scenario {
   return value as unknown as Scenario;
 }
 
-// Reads the file named by RELAY_FAKE_SCENARIO. Without one, every turn says one sentence and finishes.
-export function loadScenario(file = process.env.RELAY_FAKE_SCENARIO): Scenario {
+export type FakeProgram = "claude" | "codex";
+const PROGRAMS: string[] = ["claude", "codex"];
+
+// A file whose top-level keys are only "claude" and "codex" holds one scenario per program
+// (add-relay-switch, design decision 26), because both fakes of a handoff test see the same
+// RELAY_FAKE_SCENARIO. A program without a section gets the default scenario.
+function sectionFor(value: unknown, program: FakeProgram | undefined): unknown {
+  if (!isObject(value)) return value;
+  const keys = Object.keys(value);
+  if (keys.length === 0 || !keys.every((key) => PROGRAMS.includes(key))) return value;
+  if (program === undefined) throw new ScenarioError("The scenario has one section per program, but no program was named.");
+  return value[program] ?? { version: 1, turns: [] };
+}
+
+// Reads the file named by RELAY_FAKE_SCENARIO, or the program's section of it. Without one, every
+// turn says one sentence and finishes.
+export function loadScenario(file = process.env.RELAY_FAKE_SCENARIO, program?: FakeProgram): Scenario {
   if (file === undefined || file === "") return { version: 1, turns: [] };
   let value: unknown;
   try {
@@ -214,7 +229,7 @@ export function loadScenario(file = process.env.RELAY_FAKE_SCENARIO): Scenario {
     throw new ScenarioError(`Could not read the scenario ${file}: ${(error as Error).message}`);
   }
   try {
-    return parseScenario(value);
+    return parseScenario(sectionFor(value, program));
   } catch (error) {
     throw new ScenarioError(`${file}: ${(error as Error).message}`);
   }

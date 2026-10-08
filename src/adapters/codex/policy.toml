@@ -2,6 +2,7 @@
 # Check them again before checked_on is older than max_age_days; scripts/check-policies.ts lists stale ones.
 provider = "codex"
 display_name = "Codex"
+company = "OpenAI"
 checked_on = "2026-10-07"
 max_age_days = 90
 sign_in_methods = [
@@ -10,6 +11,8 @@ sign_in_methods = [
 ]
 unattended_subscription_use = "allowed"
 same_provider_automatic_switching = "off"
+# Printed before the first handoff to another account of this provider (add-relay-switch, design decision 16).
+own_accounts_note = "OpenAI's terms forbid circumventing rate limits. Moving this job between your own Codex accounts is your choice."
 usage_signals = [
   "account/rateLimits/read and account/rateLimits/updated in the Codex app server",
   "the error code usageLimitExceeded on failed turns",

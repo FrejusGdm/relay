@@ -1,0 +1,17 @@
+{
+  "claude": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "say": "Writing the notes."
+          },
+          {
+            "hang": true
+          }
+        ]
+      }
+    ]
+  }
+}

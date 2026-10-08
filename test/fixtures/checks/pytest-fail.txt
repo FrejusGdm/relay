@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.5, pluggy-1.5.0
+rootdir: /home/developer/project
+collected 235 items
+
+tests/test_text.py ...................................................... [ 22%]
+tests/test_notes.py F.................................................sss [100%]
+
+=================================== FAILURES ===================================
+__________________________ test_reads_structured_notes __________________________
+
+    def test_reads_structured_notes():
+>       assert notes.goal == "Continue the task"
+E       AssertionError: assert '' == 'Continue the task'
+
+tests/test_notes.py:42: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_notes.py::test_reads_structured_notes - AssertionError
+==================== 1 failed, 231 passed, 3 skipped in 4.20s ====================

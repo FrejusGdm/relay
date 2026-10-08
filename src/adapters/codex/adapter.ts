@@ -1,9 +1,13 @@
-// The Codex adapter (add-provider-adapters). This version finds the program, reads its version
-// and sign-in state, and names its login command; starting workers comes in task group 8.
+// The Codex adapter (add-provider-adapters): detection, sign-in state and login, and workers
+// through the app server, the codex exec fallback, or the person's terminal.
 import { policyOf } from "../../policies/load";
 import { detectProgram, findProgram, runProgram } from "../program";
 import type { Capabilities, ProviderAdapter, Transport } from "../types";
 import tested from "./tested-versions.json";
+import { startAppServerWorker } from "./app-server-worker";
+import { startExecWorker } from "./exec";
+import { startCodexInteractive } from "./interactive";
+import { codexAvailability } from "./session";
 
 type Env = Record<string, string | undefined>;
 
@@ -34,8 +38,12 @@ export function createCodexAdapter(env: Env = process.env): ProviderAdapter {
       return method === undefined ? { signedIn: true } : { signedIn: true, method };
     },
     loginCommand: () => ["codex", "login"],
-    start: () => Promise.reject(new Error("Starting Codex workers is not built yet.")),
-    availability: () => Promise.reject(new Error("Codex availability is not built yet.")),
+    start(account, request) {
+      if (request.mode === "interactive") return startCodexInteractive(account, request, env);
+      if (env.RELAY_CODEX_TRANSPORT === "exec" || request.env.RELAY_CODEX_TRANSPORT === "exec") return startExecWorker(account, request, env);
+      return startAppServerWorker(account, request, env);
+    },
+    availability: (account, agentEnv) => codexAvailability(account, agentEnv, env),
     hookSpec: () => ({ file: "hooks.json", events: ["SessionStart", "Stop", "SessionEnd", "Interrupt", "PreCompact"] }),
   };
 }

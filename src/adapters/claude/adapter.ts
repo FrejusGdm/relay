@@ -1,10 +1,12 @@
-// The Claude Code adapter (add-provider-adapters). This version finds the program, reads its
-// version and sign-in state, and names its login command; starting workers comes in task group 7.
+// The Claude Code adapter uses the installed program and relay’s recorded readings.
 import type { Account } from "../../core/config/types";
 import { policyOf } from "../../policies/load";
 import { detectProgram, findProgram, runProgram } from "../program";
 import type { Capabilities, ProviderAdapter, Transport } from "../types";
 import tested from "./tested-versions.json";
+import { readAvailability } from "../../accounts/availability";
+import { startClaudeHeadless } from "./headless";
+import { startClaudeInteractive } from "./interactive";
 
 type Env = Record<string, string | undefined>;
 
@@ -44,8 +46,9 @@ export function createClaudeAdapter(env: Env = process.env): ProviderAdapter {
         : { signedIn: true };
     },
     loginCommand: () => ["claude", "auth", "login"],
-    start: () => Promise.reject(new Error("Starting Claude Code workers is not built yet.")),
-    availability: () => Promise.reject(new Error("Claude Code availability is not built yet.")),
+    start: (account, request) => request.mode === "headless"
+      ? startClaudeHeadless(account, request, env) : startClaudeInteractive(account, request, env),
+    availability: async (account, agentEnv) => readAvailability(agentEnv.RELAY_HOME!, account),
     hookSpec: () => ({
       file: "settings.json",
       events: ["SessionStart", "Stop", "StopFailure", "Notification", "SessionEnd", "PreCompact"],
