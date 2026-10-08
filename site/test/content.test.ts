@@ -5,7 +5,7 @@ import { join } from "node:path";
 const pub = join(import.meta.dir, "..", "public");
 const read = (name: string) => Bun.file(join(pub, name)).text();
 const htmlFiles = readdirSync(pub).filter((name) => name.endsWith(".html"));
-const allowedLinks = ["#top", "#how", "#pricing", "/", "https://www.apache.org/licenses/LICENSE-2.0"];
+const allowedLinks = ["#top", "#how", "#pricing", "/", "https://www.apache.org/licenses/LICENSE-2.0", "https://github.com/FrejusGdm/relay"];
 
 describe.each(htmlFiles)("%s", (name) => {
   test("links only to parts of the page, the home page and the license", async () => {

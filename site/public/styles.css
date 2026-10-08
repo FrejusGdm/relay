@@ -503,15 +503,18 @@ section { padding: 128px 0; border-top: 1px solid var(--rule); }
 @media (max-width: 760px) { .foot-grid { grid-template-columns: 1fr; } }
 
 /* Install panel */
-.install { margin: auto; width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 32px; border: 1px solid var(--rule); border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
+.install { margin: auto; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 32px; border: 1px solid var(--rule); border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
 .install::backdrop { background: rgba(20, 20, 19, 0.32); }
 .install-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .install-head h2 { margin: 0; font: 600 20px var(--font-text); }
 .install p { margin: 12px 0 0; color: var(--muted); font-size: 15px; }
+.install p a { color: var(--text); text-underline-offset: 3px; }
 .install-block { margin-top: 28px; }
 .install-block-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .install-block-head h3 { margin: 0; font: 600 15px var(--font-text); }
-.install-cmd { margin: 10px 0 0; padding: 14px 16px; font: 13px/1.6 var(--font-mono); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; white-space: pre; overflow-x: auto; }
+.install-cmd { margin: 10px 0 0; padding: 14px 16px; font: 13px/1.6 var(--font-mono); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; white-space: pre-wrap; word-break: break-all; overflow-x: auto; }
+/* The 80-character download address fits the 760px panel. On a narrower screen it wraps between any two characters
+   instead of scrolling sideways, so it continues on the same line as its indent; copying keeps the original lines. */
 .install-note { font-size: 14px; }
 .nowrap { white-space: nowrap; }
 @media (max-width: 480px) {

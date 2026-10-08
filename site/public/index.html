@@ -377,7 +377,7 @@ at 11:17, at its usage limit.</span>
     <h2 id="install-title">Install relay</h2>
     <button type="button" class="btn btn-secondary btn-sm" popovertarget="install" popovertargetaction="hide" autofocus>Close</button>
   </div>
-  <p>relay is installed from the releases of its GitHub repository, which is private for now. You need the GitHub CLI, <span class="mono">gh</span>, signed in with an account that can read <span class="mono">FrejusGdm/relay</span>. Run <span class="mono">gh auth status</span> to check, or <span class="mono">gh auth login</span> to sign in.</p>
+  <p>relay is free and <a href="https://github.com/FrejusGdm/relay">open source</a>. These commands download the latest release from GitHub.</p>
 
   <div class="install-block">
     <div class="install-block-head">
@@ -385,11 +385,8 @@ at 11:17, at its usage limit.</span>
       <button type="button" class="btn btn-secondary btn-sm" data-copy="install-macos-cmd" aria-label="Copy the macOS commands">Copy</button>
     </div>
     <pre id="install-macos-cmd" class="install-cmd" tabindex="0">mkdir -p "$HOME/.local/bin"
-gh release download \
-  --repo FrejusGdm/relay \
-  --pattern relay-darwin-arm64 \
-  --output "$HOME/.local/bin/relay" \
-  --clobber
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64
 chmod +x "$HOME/.local/bin/relay"
 "$HOME/.local/bin/relay" --version</pre>
   </div>
@@ -400,11 +397,8 @@ chmod +x "$HOME/.local/bin/relay"
       <button type="button" class="btn btn-secondary btn-sm" data-copy="install-linux-cmd" aria-label="Copy the Linux commands">Copy</button>
     </div>
     <pre id="install-linux-cmd" class="install-cmd" tabindex="0">mkdir -p "$HOME/.local/bin"
-gh release download \
-  --repo FrejusGdm/relay \
-  --pattern relay-linux-x64 \
-  --output "$HOME/.local/bin/relay" \
-  --clobber
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-linux-x64
 chmod +x "$HOME/.local/bin/relay"
 "$HOME/.local/bin/relay" --version</pre>
   </div>

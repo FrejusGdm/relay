@@ -132,7 +132,8 @@ test("in a repository with no commits and no index, the tree holds the files and
   expect(tmpFiles()).toEqual([]);
 });
 
-test("a file name that is not UTF-8 is still measured and left out", async () => {
+// APFS refuses file names that are not UTF-8 (EILSEQ), so such a file cannot exist on macOS.
+test.skipIf(process.platform === "darwin")("a file name that is not UTF-8 is still measured and left out", async () => {
   const jobId = await setUpJob();
   const name = Buffer.concat([Buffer.from("big"), Buffer.from([0xff]), Buffer.from(".bin")]);
   writeFileSync(Buffer.concat([Buffer.from(`${scratch.repo}/`), name]), Buffer.alloc(2 * MB, 1));

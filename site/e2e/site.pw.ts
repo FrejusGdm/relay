@@ -103,11 +103,8 @@ for (const width of widths) {
 
 const macosBlock = [
   'mkdir -p "$HOME/.local/bin"',
-  "gh release download \\",
-  "  --repo FrejusGdm/relay \\",
-  "  --pattern relay-darwin-arm64 \\",
-  '  --output "$HOME/.local/bin/relay" \\',
-  "  --clobber",
+  'curl -fsSL -o "$HOME/.local/bin/relay" \\',
+  "  https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64",
   'chmod +x "$HOME/.local/bin/relay"',
   '"$HOME/.local/bin/relay" --version',
 ].join("\n");
