@@ -10,8 +10,8 @@ export const SECRET_SERVICE = "relay-t3";
 
 export function osSecretStore(): SecretStore {
   const unavailable = () => new T3Error("token_rejected", process.platform === "darwin"
-    ? "relay: there is no credential store to keep the T3 Code token in. Unlock your macOS Keychain, then run relay t3 connect again."
-    : "relay: there is no credential store to keep the T3 Code token in. Install and unlock a Secret Service provider (for example GNOME Keyring), then run relay t3 connect again.");
+    ? "there is no credential store to keep the T3 Code token in. Unlock your macOS Keychain, then run relay t3 connect again."
+    : "there is no credential store to keep the T3 Code token in. Install and unlock a Secret Service provider (for example GNOME Keyring), then run relay t3 connect again.");
   // Never repeat a native error: it may include the credential or the supplied value.
   return {
     async get(name) {

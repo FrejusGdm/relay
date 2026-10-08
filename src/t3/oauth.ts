@@ -174,7 +174,7 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     }
     const { tools } = await client.listTools();
     if (T3_TOOLS.some((tool) => !tools.some((entry) => entry.name === tool))) {
-      throw new T3Error("too_old", "relay: this T3 Code build cannot be driven by other programs. Install a nightly build from v0.0.46-nightly.20261006.2752 or later.");
+      throw new T3Error("too_old", "this T3 Code build cannot be driven by other programs. Install a nightly build from v0.0.46-nightly.20261006.2752 or later.");
     }
     if (!issuedAt || !expiresAt) throw new Error("T3 Code did not complete sign-in. Run relay t3 connect again.");
     const serverVersion = client.getServerVersion()?.version ?? null;

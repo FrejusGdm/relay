@@ -123,7 +123,7 @@ test("the injected deadline closes the listener and returns the exact timeout me
 
 test("Nothing on disk: no file, log or printed line contains the token, code or verifier", async () => {
   const { fake, store, lines, options, callbackAddress } = await setup();
-  let verifier: string | null = null;
+  let verifier = null as string | null;
   options.fetch = async (url, init) => {
     if (new URL(url).pathname === "/token") verifier = new URLSearchParams(String(init?.body)).get("code_verifier");
     return fake.fetch(url, init);
