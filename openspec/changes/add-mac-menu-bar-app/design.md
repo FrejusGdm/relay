@@ -554,8 +554,14 @@ The primary action opens a view; it never starts, stops or sends anything.
   `NSWorkspace.shared.activateFileViewerSelecting([project_root URL])`. When the project is missing,
   there is no primary action.
 
-The host is looked up each time the window opens, never in the background. Process lookups go
+The host is looked up each time the window opens, when the current worker's process ID changes
+(after a switch, or when a link's job arrives after its window opened), and each time a link window
+is shown again, never in the background. A host is used only for the process ID it was found for. Process lookups go
 through a `ProcessTable` protocol so tests can give a fake process tree.
+
+The checkpoint and switch sheets are shown in place of the card, inside the same window, until they
+close: a menu-bar window has no stable parent for a system sheet. The primary action's button
+carries the host's process ID, so pressing it activates that process and nothing else.
 
 "View checkpoint" opens a sheet: title "Checkpoint 7"; rows "Commit" (all 40 characters, IBM Plex
 Mono, selectable), "Saved" (time and age), "Kind" (`baseline` "First checkpoint", `manual` "Saved
@@ -578,6 +584,9 @@ The sheet:
   The person selects one.
 - Buttons "Cancel" and "Switch to codex:personal" (disabled until an account is selected).
 
+The request body is written as `{"target":"<target>","confirm_new_provider":<true or false>}`
+in that key order; the target has already matched the target pattern, so it needs no escaping.
+
 The flow (every message shown is the API's `message`, word for word):
 
 1. Send `POST /v1/jobs/{job}/switch` with `{"target":"codex:personal","confirm_new_provider":false}`.
@@ -597,6 +606,21 @@ The flow (every message shown is the API's `message`, word for word):
 6. No answer within 15 minutes, or a closed connection: "relay did not answer. The switch may still
    be running; this card updates when relay reports it." and "Close". No retry.
 
+Decided while building task 4.2 (2026-10-08, after review):
+
+- Return presses "Switch to …" only. "Send and switch" has no key, so pressing Return twice cannot
+  answer the provider question before the person has read it; Escape presses "Cancel" or "Close".
+- While the request runs, the left button reads "Close". It only hides the sheet: the request
+  continues, and a later question from the daemon appears when the person opens "Switch worker…"
+  again. "Cancel" ends the flow for good, and nothing more is sent after it.
+- "The switch may still be running" appears only when the connection closed before the answer or
+  the 15 minutes passed. When the app could not connect at all, the sheet says "The switch was not
+  sent, because relay is not running." with the command of decision 9; an answer the app cannot
+  read says that the switch may have run.
+- The `'\''` quoting of step 4 is right for sh, bash and zsh, but fish also reads a backslash
+  inside single quotes. When the project path contains a backslash or a control character, the
+  sheet shows the daemon's message without a command to copy.
+
 Before step 1 there is no extra "Are you sure?" dialog: `relay switch` has none, and choosing an
 account and pressing a button named after it is the deliberate act.
 
@@ -611,7 +635,9 @@ link returns `nil` and is ignored without a message.
 URLs. For each accepted job ID it shows one window (`NSWindow` with an `NSHostingView` of the
 expanded card for that job, title "relay", 376 points wide), reusing the window already open for
 the same job, and calls `NSApp.activate()`. An unknown job shows the API's `job_not_found` message
-in that window. The window's actions are the same as the menu-bar card's: opening a link never
+in that window; any other failure to load the job shows the API's message, or that relay is not
+running or did not answer, instead of "Connecting to relay…". The link is compared as text, so
+`relay://job:/…`, `relay://@job/…` and `relay://JOB/…` are ignored too. The window's actions are the same as the menu-bar card's: opening a link never
 sends a `POST`.
 
 An `NSWindow` made by the app delegate is used instead of a SwiftUI `WindowGroup` with

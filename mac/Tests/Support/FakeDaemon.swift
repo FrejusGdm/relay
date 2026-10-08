@@ -14,7 +14,7 @@ public final class FakeDaemon: @unchecked Sendable {
         public let body: [UInt8]
     }
 
-    public enum Reply: Sendable {
+    public indirect enum Reply: Sendable {
         /// These bytes, then the connection closes.
         case raw([UInt8])
         /// A file of `Tests/Fixtures/api/` as a JSON answer.
@@ -25,6 +25,8 @@ public final class FakeDaemon: @unchecked Sendable {
         case feed(EventFeed)
         /// A new feed for each request, kept in `openedFeeds`.
         case newFeedPerRequest
+        /// Another reply, sent after this many seconds of real time.
+        case delayed(Double, Reply)
     }
 
     public let home: String
@@ -179,7 +181,14 @@ public final class FakeDaemon: @unchecked Sendable {
             return replies["\(method) \(path)"]
         }
 
+        answer(reply, method: method, path: path, to: client)
+    }
+
+    private func answer(_ reply: Reply?, method: String, path: String, to client: Int32) {
         switch reply {
+        case .delayed(let seconds, let inner):
+            usleep(useconds_t(seconds * 1_000_000))
+            answer(inner, method: method, path: path, to: client)
         case .raw(let raw):
             write(client, raw)
         case .fixture(let name, let status, let streamSeq):

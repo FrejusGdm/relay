@@ -8,14 +8,22 @@ public struct ExpandedCard: View {
 
     let model: CardModel
     let actions: CardActions
-    let showLess: () -> Void
+    let showLess: (() -> Void)?
+    let openPanel: (CardPanel) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: CardModel, actions: CardActions = CardActions(), showLess: @escaping () -> Void = {}) {
+    /// `showLess` is `nil` in a `relay://` window, which has no tiny card to go back to.
+    public init(
+        model: CardModel,
+        actions: CardActions = CardActions(),
+        showLess: (() -> Void)? = nil,
+        openPanel: @escaping (CardPanel) -> Void = { _ in }
+    ) {
         self.model = model
         self.actions = actions
         self.showLess = showLess
+        self.openPanel = openPanel
     }
 
     public var body: some View {
@@ -44,7 +52,7 @@ public struct ExpandedCard: View {
                 .tracking(-0.14)
                 .foregroundStyle(palette(.ink))
             Spacer(minLength: 0)
-            headButton("Show less", palette, action: showLess)
+            if let showLess { headButton("Show less", palette, action: showLess) }
             headButton("Quit", palette, action: actions.quit)
         }
         .padding(.bottom, 24)
@@ -118,15 +126,21 @@ public struct ExpandedCard: View {
 
         VStack(spacing: 0) {
             if let action = card.primaryAction {
-                primaryButton(action.label, palette) { actions.primary(action) }
+                PrimaryButton(label: action.label) { actions.primary(action) }
             }
-            let checkpoint = card.showsViewCheckpoint ? actions.viewCheckpoint : nil
-            let switchWorker = card.showsSwitchWorker ? actions.switchWorker : nil
-            if checkpoint != nil || switchWorker != nil {
+            let checkpoint = card.showsViewCheckpoint ? card.checkpoint : nil
+            let makeSwitchFlow = card.showsSwitchWorker ? actions.makeSwitchFlow : nil
+            if checkpoint != nil || makeSwitchFlow != nil {
                 HStack {
-                    if let checkpoint { textButton("View checkpoint", palette, action: checkpoint) }
+                    if let checkpoint {
+                        TextButton(title: "View checkpoint") { openPanel(.checkpoint(checkpoint)) }
+                    }
                     Spacer(minLength: 0)
-                    if let switchWorker { textButton("Switch worker…", palette, action: switchWorker) }
+                    if let makeSwitchFlow {
+                        TextButton(title: "Switch worker…") {
+                            if let flow = makeSwitchFlow(card.jobID) { openPanel(.switchWorker(flow)) }
+                        }
+                    }
                 }
                 .padding(.top, 12)
             }
@@ -142,38 +156,8 @@ public struct ExpandedCard: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 10)
         if let command = card.command {
-            primaryButton("Copy command", palette) { actions.copy(command) }
+            PrimaryButton(label: "Copy command") { actions.copy(command) }
                 .padding(.top, 22)
         }
-    }
-
-    private func primaryButton(_ label: String, _ palette: Palette, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Text(label)
-                    .font(RelayFont.text(13, .semibold))
-                RightArrow().line(palette(.onAccent), width: 1.3)
-                    .frame(width: 17, height: 17)
-            }
-            .foregroundStyle(palette(.onAccent))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 15)
-            .background(RoundedRectangle(cornerRadius: 8).fill(palette(.accent)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PressStyle())
-        .keyboardShortcut(.defaultAction)
-    }
-
-    private func textButton(_ title: String, _ palette: Palette, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(RelayFont.text(12))
-                .underline(true, color: palette(.rule))
-                .foregroundStyle(palette(.muted))
-                .padding(.vertical, 4)
-        }
-        .buttonStyle(PressStyle())
     }
 }
