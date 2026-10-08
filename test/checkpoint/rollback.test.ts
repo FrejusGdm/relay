@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, setDefaultTimeout, test } from "bun:test
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { watchGitCalls } from "../../src/git/run";
+import { tryLock } from "../../src/platform/file-lock";
 import { MAIN } from "../helpers/cli";
 import { captureState } from "../helpers/invariants";
 import {
@@ -240,7 +241,14 @@ test("Control-C while files are written leaves a state the undo checkpoint resto
     rmSync(flag, { force: true });
   }
   expect(readdirSync(join(scratch.relayHome, "tmp"))).toEqual([]);
-  expect(readdirSync(join(scratch.relayHome, "locks"))).toEqual([]);
+  // The events lock is an flock lock whose file stays (add-daemon-api-and-status); no lock is held.
+  const locks = readdirSync(join(scratch.relayHome, "locks"));
+  expect(locks.filter((name) => !name.endsWith(".events.lock"))).toEqual([]);
+  for (const name of locks) {
+    const handle = tryLock(join(scratch.relayHome, "locks", name));
+    expect(handle).not.toBeNull();
+    handle!.release();
+  }
   expect(existsSync(join(scratch.repo, "extra.txt"))).toBe(false);
 
   expect((await relay(scratch, ["rollback", "3", "--yes"], { quiet: true })).code).toBe(0);

@@ -1,14 +1,18 @@
 // Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
+// Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
 // command that writes, the short events lock, held while one event is appended, and the config
-// lock, held while config.toml is changed (add-provider-adapters, design decision 10). A lock file
-// holds its owner as JSON. It is written to a temporary file first and then linked into place,
-// which fails when the lock exists, so a reader never sees half an owner.
+// lock, held while config.toml is changed (add-provider-adapters, design decision 10). A job lock
+// or config lock file holds its owner as JSON. It is written to a temporary file first and then
+// linked into place, which fails when the lock exists, so a reader never sees half an owner. The
+// events lock is an flock lock instead (add-daemon-api-and-status, design decision 9): the kernel
+// releases it when its holder dies, so a crash never leaves it held.
 import { randomBytes } from "node:crypto";
 import { closeSync, linkSync, mkdirSync, openSync, readFileSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
+import { lock, LockTimeout } from "../platform/file-lock";
 import { isJobId } from "./id";
 
 interface Owner {
@@ -53,25 +57,19 @@ export function takeJobLock(relayHome: string, jobId: string, command: string): 
 // Runs `action` while holding the events lock, trying every 10 ms for up to 2 seconds.
 export async function withEventsLock<T>(relayHome: string, jobId: string, action: () => T): Promise<T> {
   const path = lockPath(relayHome, jobId, "events.lock");
-  const deadline = Date.now() + SHORT_WAIT_MS;
-  for (;;) {
-    const release = tryLock(path, "append-event");
-    if (release !== null) {
-      try {
-        return action();
-      } finally {
-        release();
-      }
-    }
-    const owner = readOwner(path);
-    if (owner !== null && owner !== "gone" && isStale(owner.parsed)) recoverStale(path, owner.text);
-    if (Date.now() >= deadline) {
-      const holder = owner === null || owner === "gone" ? "" : ` (process ${owner.parsed.pid})`;
-      throw new CommandError(ExitCode.Busy, [
-        `Another relay process${holder} is writing to this job's event log. Try again when it finishes.`,
-      ]);
-    }
-    await Bun.sleep(RETRY_MS);
+  let handle;
+  try {
+    handle = await lock(path, SHORT_WAIT_MS);
+  } catch (error) {
+    if (!(error instanceof LockTimeout)) throw error;
+    throw new CommandError(ExitCode.Busy, [
+      "Another relay process is writing to this job's event log. Try again when it finishes.",
+    ]);
+  }
+  try {
+    return action();
+  } finally {
+    handle.release();
   }
 }
 

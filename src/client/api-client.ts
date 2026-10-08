@@ -52,6 +52,20 @@ export async function getVersion(runDir: string, timeoutMs: number): Promise<Dae
   }
 }
 
+// GET /v1/jobs: the project root of each indexed job, or null without an answer. Throws
+// UntrustedRuntime as request() does.
+export async function getJobRoots(runDir: string, timeoutMs: number): Promise<string[] | null> {
+  const response = await request(runDir, "/v1/jobs", timeoutMs);
+  try {
+    if (response?.status !== 200) return null;
+    const body = (await response.json()) as { jobs?: { project_root?: unknown }[] } | null;
+    if (!Array.isArray(body?.jobs)) return null;
+    return body.jobs.flatMap((job) => (typeof job?.project_root === "string" ? [job.project_root] : []));
+  } catch {
+    return null;
+  }
+}
+
 // The only connection to the daemon. Before it connects, it checks that the runtime directory is
 // private and that the socket is a socket owned by this user, not a symbolic link, and throws
 // UntrustedRuntime otherwise. Returns null when there is no socket or nothing answers in time.
