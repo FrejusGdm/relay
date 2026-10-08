@@ -1,9 +1,11 @@
 #!/bin/sh
-# Checks a running copy of the website. Usage: sh site/scripts/smoke-test.sh <base address>
+# Checks a running copy of the website. Usage: sh site/scripts/smoke-test.sh <base address> [on|off]
+# With on or off, it also checks that the home page has, or does not have, the buy form.
 set -eu
 url=${1:?usage: smoke-test.sh <base address, for example https://example.azurestaticapps.net>}
 url=${url%/}
-csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+buy=${2:-}
+csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fail() { echo "Smoke test failed: $1" >&2; exit 1; }
@@ -16,6 +18,10 @@ grep -qF '<title>relay: never run out of limits again</title>' "$work/index.html
 for text in 'curl -fsSL -o "$HOME/.local/bin/relay"' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64' 'https://github.com/FrejusGdm/relay/releases/latest/download/relay-linux-x64'; do
   grep -qF -- "$text" "$work/index.html" || fail "the page does not contain: $text"
 done
+case "$buy" in
+  on) grep -qF 'action="/api/checkout"' "$work/index.html" || fail "the buy form is missing, but buying is on" ;;
+  off) ! grep -qF 'action="/api/checkout"' "$work/index.html" || fail "the page has the buy form, but buying is off" ;;
+esac
 [ "$(header content-security-policy)" = "$csp" ] || fail "the Content-Security-Policy header is missing or different"
 [ "$(header x-content-type-options)" = "nosniff" ] || fail "X-Content-Type-Options is missing or different"
 [ "$(header x-frame-options)" = "DENY" ] || fail "X-Frame-Options is missing or different"
@@ -28,4 +34,8 @@ auth=$(curl -sS -o /dev/null -w '%{http_code}' "$url/.auth/login/github") || fai
 missing=$(curl -sS -o "$work/404.html" -w '%{http_code}' "$url/no-such-page") || fail "the /no-such-page request failed"
 [ "$missing" = 404 ] || fail "/no-such-page returned $missing, expected 404"
 grep -qF 'Page not found' "$work/404.html" || fail "the 404 page text is missing"
+# The license page carries the session ID in its address, so it is never cached or sent as a referrer.
+curl -sS -o /dev/null -D "$work/headers" "$url/license/" || fail "the /license/ request failed"
+[ "$(header cache-control)" = "no-store" ] || fail "/license/ is missing Cache-Control: no-store"
+[ "$(header referrer-policy)" = "no-referrer" ] || fail "/license/ is missing Referrer-Policy: no-referrer"
 echo "Smoke test passed: $url"

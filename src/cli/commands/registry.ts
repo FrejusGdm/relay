@@ -21,6 +21,10 @@ const policy = lazy(() => import("./policy"), "policy");
 const providers = lazy(() => import("./providers"), "providers");
 const rollback = lazy(() => import("./rollback"), "rollback");
 const run = lazy(() => import("./run"), "run");
+const license: Handler = async (ctx) => {
+  const [{ licenseCommand }, { PAID_FEATURES }] = await Promise.all([import("./license"), import("../../license/features")]);
+  return licenseCommand(PAID_FEATURES)(ctx);
+};
 const switchCommand = lazy(() => import("./switch"), "switchCommand");
 const status = lazy(() => import("./status"), "status");
 const statusline = lazy(() => import("./statusline"), "statusline");
@@ -35,7 +39,7 @@ const hooks: Handler = async (ctx) =>
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
-  | "hooks" | "hook" | "statusline" | "daemon" | "doctor";
+  | "hooks" | "hook" | "statusline" | "daemon" | "doctor" | "license";
 
 export interface OptionDef {
   name: string;          // long name without dashes, for example "message"
@@ -58,6 +62,8 @@ export interface CommandContext {
   homedir: string;
   relayHome: string;
   config: RelayConfig;
+  // The license public key table: LICENSE_PUBLIC_KEYS, which only tests replace (add-lifetime-license).
+  licensePublicKeys: Readonly<Record<string, string>>;
 }
 
 export interface CommandDef {
@@ -387,5 +393,23 @@ export const COMMANDS: CommandDef[] = [
     quiet: false,
     built: true,
     handler: doctor,
+  },
+  {
+    name: "license",
+    usage: "relay license <activate|status|remove> [<key>]",
+    argsUsage: "<activate|status|remove> [<key>]",
+    summary: "Add, check or remove your relay license",
+    details: ["relay checks the key on this computer. It never sends it anywhere."],
+    examples: [
+      "relay license activate relay1.eyJ2IjoxLCJraWQiOiJsaXZlLTEi...",
+      "relay license status",
+      "relay license remove",
+    ],
+    options: [],
+    minArgs: 1,
+    maxArgs: 2,
+    quiet: false,
+    built: true,
+    handler: license,
   },
 ];

@@ -5,7 +5,7 @@ import { join } from "node:path";
 const site = join(import.meta.dir, "..");
 const pub = join(site, "public");
 const read = (path: string) => Bun.file(path).text();
-const htmlFiles = readdirSync(pub).filter((name) => name.endsWith(".html"));
+const htmlFiles = readdirSync(pub, { recursive: true, encoding: "utf8" }).filter((name) => name.endsWith(".html") && !name.startsWith("fonts/"));
 const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe.each(htmlFiles)("%s", (name) => {
@@ -86,6 +86,19 @@ describe("site.js", () => {
   test("names no address except the SVG namespace", async () => {
     const js = await read(join(pub, "site.js"));
     expect(js.match(/http:\/\/[^"'\s]*/g)).toEqual(["http://www.w3.org/2000/svg"]);
+  });
+});
+
+describe("license/license.js", () => {
+  const forbidden = ["localStorage", "sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "EventSource", "eval(", "new Function", "style=", "http"];
+
+  test.each(forbidden)("does not contain %s", async (text) => {
+    expect(await read(join(pub, "license", "license.js"))).not.toContain(text);
+  });
+
+  test("calls only this site's /api/license", async () => {
+    const js = await read(join(pub, "license", "license.js"));
+    expect(js.match(/fetch\([^,]*/g)).toEqual(['fetch("/api/license?session_id=" + encodeURIComponent(sessionId)']);
   });
 });
 

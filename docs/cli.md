@@ -6,9 +6,10 @@ arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay roll
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
 `relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
 `relay statusline`, which `docs/hooks.md` describes, `relay run`, which the section "Running an
-agent" of `docs/adapters.md` describes, `relay switch`, which `docs/handoff.md` describes, and
-`relay daemon` and `relay doctor --reindex`, which `docs/daemon.md` describes; the other commands
-do not yet. The change named in the "Built by" column builds each one.
+agent" of `docs/adapters.md` describes, `relay switch`, which `docs/handoff.md` describes,
+`relay daemon` and `relay doctor --reindex`, which `docs/daemon.md` describes, and `relay license`,
+which `docs/licensing.md` describes; the other commands do not yet. The change named in the
+"Built by" column builds each one.
 
 ## Commands
 
@@ -30,6 +31,7 @@ do not yet. The change named in the "Built by" column builds each one.
 | `statusline` | `relay statusline <provider>` | 1 | `add-provider-adapters` |
 | `daemon` | `relay daemon <start\|stop\|restart\|status\|run>` | 1 | `add-daemon-api-and-status` |
 | `doctor` | `relay doctor --reindex` | none | `add-daemon-api-and-status` |
+| `license` | `relay license <activate\|status\|remove> [<key>]` | 1 or 2 | `add-lifetime-license` |
 
 The `\|` in the table stands for `|`. An option followed by `...`, such as `[--include <path>]...`, may be given more than once. Every command also accepts `-h`, `--help` and
 `--log-level <level>`, where the level is `debug`, `info`, `warn` or `error`. Options come after
@@ -151,6 +153,9 @@ to the log by mistake.
 | `command interrupted` | `warn` | `signal` (`SIGINT`, `SIGTERM` or `SIGHUP`) | Control-C, `SIGTERM` or a closed terminal (`SIGHUP`) stopped relay. |
 | `hook ignored: not built yet` | `info` | `provider`, `event` | `relay hook` ran. `provider` is `null` unless it is `claude` or `codex`. `event` is `null` unless it is one of that provider's hook events listed below. |
 | `hook usage error` | `info` | `arguments` (how many words follow `hook`) | `relay hook` got a wrong command line. |
+| `license activated` | `info` | `license_id` | `relay license activate` saved a valid key. The key itself is never logged. |
+| `license removed` | `info` | `license_id` (`null` when the saved key could not be checked) | `relay license remove` deleted the saved key. |
+| `license check failed` | `info` | `problem` (`format`, `test_key`, `unknown_key`, `signature` or `product`) | `relay license activate` or `status` found a key that is not valid. |
 
 ### Levels
 
@@ -252,7 +257,9 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 31 | `StartFailed` | The next agent did not start; the handoff is ready to retry. |
 | 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
 | 33 | `CannotStop` | The current agent could not be stopped, or the `relay run` that holds it did not answer. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 40 to 42 by `add-t3-limit-rules`. The other numbers are free. |
+| 50 | `LicenseInvalid` | The license key is not valid: wrong format, a test key, an unknown signing key, a failed signature check, or another product. |
+| 51 | `LicenseMissing` | No license is active (from `relay license status`, and later from a paid feature). |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 40 to 42 by `add-t3-limit-rules`. The other numbers are free. `add-lifetime-license` uses 50 and 51 because 40 to 42 were already taken. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |
@@ -266,7 +273,7 @@ convention of 128 plus the signal number.
 
 Every command can also exit with 2 for a wrong command line, 70 for a bug in relay, 78 for a
 problem with the relay folder or `config.toml`, and 130 or 143 when a signal stops it. The table
-lists the other codes of the commands that `add-provider-adapters` and `add-relay-switch` build.
+lists the other codes of the commands that `add-provider-adapters`, `add-relay-switch` and `add-lifetime-license` build.
 
 | Command | Exit codes |
 |---|---|
@@ -276,6 +283,7 @@ lists the other codes of the commands that `add-provider-adapters` and `add-rela
 | `relay hooks` | 0 done; 1 a settings file could not be changed, or relay runs from source without `RELAY_BIN`; 7 an answer is needed; 21 no such account; 78 an unsafe profile folder |
 | `relay policy show` | 0 done; 2 a provider relay has no adapter for |
 | `relay providers` | 0 done |
+| `relay license` | 0 done; 50 the key, or the saved key, is not valid; 51 `status` found no saved license; 69 this version of relay has no public key to check keys with yet |
 
 ## How to add a command
 

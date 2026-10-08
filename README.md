@@ -39,6 +39,9 @@ and decisions.
 [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the open decisions, and
 [DESIGN.md](DESIGN.md) for the design direction.
 
+relay's core is free and stays free; a one-time payment for a lifetime license will unlock the
+paid features, and [docs/licensing.md](docs/licensing.md) explains how the license works.
+
 ## Install
 
 relay is free and open source. These commands download the latest release from GitHub and
@@ -98,6 +101,7 @@ an agent" of [docs/adapters.md](docs/adapters.md) explains `relay run`.
 | [docs/mac-app.md](docs/mac-app.md) | The Mac menu-bar app: install, first launch, how it talks to the daemon, and how it is built |
 | `DESIGN.md`, `docs/design/` | The design direction and its working preview |
 | `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |
+| `license-server/` | The server that sells and delivers the lifetime license with Stripe Checkout; see [docs/licensing.md](docs/licensing.md) |
 | `openspec/` | Project rules (`config.yaml`) and detailed change proposals for the first version |
 | `AGENTS.md`, `CLAUDE.md` | Instructions for coding agents |
 
