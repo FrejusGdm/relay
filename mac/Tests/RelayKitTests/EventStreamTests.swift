@@ -112,7 +112,7 @@ struct EventStreamTests {
         #expect(change.availability.status == .rateLimited)
         #expect(change.usage == [])
 
-        let short = #"{"target":"claude:work","availability":{"status":"rate_limited","reason":"Claude Code reported a rate limit","retry_at":null,"measured_at":"2026-10-07T14:02:11.402Z","source":"hook"}}"#
+        let short = #"{"target":"claude:work","availability":{"status":"rate_limited","reason":"Claude Code reported a rate limit","retry_at":"2026-10-07T19:00:00.000Z","measured_at":"2026-10-07T14:02:11.402Z","source":"hook"}}"#
         let fromShort = ServerEvent(.event(SSEEvent(id: "4182", type: "availability", data: short)))
         guard case .availability(let shortChange) = fromShort.payload else {
             Issue.record("Expected an availability event, got \(fromShort.payload)")
