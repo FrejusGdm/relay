@@ -33,7 +33,7 @@ provider or a real T3 Code: they use the fake T3 server of task 4.1, phase 3's `
 
 - [ ] 2.1 Add the `[t3]`, `[t3.instances.<id>]` and `[limits."<account>".<window>]` tables to
   phase 1's settings schema, `docs/config.md` and `docs/config.example.toml` (design.md 5). Verify
-  with `bun test test/config/t3-settings.test.ts test/config/limits-settings.test.ts`, which cover
+  with `bun test test/core/config-t3.test.ts test/core/config-limits.test.ts`, which cover
   every scenario of the `t3-connection` requirement "T3 settings" and of the `limit-rules`
   requirements "Rule settings" and "Switch targets are checked", each with exit code 78.
 - [ ] 2.2 Add `src/limits/rules.ts` with the defaults of the `limit-rules` requirement

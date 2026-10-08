@@ -2,7 +2,10 @@ import { join } from "node:path";
 import { PROVIDERS, type Provider } from "../../adapters/providers";
 import { expandPath } from "../paths";
 import { quote } from "../quote";
-import { LOG_LEVELS, type AccountId, type ConfigProblem, type LogLevel, type RelayConfig } from "./types";
+import {
+  LIMIT_ACTIONS, LIMIT_WINDOWS, LOG_LEVELS, type AccountId, type ConfigProblem,
+  type LimitAction, type LimitSetting, type LimitWindow, type LogLevel, type RelayConfig,
+} from "./types";
 
 const ACCOUNT_ID = /^([a-z]+):([a-z0-9][a-z0-9-]{0,31})$/;
 const VARIABLE_NAME = /^[A-Z_][A-Z0-9_]*$/;
@@ -29,6 +32,8 @@ export function emptyConfig(relayHome: string): RelayConfig {
     checkpoint: { maxFileSizeMb: 20 },
     accounts: [],
     projects: [],
+    t3: { url: "http://127.0.0.1:3773/mcp", projects: [], instances: [] },
+    limits: [],
   };
 }
 
@@ -43,7 +48,7 @@ export function validateConfig(
   const add = (key: string, message: string) => problems.push({ key, message });
   const root: Table = isTable(raw) ? raw : {};
 
-  // Allow lists and defaults.account may name an account defined later in the file.
+  // Account references may name an account defined later in the file.
   const defined = new Set(
     Object.keys(isTable(root.accounts) ? root.accounts : {}).filter((id) => parseAccountId(id) !== null),
   );
@@ -191,6 +196,80 @@ export function validateConfig(
     if (found.path !== null && found.allow !== null) config.projects.push({ path: found.path, allow: found.allow });
   }
 
+  const t3ProjectPaths = new Map<string, number>();
+  const instanceAccounts = new Map<AccountId, string>();
+  function checkInstance(id: string, value: unknown): void {
+    const key = `t3.instances.${quoteKey(id)}`;
+    const validId = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(id);
+    if (!validId) add(key, 'T3 provider instance IDs use letters, digits, "_" and "-".');
+    const found: { account: AccountId | null; model: string | null } = { account: null, model: null };
+    const isTableValue = walkTable(key, value, {
+      account: (childKey, child) => {
+        if (typeof child !== "string") add(childKey, STRING);
+        else {
+          found.account = accountRef(childKey, child);
+          if (found.account === null) return;
+          const first = instanceAccounts.get(found.account);
+          if (first === undefined) instanceAccounts.set(found.account, key);
+          else add(childKey, `the same account as ${first}.`);
+        }
+      },
+      model: (childKey, child) => {
+        if (typeof child === "string" && child.trim().length > 0) found.model = child;
+        else add(childKey, STRING);
+      },
+    });
+    if (!isTableValue) return;
+    if (!Object.hasOwn(value as Table, "account")) add(`${key}.account`, "is required.");
+    if (validId && found.account !== null) config.t3.instances.push({ id, account: found.account, model: found.model });
+  }
+
+  const limitChecks: { key: string; setting: LimitSetting; hasSwitchTo: boolean }[] = [];
+  function checkLimits(id: string, value: unknown): void {
+    const key = `limits.${quoteKey(id)}`;
+    const account = accountRef(key, id);
+    if (!isTable(value)) {
+      add(key, TABLE);
+      return;
+    }
+    for (const [name, child] of Object.entries(value)) {
+      const windowKey = `${key}.${quoteKey(name)}`;
+      if (!(LIMIT_WINDOWS as readonly string[]).includes(name)) {
+        add(windowKey, "unknown window. Use five_hour or seven_day.");
+        reportCredentialKeys(windowKey, child);
+        continue;
+      }
+      const found: LimitSetting = {
+        account: (account ?? id) as AccountId, window: name as LimitWindow,
+        threshold: null, action: null, switchTo: null,
+      };
+      const isTableValue = walkTable(windowKey, child, {
+        threshold: (childKey, setting) => {
+          if (Number.isInteger(setting) && (setting as number) >= 1 && (setting as number) <= 100) {
+            found.threshold = setting as number;
+          } else add(childKey, "must be a whole number from 1 to 100.");
+        },
+        action: (childKey, setting) => {
+          if ((LIMIT_ACTIONS as readonly unknown[]).includes(setting)) found.action = setting as LimitAction;
+          else add(childKey, 'must be "wait", "switch" or "notify".');
+        },
+        switch_to: (childKey, setting) => {
+          if (typeof setting !== "string") add(childKey, STRING);
+          else found.switchTo = accountRef(childKey, setting);
+        },
+      });
+      if (account === null || !isTableValue) continue;
+      config.limits.push(found);
+      limitChecks.push({ key: windowKey, setting: found, hasSwitchTo: Object.hasOwn(child as Table, "switch_to") });
+    }
+    // An empty account table still opts this account into the default rules.
+    if (account !== null && Object.keys(value).length === 0) {
+      for (const window of LIMIT_WINDOWS) {
+        config.limits.push({ account, window, threshold: null, action: null, switchTo: null });
+      }
+    }
+  }
+
   for (const [name, value] of Object.entries(root)) {
     switch (name) {
       case "version":
@@ -236,8 +315,67 @@ export function validateConfig(
         if (Array.isArray(value)) value.forEach((item, index) => checkProject(index + 1, item));
         else add("projects", "must be a list of [[projects]] tables.");
         break;
+      case "t3":
+        walkTable("t3", value, {
+          url: (key, child) => {
+            if (typeof child !== "string") {
+              add(key, STRING);
+              return;
+            }
+            let url: URL;
+            try {
+              url = new URL(child);
+            } catch {
+              add(key, "must look like http://127.0.0.1:3773/mcp.");
+              return;
+            }
+            if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+              add(key, "relay only connects to T3 Code on this computer (127.0.0.1 or localhost).");
+            } else if (url.protocol !== "http:" || url.pathname !== "/mcp") {
+              add(key, "must look like http://127.0.0.1:3773/mcp.");
+            } else config.t3.url = child;
+          },
+          projects: (key, child) => {
+            if (!Array.isArray(child)) {
+              add(key, "must be a list of folders.");
+              return;
+            }
+            child.forEach((item, index) => {
+              const childKey = `${key}[${index + 1}]`;
+              const path = pathSetting(childKey, item);
+              if (path === null) return;
+              const first = t3ProjectPaths.get(path);
+              if (first === undefined) t3ProjectPaths.set(path, index + 1);
+              else add(childKey, `the same path as t3.projects[${first}].`);
+              config.t3.projects.push(path);
+            });
+          },
+          instances: (key, child) => {
+            if (isTable(child)) for (const [id, instance] of Object.entries(child)) checkInstance(id, instance);
+            else add(key, TABLE);
+          },
+        });
+        break;
+      case "limits":
+        if (isTable(value)) for (const [id, child] of Object.entries(value)) checkLimits(id, child);
+        else add("limits", TABLE);
+        break;
       default:
         unknownKey(quoteKey(name), name, value);
+    }
+  }
+  const mapped = new Set(config.t3.instances.map((instance) => instance.account));
+  for (const { key, setting, hasSwitchTo } of limitChecks) {
+    const targetKey = `${key}.switch_to`;
+    if (setting.action === "switch" && !hasSwitchTo) add(targetKey, 'is required when action is "switch".');
+    if (setting.switchTo === null) continue;
+    const provider = parseAccountId(setting.account)!.provider;
+    if (parseAccountId(setting.switchTo)!.provider === provider) {
+      add(targetKey, provider === "claude"
+        ? "relay does not move work between two Claude accounts on its own. Anthropic's terms say plan limits assume ordinary, individual use."
+        : "relay does not move work between two Codex accounts on its own. OpenAI's terms forbid getting around rate limits.");
+    } else if (!mapped.has(setting.switchTo)) {
+      add(targetKey, `T3 Code has no provider mapped to ${setting.switchTo}. Run relay t3 connect to map it.`);
     }
   }
   return { config, problems };

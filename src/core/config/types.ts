@@ -5,6 +5,21 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type AccountId = `${Provider}:${string}`;
 
+export const LIMIT_WINDOWS = ["five_hour", "seven_day"] as const;
+export type LimitWindow = (typeof LIMIT_WINDOWS)[number];
+export const LIMIT_ACTIONS = ["wait", "switch", "notify"] as const;
+export type LimitAction = (typeof LIMIT_ACTIONS)[number];
+
+export interface T3Instance { id: string; account: AccountId; model: string | null }
+export interface T3Settings { url: string; projects: string[]; instances: T3Instance[] }
+export interface LimitSetting {
+  account: AccountId;
+  window: LimitWindow;
+  threshold: number | null;
+  action: LimitAction | null;
+  switchTo: AccountId | null;
+}
+
 export interface Account {
   id: AccountId;               // "claude:personal"
   provider: Provider;          // "claude"
@@ -29,6 +44,8 @@ export interface RelayConfig {
   checkpoint: { maxFileSizeMb: number };
   accounts: Account[];         // in file order
   projects: Project[];         // in file order
+  t3: T3Settings;
+  limits: LimitSetting[];      // in file order
 }
 
 export interface ConfigProblem { key: string; message: string }   // printed as "  <key>: <message>"
