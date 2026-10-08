@@ -1,6 +1,6 @@
 # How relay runs git
 
-Last updated 2026-10-08, after task groups 1 and 2 of `add-checkpoint-engine` and the fixes
+Last updated 2026-10-08, after task groups 1, 2 and 8 of `add-checkpoint-engine` and the fixes
 from their reviews.
 
 relay runs git outside any sandbox, in repositories where agents have been working. An agent can
@@ -246,7 +246,7 @@ goes on. If something changed, relay prints what changed and stops with exit cod
 can then look at the change and, if they made it themselves, run `relay accept-git-changes` in a
 terminal, which writes a new record. `relay checkpoint` and `relay rollback` also append a
 `checkpoint_refused` event with the reason `git_changed`; `relay checkpoints` only reads, so it
-appends no event. (`relay accept-git-changes` comes in a later task group of the same change.)
+appends no event. The section "Accepting a change" below describes `relay accept-git-changes`.
 
 A comparison finds a file that git now reads but did not read before, such as a new
 `~/.gitconfig`, a file that git no longer reads, and a file whose bytes changed. Restoring a file
@@ -278,6 +278,71 @@ erase a line or hide text. Before printing, relay shows control characters (C0, 
 `\xNN`, and the invisible characters of design decision 4 and every other Unicode format
 character and line or paragraph separator (such as U+061C, U+2028 and U+2029) as `\u{NNNN}`. For example, a filter
 section named with the escape sequence `ESC[8m` prints as `filter.\x1B[8m.clean`.
+
+### Accepting a change
+
+When the person made the change themselves, for example by adding a hook or changing
+`~/.gitconfig`, they tell relay to trust it with `relay accept-git-changes`
+(`src/cli/commands/accept-git-changes.ts`). The command refuses to run unless both standard input
+and standard output are a terminal, because agents usually run commands without one. relay asks
+at a terminal, but a program running as you with its own pseudo-terminal could answer; keep
+agents sandboxed so they cannot write `RELAY_HOME`. Such a program could also edit
+`git-trust.json` directly, so the terminal check is a guard against ordinary agent tools, not a
+proof that a person answered.
+
+```mermaid
+flowchart TD
+  start["relay accept-git-changes"] --> tty{"Are standard input and<br/>standard output a terminal?"}
+  tty -- no --> stop7["Exit code 7.<br/>Nothing changes."]
+  tty -- yes --> lock["Find the job and take the job lock"]
+  lock --> review["reviewTrust(): read the git settings<br/>and hooks and compare them with the record"]
+  review -- "nothing changed" --> none["Nothing changed in the git<br/>configuration or hooks. Exit code 0."]
+  review -- "something changed, or the<br/>record is missing or damaged" --> ask["Print what changed, or what git<br/>would run now, and ask:<br/>Type yes to continue"]
+  ask -- "any other answer" --> cancel["Cancelled. Nothing changed.<br/>Exit code 7."]
+  ask -- yes --> again{"Read the settings and hooks again.<br/>Are they what the report described?"}
+  again -- no --> waited["Nothing was trusted.<br/>Exit code 7."]
+  again -- yes --> write["Write that state as the new record,<br/>and append a git_changes_accepted event"]
+```
+
+The diagram shows the command from top to bottom. relay first checks for a terminal, before it
+looks at the repository, so a call without one changes nothing and reads nothing. It then finds
+the job in `.relay/state.json`, takes the job lock, and compares the git settings and hooks with
+the record, as `relay checkpoint` would. When nothing changed, it says so and stops. Otherwise it
+prints the refusal report without its last two lines, which point to this command, and without
+the word "Stopped:", and asks "Trust these changes? Type yes to continue:". Every name in the
+report is escaped the same way as in a refusal, so a crafted key or hook name cannot hide part of
+what the person approves.
+
+Only the exact answer `yes` can write a new record, and only if nothing changed while relay
+waited. After `yes`, `reviewTrust()` in `src/git/trust.ts` reads the settings and hooks again and
+compares every hash with the reading the report came from. If anything differs, for example a
+hook that an agent made harmless while the person looked at it and then changed back, relay
+prints "The git settings or hooks changed while relay was waiting. Nothing was trusted. Run relay
+accept-git-changes again." and exits with code 7 without writing anything. Otherwise the new
+record holds exactly the state the report described, and the event `git_changes_accepted` lists
+the files whose hashes or keys changed.
+
+The command also repairs a record that is missing or damaged, including a file that is valid
+JSON but not a record, such as `{}` or `null`. Such a record is never used to decide whether the
+job belongs to this checkout, so the repair is always offered. relay cannot tell what changed, so
+it prints "The git trust record <path> is missing." (or "is damaged."), says that it cannot tell
+what changed, and lists what git would run now: the settings marked "(can run commands)" or
+"(changes where git writes files)", and the hooks that exist (without the `*.sample` files that
+`git init` writes, which git never runs). Each list says "none" when it is empty. It then asks
+"Trust the current git configuration and hooks? Type yes to continue:". After `yes`, the same
+check runs, a new record of the current settings and hooks is written, and the event has the
+extra field `trust_record` with the value `missing` or `damaged`. Look at `.git/config`,
+`~/.gitconfig` and the hooks folder before answering, because relay has nothing to compare them
+with.
+
+`test/checkpoint/accept-git-changes.test.ts` simulates a terminal through relay's input and output
+functions. It checks the refusal without a terminal, the answer `yes`, other answers, the case
+where nothing changed, a hook added or changed while relay waits for the answer, escaped names,
+and a record that is missing, cut short, `{}` or `null`. `test/checkpoint/tampering.test.ts` first
+shows with plain git that each planted program runs, then checks that a change to the settings,
+the hooks, `info/attributes` or `~/.gitconfig` stops both `relay checkpoint` and `relay rollback`
+with exit code 5 before any planted program runs, and that after the person accepts planted hooks
+and settings, checkpoints and rollbacks work and still run none of them.
 
 ### What the trust record does not cover
 

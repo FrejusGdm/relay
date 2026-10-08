@@ -25,7 +25,7 @@ export async function setUpJob(kind: "full" | "empty" = "full", limitMb?: number
 export async function relay(
   scratch: ScratchRepo,
   args: string[],
-  options: { cwd?: string; terminal?: { answer: string | null }; quiet?: boolean } = {},
+  options: { cwd?: string; terminal?: { answer: string | null; beforeAnswer?: () => void }; quiet?: boolean } = {},
 ): Promise<RelayResult> {
   const result = await runRelayInProcess(args, {
     cwd: options.cwd ?? scratch.repo,
@@ -36,7 +36,8 @@ export async function relay(
     const shown = args.map((arg) => (/[\s"]/.test(arg) ? JSON.stringify(arg) : arg));
     // The person's answer appears after the question, as the terminal shows it.
     const answer = options.terminal?.answer;
-    const stdout = typeof answer === "string" ? result.stdout.replace("[y/N] ", `[y/N] ${answer}\n`) : result.stdout;
+    const stdout =
+      typeof answer === "string" ? result.stdout.replace(/(\[y\/N\] |Type yes to continue: )/, `$1${answer}\n`) : result.stdout;
     console.log(["$ relay", ...shown].join(" ") + "\n" + stdout + result.stderr + `(exit code ${result.code})\n`);
   }
   return result;

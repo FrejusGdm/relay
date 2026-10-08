@@ -1,6 +1,6 @@
 # Codebase map
 
-Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 5 of
+Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 and 2 of `add-provider-adapters`, task groups 1 to 4 of
 `add-handoff-evaluation`, task groups 1 to 7 of `add-website`, and task groups 1 to 3 of
 `add-daemon-api-and-status`.
@@ -15,7 +15,7 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, hook.ts, daemon.ts,<br/>not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts,<br/>hook.ts, daemon.ts, not-built.ts: their handlers"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml"]
@@ -66,7 +66,7 @@ flowchart TD
   gittests -->|"use scratch repositories and captureState() from"| helpers
   commands -->|"init.ts sets up a job with"| job
   commands -->|"init.ts checks the scanner with"| secrets
-  commands -->|"init.ts finds the repository and records trust with"| git
+  commands -->|"init.ts finds the repository and records trust with,<br/>accept-git-changes.ts rewrites the trust record with"| git
   secrets -->|"reads the checkpoint trees through"| git
   commands -->|"init.ts, checkpoint.ts, checkpoints.ts and rollback.ts use"| checkpoint
   checkpoint -->|"builds trees and commits through"| git
@@ -98,10 +98,11 @@ the command line to `runCli` in `src/cli/run.ts`. `runCli` asks `src/cli/router.
 command line means, prints help from `src/cli/help.ts` or an error, or calls the command's
 handler. `src/cli/commands/registry.ts` lists the sixteen commands with their help texts and
 argument counts. In this version every handler is `not-built.ts`, except `hook.ts` for
-`relay hook`, `init.ts` for `relay init`, `checkpoint.ts` for `relay checkpoint`, `checkpoints.ts`
-for `relay checkpoints`, `rollback.ts` for `relay rollback`, which restores an earlier
-checkpoint's files after saving an undo checkpoint, and `daemon.ts` for `relay daemon`.
-`--version` prints the version from `src/core/version.ts`, which reads the
+`relay hook`, `init.ts` for `relay init`, `checkpoint.ts` for `relay checkpoint`,
+`checkpoints.ts` for `relay checkpoints`, `rollback.ts` for `relay rollback`, which restores an
+earlier checkpoint's files after saving an undo checkpoint, `accept-git-changes.ts` for
+`relay accept-git-changes`, and `daemon.ts` for `relay daemon`. `--version` prints the version
+from `src/core/version.ts`, which reads the
 `version` field of `package.json`. `docs/cli.md` describes the command line and its exit codes.
 
 Before a command's handler runs, `runCli` finds the relay folder with `src/core/paths.ts`,
@@ -237,6 +238,16 @@ runs `relay init` in scratch repositories and compares `captureState()` before a
 `test/checkpoint/snapshot.test.ts` and `commit.test.ts` call the checkpoint modules directly, and
 `test/checkpoint/checkpoint.test.ts` runs `relay checkpoint` and compares `captureState()` before
 and after in ordinary, detached, empty and linked-worktree repositories.
+
+`src/cli/commands/accept-git-changes.ts` is `relay accept-git-changes`. It refuses to run without
+a terminal, compares the git settings and hooks with the trust record through `reviewTrust()` in
+`src/git/trust.ts`, and writes a new record only after the person types `yes`.
+`test/checkpoint/accept-git-changes.test.ts` simulates the terminal, and
+`test/checkpoint/tampering.test.ts` checks that a planted setting or hook stops relay and never
+runs. `test/checkpoint/e2e.test.ts` builds the program with the build script of `package.json`
+and runs it as a separate process through a whole job, reading the git commands it ran from the
+runner's call log. The section "When relay refuses to run git" of `docs/checkpoints.md` shows the
+messages.
 
 ## The handoff evaluation harness
 

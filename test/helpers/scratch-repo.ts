@@ -42,6 +42,30 @@ export function plainGit(cwd: string, args: string[], env: Record<string, string
   }).exitCode;
 }
 
+// The setting names git reads from the machine's system and global files, as relay's runner sees
+// them: it removes every GIT_ variable, including the GIT_CONFIG_NOSYSTEM the test preload sets.
+// A test that checks a list of settings relay prints leaves these out, because they differ from
+// one machine to another (for example Git LFS's filter.lfs.* on CI runners).
+export function machineGitKeys(cwd: string): Set<string> {
+  const env: Record<string, string> = { ...GIT_GUARD_PASS };
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value !== undefined && !name.startsWith("GIT_")) env[name] = value;
+  }
+  const result = Bun.spawnSync(["git", "config", "--list", "--name-only", "--show-scope"], {
+    cwd,
+    env,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const keys = new Set<string>();
+  for (const line of result.stdout.toString().split("\n")) {
+    const [scope, name] = line.split("\t");
+    if ((scope === "system" || scope === "global") && name) keys.add(name);
+  }
+  return keys;
+}
+
 // Runs git without relay's runner, to set up or change a scratch repository.
 export function runGit(cwd: string, args: string[]): string {
   const result = Bun.spawnSync(
