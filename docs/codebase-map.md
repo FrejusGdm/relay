@@ -3,7 +3,7 @@
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, `add-relay-switch`
 (see `docs/handoff.md`), task groups 1 to 7 of `add-handoff-evaluation`, task groups 1 to 7 of
-`add-website`, task groups 1 to 6, 9 and 10 of `add-daemon-api-and-status`, and task groups 1 to 4
+`add-website`, task groups 1 to 6 and 8 to 10 of `add-daemon-api-and-status`, and task groups 1 to 4
 of `add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
@@ -16,8 +16,8 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, switch.ts,<br/>hook.ts, hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
-    hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands,<br/>each module loaded when its command runs<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, switch.ts,<br/>hook.ts, hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
+    hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability<br/>mapping.ts: the daemon's hook queue, the worker,<br/>job and account of an event, the availability table<br/>feed.ts: the hook events interactive workers read"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml<br/>edit.ts: the one writer of config.toml"]
@@ -25,10 +25,9 @@ flowchart TD
     adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>mapper.ts, worker.ts: shared parts of the workers<br/>claude/: adapter, stream mapper, headless and<br/>interactive workers, hook mapper<br/>codex/: adapter, rpc, protocol, app-server and<br/>exec mappers and workers, interactive worker<br/>each: policy.toml, tested-versions.json;<br/>codex/protocol-used.json"]
     policies["src/policies/<br/>schema.ts, load.ts: the policy files<br/>switching.ts: mayAutoSwitch"]
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
-    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list"]
-    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs, events"]
+    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list<br/>spool.ts: drains the hook spool at start"]
+    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs, events, hooks"]
     status["src/status/<br/>model.ts: rows, roles, closing sentence<br/>render-text.ts, render-json.ts, time-format.ts<br/>sources.ts: the saved state without the daemon"]
-    hooks["src/hooks/<br/>mapping.ts: what a hook event says about an account"]
     state["src/state/<br/>schema.sql, db.ts: relay.db<br/>index-builder.ts, apply-event.ts: filling it<br/>queries.ts, availability.ts: reading it<br/>projects-list.ts: projects.list"]
     client["src/client/<br/>api-client.ts: the only fetch, over the socket<br/>ensure-daemon.ts: starts the daemon"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
@@ -48,7 +47,7 @@ flowchart TD
     coretests["core/: paths, relay folder, settings and log tests<br/>fixtures/config/: settings files"]
     fake["fixtures/fake-provider/<br/>guard programs, fake agent, scenarios"]
     buildtests["build/: no-network.test.ts"]
-    daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
+    daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream<br/>hooks/delivery, mapping, spool-drain: hook events<br/>reaching the daemon; fixtures/hooks/: hook payloads<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
     handofftests["handoff/, config/: the handoff parts and the switch<br/>handoff/job.ts, asker.ts, switch-helpers.ts: jobs,<br/>questions, scenario files and terminals<br/>e2e/: whole handoffs with the relay program<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/, fixtures/e2e/:<br/>test outputs, checkpoint.md files and prompts"]
     runtests["run/: relay run with the fake agents,<br/>headless, interactive and end to end"]
@@ -125,8 +124,12 @@ flowchart TD
   commands -->|"switch.ts and run.ts hand off with"| handoff
   runfolder -->|"runs performHandoff and supervises the next agent"| handoff
   commands -->|"hook.ts, hooks.ts, statusline.ts use"| hooks
+  hooks -->|"hook-command.ts sends events through"| client
+  api -->|"routes/hooks.ts queues events for"| hooks
+  daemon -->|"spool.ts drains the spool into the queue of"| hooks
+  hooks -->|"mapping.ts appends hook and availability events with"| job
   hooks -->|"writes availability.json through"| accounts
-  adapters -->|"interactive workers read the spool of"| hooks
+  adapters -->|"interactive workers read hook events through"| hooks
   commands -->|"run.ts calls"| runfolder
   runtests -->|"check"| runfolder
   runfolder -->|"starts and watches the agent through"| adapters
@@ -234,12 +237,23 @@ creates profile folders with `src/accounts/profile.ts`, writes `config.toml` onl
 `policy.ts` is `relay policy show`. `docs/accounts.md` describes the accounts with diagrams.
 
 `src/hooks/` holds relay's side of the providers' hooks. `hook-command.ts` is `relay hook`: it keeps
-the fields that `fields.ts` allows and appends one line to the spool with `spool.ts`.
+the fields that `fields.ts` allows, sends the line to the daemon with `postHook` in
+`src/client/api-client.ts`, and appends it to the spool with `spool.ts` when the daemon does not
+accept it within 150 ms. `src/cli/main.ts` ends a `relay hook` process 500 ms after it started, and
+`src/cli/commands/registry.ts` loads each command's module only when that command runs, so
+`relay hook` never loads the database or git code. In the daemon, `src/api/routes/hooks.ts` checks
+each line again with `parseSpoolLine` from `fields.ts` and puts it on the queue in `mapping.ts`,
+which finds the event's worker, job and account, and records the event and any availability
+change in the job's `events.jsonl`, in `availability.json`, or in the index and the event stream.
+`src/daemon/spool.ts` drains the spool into the same queue when the daemon starts, after each
+accepted event and every 2 seconds. `feed.ts` gives the interactive workers in `src/adapters/` the
+hook events of their session from the spool and from the job's `events.jsonl`.
 `install.ts` adds and removes relay's entries in an account's `settings.json` or `hooks.json`,
 with a backup, and `src/cli/commands/hooks.ts` is `relay hooks install | remove | status`.
 `statusline.ts` is `relay statusline claude`, which records the usage windows of Claude Code's
 status line and then runs the person's own. `fold.ts` turns spool lines into availability readings
-for `relay account status`. `docs/hooks.md` describes these with a diagram.
+for `relay account status`. `docs/hooks.md` describes these with diagrams, and the tests in
+`test/hooks/` run `relay hook` and the daemon's parts with the payloads in `test/fixtures/hooks/`.
 
 `src/run/` is `relay run`, which `src/cli/commands/run.ts` calls. `run.ts` checks the account, its
 program, profile folder and sign-in and the project's allow list, takes the worker lock with

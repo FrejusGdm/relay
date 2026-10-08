@@ -3,10 +3,12 @@
 // this project's files, then adds the newest availability per account from a read-only copy of
 // relay.db and from hook events spooled while the daemon was down. Nothing is written.
 import { Database } from "bun:sqlite";
-import { closeSync, constants, fstatSync, openSync, readdirSync, readSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { usesProviderDefaultFolder } from "../accounts/profile";
 import type { Account } from "../core/config/types";
 import { availabilityFromHook } from "../hooks/mapping";
+import { readSpoolFile } from "../hooks/spool";
 import { applyAvailability } from "../state/apply-event";
 import { databasePath, openMemoryDatabase } from "../state/db";
 import { indexProject, syncTargets } from "../state/index-builder";
@@ -21,13 +23,14 @@ export async function fromFiles(
   root: string,
   jobId: string,
   accounts: Account[],
+  homedir: string,
 ): Promise<Omit<StatusData, "daemon" | "savedState"> | null> {
   const db = openMemoryDatabase();
   try {
     syncTargets(db, relayHome, accounts);
     await indexProject(db, relayHome, root);
     addSavedAvailability(db, relayHome);
-    addSpooledHooks(db, relayHome, accounts);
+    addSpooledHooks(db, relayHome, accounts, homedir);
     const job = getJob(db, jobId);
     if (job === null) return null;
     return { job, workers: listWorkers(db, jobId), accounts: listAccounts(db) };
@@ -68,7 +71,7 @@ function addSavedAvailability(db: Database, relayHome: string): void {
 // spool/hooks.jsonl and leftover spool/hooks.<pid>.draining files (the spool line of
 // add-provider-adapters design decision 14). The account is relay_target, else the configured
 // account whose profile folder the hook names.
-function addSpooledHooks(db: Database, relayHome: string, accounts: Account[]): void {
+function addSpooledHooks(db: Database, relayHome: string, accounts: Account[], homedir: string): void {
   const dir = join(relayHome, "spool");
   let names: string[];
   try {
@@ -78,43 +81,16 @@ function addSpooledHooks(db: Database, relayHome: string, accounts: Account[]): 
   }
   for (const name of names) {
     const path = join(dir, name);
-    const text = readSpoolFile(path);
+    const text = readSpoolFile(path, SPOOL_MAX_BYTES);
     if (text === null) continue;
     for (const line of text.split("\n")) {
       const entry = parse(line);
       if (entry === null) continue;
-      const target = accountOf(entry, accounts);
+      const target = accountOf(entry, accounts, homedir);
       const change = availabilityFromHook(entry.provider, entry.event, entry.fields);
       if (target === null || change === null) continue;
       applyAvailability(db, target, { ...change, retry_at: null, measured_at: entry.received_at, source: "hook", windows: [] });
     }
-  }
-}
-
-// A spool file's text, or null when it is not a regular file (a named pipe would block the read),
-// is a symbolic link, is larger than 10 MB or cannot be read.
-function readSpoolFile(path: string): string | null {
-  let fd: number;
-  try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  } catch {
-    return null;
-  }
-  try {
-    const stats = fstatSync(fd);
-    if (!stats.isFile() || stats.size > SPOOL_MAX_BYTES) return null;
-    const buffer = Buffer.alloc(stats.size);
-    let length = 0;
-    while (length < buffer.length) {
-      const read = readSync(fd, buffer, length, buffer.length - length, length);
-      if (read === 0) break;
-      length += read;
-    }
-    return buffer.toString("utf8", 0, length);
-  } catch {
-    return null;
-  } finally {
-    closeSync(fd);
   }
 }
 
@@ -145,12 +121,14 @@ function parse(line: string): SpoolEntry | null {
   }
 }
 
-function accountOf(entry: SpoolEntry, accounts: Account[]): string | null {
+// The profile "default" is the provider's own folder, ~/.claude or ~/.codex, as in the daemon
+// (src/hooks/mapping.ts), not relay's default profile folder.
+function accountOf(entry: SpoolEntry, accounts: Account[], homedir: string): string | null {
   if (entry.relay_target !== null) return TARGET.test(entry.relay_target) ? entry.relay_target : null;
   const match = accounts.find(
     (account) =>
       account.provider === entry.provider &&
-      (entry.profile === "default" ? account.profileDirIsDefault : account.profileDir === entry.profile),
+      (entry.profile === "default" ? usesProviderDefaultFolder(account, homedir) : account.profileDir === entry.profile),
   );
   return match?.id ?? null;
 }

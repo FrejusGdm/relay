@@ -1,0 +1,10 @@
+{
+  "session_id": "7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f",
+  "transcript_path": "/srv/home/.claude/projects/-srv-app/7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f.jsonl",
+  "cwd": "/srv/app",
+  "permission_mode": "default",
+  "hook_event_name": "StopFailure",
+  "error": "billing_error",
+  "error_details": "Your credit balance is too low.",
+  "last_assistant_message": "Here is the plan."
+}

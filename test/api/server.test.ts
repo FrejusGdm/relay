@@ -76,7 +76,7 @@ describe("the API server", () => {
       started_at: STARTED,
       schema_version: 1,
       stream_epoch: streamEpoch(db),
-      capabilities: ["accounts", "jobs", "events.sse"],
+      capabilities: ["accounts", "jobs", "events.sse", "hooks"],
       agents_running: [],
     });
     expect(log.entries).toContainEqual(
