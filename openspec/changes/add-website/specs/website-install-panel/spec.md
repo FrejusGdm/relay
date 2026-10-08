@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the install panel that the "CLI setup" and "Get relay" buttons open: the commands it shows for the command-line tool and the Mac app, its copy buttons, and its text about the private repository.
+Defines the install panel that the "CLI setup" and "Get relay" buttons open: the commands it shows for the command-line tool and the Mac app, its copy buttons, and its text about where the commands download from.
 
 ## ADDED Requirements
 
@@ -21,23 +21,21 @@ The buttons `CLI setup` and `Get relay` SHALL open one panel, `id="install"`, th
 - **WHEN** a visitor clicks `Get relay` in the hero
 - **THEN** the panel is open and the heading `Command line on macOS` has focus and is visible
 
-### Requirement: Private repository notice
-The panel SHALL say, before any command, that relay is installed from the releases of a GitHub repository that is private for now, that the GitHub CLI `gh` must be signed in with an account that can read `FrejusGdm/relay`, and that `gh auth status` checks this and `gh auth login` signs in.
+### Requirement: Open source notice
+Josué made relay open source on 2026-10-08, so the install commands download the release directly. The panel SHALL say, before any command, "relay is free and open source. These commands download the latest release from GitHub.", with "open source" linking to `https://github.com/FrejusGdm/relay`. It SHALL NOT ask for a GitHub account or the GitHub CLI.
 
 #### Scenario: Notice text
 - **WHEN** the panel is read
-- **THEN** its first paragraph contains `private`, `FrejusGdm/relay`, `gh auth status` and `gh auth login`
+- **THEN** its first paragraph is that sentence with that link
+- **AND** the page contains none of `gh auth`, `gh release`, `private` and `--pattern`
 
 ### Requirement: Command-line install commands
 The panel SHALL show one block for macOS on Apple silicon and one for Linux on x64. The macOS block SHALL be exactly these lines:
 
 ```
 mkdir -p "$HOME/.local/bin"
-gh release download \
-  --repo FrejusGdm/relay \
-  --pattern relay-darwin-arm64 \
-  --output "$HOME/.local/bin/relay" \
-  --clobber
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64
 chmod +x "$HOME/.local/bin/relay"
 "$HOME/.local/bin/relay" --version
 ```
@@ -49,7 +47,7 @@ The Linux block SHALL be the same with `relay-linux-x64` in place of `relay-darw
 - **THEN** each equals its block above, character for character
 
 #### Scenario: Linux block works
-- **WHEN** the Linux block is run on Linux x64 with `gh` signed in to an account that can read the repository, and the latest release has the asset `relay-linux-x64`
+- **WHEN** the Linux block is run on Linux x64, with no GitHub account, and the latest release has the asset `relay-linux-x64`
 - **THEN** the last line prints `relay` followed by its version and exits with code 0
 
 ### Requirement: Mac app install commands
@@ -89,7 +87,7 @@ Each command block SHALL have a `Copy` button that copies the block's text follo
 - **AND** the button reads `Copied`
 
 ### Requirement: Readable on a phone
-No line of any command block SHALL be longer than 42 characters, and at 390 pixels wide every block SHALL show its full width without scrolling sideways.
+No line of any command block SHALL be longer than 42 characters, except the download address, which cannot be split. At 390 pixels wide every block SHALL show its full width without scrolling sideways; a line that does not fit SHALL wrap, and copying SHALL still give the original lines.
 
 #### Scenario: Phone width
 - **WHEN** the panel is open in a 390 pixel wide window
