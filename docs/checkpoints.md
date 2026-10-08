@@ -571,7 +571,10 @@ To undo: relay rollback 3
 ### Undoing a rollback
 
 The last line names the undo checkpoint. Rolling back to it returns every file the rollback
-changed to what it was before, byte for byte, and saves another undo checkpoint on the way:
+changed to what it was before, byte for byte, and saves another undo checkpoint on the way. To keep
+that promise, relay refuses (exit code 8) to roll back over a file whose bytes git would change when
+it stores them (line endings, a clean filter or Git LFS), and over a file marked assume-unchanged or
+skip-worktree whose changes git does not show; the message says which, and how to clear a flag:
 
 ```
 $ relay rollback 3 --yes

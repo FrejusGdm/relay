@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
-import { printable, quote } from "../core/quote";
+import { printable, shellWord } from "../core/quote";
 import type { Repository } from "../git/repo";
 import { git } from "../git/run";
 import { compareTrust, TrustRecordError, trustReport } from "../git/trust";
@@ -56,9 +56,10 @@ export type SaveResult =
       included: string[];
       tree: string;
       secretLike: string[];
+      unsavedKeys: string[];
     }
   // Nothing changed; files left out are still reported, since a new one is not saved.
-  | { saved: false; latest: number; leftOut: LeftOutFile[]; tree: string; secretLike: string[] };
+  | { saved: false; latest: number; leftOut: LeftOutFile[]; tree: string; secretLike: string[]; unsavedKeys: string[] };
 
 // These two files change after every checkpoint, so they alone never make a new one.
 const ALWAYS_CHANGING = new Set([".relay/state.json", ".relay/events.jsonl"]);
@@ -99,7 +100,8 @@ export async function saveCheckpoint(repo: Repository, options: SaveOptions): Pr
       compared = { with: "checkpoint", number: refs.highest };
       changed = (await changedPaths(repo, latestTree, snapshot.tree)).filter((path) => !ALWAYS_CHANGING.has(path));
       if (changed.length === 0) {
-        return { saved: false, latest: refs.highest, leftOut: snapshot.leftOut, tree: snapshot.tree, secretLike: snapshot.secretLike };
+        const { tree, secretLike, unsavedKeys } = snapshot;
+        return { saved: false, latest: refs.highest, leftOut: snapshot.leftOut, tree, secretLike, unsavedKeys };
       }
     } else {
       // The job files are new to the person's commit, so only the person's files are counted.
@@ -165,6 +167,7 @@ export async function saveCheckpoint(repo: Repository, options: SaveOptions): Pr
       included,
       tree: snapshot.tree,
       secretLike: snapshot.secretLike,
+      unsavedKeys: snapshot.unsavedKeys,
     };
   } finally {
     release();
@@ -243,10 +246,4 @@ async function changedPaths(repo: Repository, from: string | null, to: string): 
   const result = await git(repo, ["diff-tree", "-r", "-z", "--no-renames", "--name-only", base, to]);
   if (result.code !== 0) throw gitFailed("relay could not compare checkpoints", result.stderr);
   return decoder.decode(result.stdout).split("\0").filter((path) => path !== "");
-}
-
-// A path as the person would type it in a shell: as it is when it holds only safe characters,
-// otherwise in quotes.
-function shellWord(path: string): string {
-  return /^[\w./@%+=:,-]+$/.test(path) ? path : quote(path);
 }

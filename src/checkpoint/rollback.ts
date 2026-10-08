@@ -4,16 +4,16 @@
 // checkpoint, deletes and writes only the planned paths, and checks the result. It never runs
 // git checkout, reset, restore, clean or stash, never moves HEAD or a branch, and never writes an
 // index other than its own temporary one. .relay/ is never part of the plan.
-import { randomBytes } from "node:crypto";
-import { lstatSync, mkdirSync, readdirSync, rmdirSync, rmSync, unlinkSync, type Stats } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmdirSync, rmSync, unlinkSync, type Stats } from "node:fs";
 import { join } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import { onInterrupt } from "../core/cleanup";
-import { quote } from "../core/quote";
+import { printable, quote, shellWord } from "../core/quote";
 import type { Repository } from "../git/repo";
 import { git } from "../git/run";
-import { appendEvent, type JobRef } from "../job/events";
+import { appendEvent, readEvents, type JobRef } from "../job/events";
 import { readState, writeState } from "../job/state";
 import { gitFailed } from "./commit";
 import type { CheckpointInfo } from "./list";
@@ -22,31 +22,56 @@ import { buildSnapshotTree, type Snapshot } from "./snapshot";
 
 type Action = "modify" | "add" | "delete";
 
+// Paths are compared as keys: git's bytes as latin1 text, so two names that are not valid UTF-8
+// never compare equal. They are decoded as UTF-8 only to be shown.
 interface PlanEntry {
   action: Action;
-  // As git prints it, decoded for display and comparison.
-  path: string;
-  // git's bytes, used for every file operation, so a name that is not valid UTF-8 is still found.
+  key: string;
+  // git's bytes, used for every file operation.
   raw: Buffer;
+  // The mode and object of the path in the current snapshot ("000000" and zeros when it has none).
+  oldMode: string;
+  oldObject: string;
 }
 
 interface Plan {
   entries: PlanEntry[];
-  // Submodules are never changed, so their paths stay out of the plan.
+  // Submodules are never changed, so their keys stay out of the entries.
   submodules: string[];
+}
+
+type Flag = "assume-unchanged" | "skip-worktree";
+
+// A file marked in the person's index, with the mode and object the index holds for it.
+interface FlaggedFile {
+  flag: Flag;
+  mode: string;
+  object: string;
 }
 
 export interface Prepared {
   target: CheckpointInfo;
   snapshot: Snapshot;
   plan: Plan;
-  // Files marked assume-unchanged or skip-worktree in the person's index. The snapshot holds
-  // their index version, not what is on disk, so their content may not be saved.
-  flagged: string[];
-  // Paths whose current content is not saved: files left out, untracked files with secret-like
-  // names, flagged files, and folders (ending in "/") that hold a repository of their own or a
-  // submodule.
+  // Files marked assume-unchanged or skip-worktree in the person's index, by key. A snapshot holds
+  // their index version, not what is on disk, so their changes are not saved.
+  flagged: Map<string, FlaggedFile>;
+  // Keys whose current content is not saved: files left out, untracked files with secret-like
+  // names, and folders (ending in "/") that hold a repository of their own or a submodule.
   unsaved: Set<string>;
+  // The paths the target checkpoint left out, as its trailers and its event name them. Its tree
+  // holds an old version of such a file, or none, so the rollback never changes them.
+  targetLeftOut: Set<string>;
+}
+
+// Why the plan cannot run, by key.
+export interface Problems {
+  // Files relay has not saved, or that stand where the rollback writes.
+  unsaved: string[];
+  // Files whose bytes on disk differ from what git stores for them, because of a line-ending
+  // conversion, a clean filter or Git LFS. The undo checkpoint could not give them back exactly.
+  converted: string[];
+  flagged: Record<Flag, string[]>;
 }
 
 export interface RollbackSettings {
@@ -57,6 +82,8 @@ export interface RollbackSettings {
 }
 
 const SUBMODULE_MODE = "160000";
+const LINK_MODE = "120000";
+const FILE_MODES = new Set(["100644", "100755"]);
 const decoder = new TextDecoder();
 
 // The checkpoint to roll back to: a number, a commit prefix of at least 7 hexadecimal characters
@@ -83,40 +110,94 @@ export function resolveTarget(list: CheckpointInfo[], argument: string | undefin
   throw usage(`Checkpoint ${argument} does not exist. See relay checkpoints.`);
 }
 
-// Steps 2 to 4: the current snapshot, the plan, and the paths the plan must not touch. Creates no
+// Steps 2 to 4: the current snapshot, the plan, and what the plan must not touch. Creates no
 // checkpoint and changes no file.
 export async function prepareRollback(repo: Repository, settings: RollbackSettings, target: CheckpointInfo): Promise<Prepared> {
   const snapshot = await currentSnapshot(repo, settings);
-  const plan = await readPlan(repo, snapshot.tree, target.commit);
-  const flagged = await flaggedPaths(repo);
-  return { target, snapshot, plan, flagged, unsaved: unsavedPaths(snapshot, plan, flagged) };
+  const targetLeftOut = leftOutOf(settings.job, target);
+  const plan = await readPlan(repo, snapshot.tree, target.commit, targetLeftOut);
+  return {
+    target,
+    snapshot,
+    plan,
+    flagged: await flaggedFiles(repo),
+    unsaved: new Set([...snapshot.unsavedKeys, ...plan.submodules.map((key) => `${key}/`)]),
+    targetLeftOut,
+  };
 }
 
-// The planned paths that hold files relay has not saved, or that stand where the rollback must
-// write: a file or link on the way to a planned path, a file that is not in the current snapshot
-// where the rollback adds one, and the files inside a folder that stands where a file goes.
-export function filesInTheWay(root: string, plan: Plan, unsaved: Set<string>): string[] {
-  const deleted = new Set(plan.entries.filter((entry) => entry.action === "delete").map((entry) => entry.path));
-  const found = new Set<string>();
+// Step 4: what stops the plan. relay runs it before it asks, and again just before the first file
+// changes. A path the plan adds may not exist yet, unless it is the same file as a path the plan
+// deletes (a name that changed only in case, on a file system that ignores case). A file the plan
+// changes or deletes must hold exactly the bytes saved for it. A flagged file stops the rollback
+// when the plan touches it or when it differs from the index, because relay cannot see its changes.
+export function findProblems(root: string, prepared: Prepared): Problems {
+  const { plan, unsaved, flagged } = prepared;
+  const deleted = new Map(plan.entries.filter((entry) => entry.action === "delete").map((entry) => [entry.key, entry]));
+  const problems: Problems = { unsaved: [], converted: [], flagged: { "assume-unchanged": [], "skip-worktree": [] } };
+  const reported = new Set<string>();
+  const report = (list: string[], key: string) => {
+    if (!reported.has(key)) list.push(key);
+    reported.add(key);
+  };
   for (const entry of plan.entries) {
-    if (unsaved.has(entry.path)) {
-      found.add(entry.path);
+    const flag = flagged.get(entry.key);
+    if (isUnsaved(entry.key, unsaved)) {
+      report(problems.unsaved, entry.key);
+      continue;
+    }
+    if (flag !== undefined) {
+      report(problems.flagged[flag.flag], entry.key);
       continue;
     }
     const way = checkFolders(root, entry, deleted, unsaved);
     if (way === "deleted first") continue;
     if (way !== "clear") {
-      found.add(way.blocking);
+      report(problems.unsaved, way.blocking);
       continue;
     }
     const stat = lstat(root, entry.raw);
-    if (stat?.isDirectory()) {
-      for (const file of filesUnder(root, entry.raw)) if (!deleted.has(file)) found.add(file);
-    } else if (stat !== undefined && entry.action === "add") {
-      found.add(entry.path);
+    if (stat === undefined) continue;
+    if (stat.isDirectory()) {
+      for (const key of filesUnder(root, entry.raw)) if (!deleted.has(key)) report(problems.unsaved, key);
+    } else if (entry.action === "add") {
+      if (!sameFileAsDeleted(root, entry, stat, deleted)) report(problems.unsaved, entry.key);
+    } else if (FILE_MODES.has(entry.oldMode) && stat.isFile() && blobId(readFileSync(absolute(root, entry.raw)), entry.oldObject) !== entry.oldObject) {
+      report(problems.converted, entry.key);
     }
   }
-  return [...found].sort();
+  for (const [key, file] of flagged) {
+    if (!reported.has(key) && differsFromIndex(root, key, file)) report(problems.flagged[file.flag], key);
+  }
+  return problems;
+}
+
+export function hasProblems(problems: Problems): boolean {
+  return problems.unsaved.length + problems.converted.length + problems.flagged["assume-unchanged"].length +
+    problems.flagged["skip-worktree"].length > 0;
+}
+
+// The exit-code-8 message: one sentence for each kind of problem.
+export function problemLines(problems: Problems): string[] {
+  const list = (keys: string[]) => [...keys].sort().map(show).join(", ");
+  const lines: string[] = [];
+  if (problems.unsaved.length > 0) {
+    lines.push(`Rolling back would overwrite files relay has not saved: ${list(problems.unsaved)}. Move them or delete them yourself, then try again.`);
+  }
+  if (problems.converted.length > 0) {
+    lines.push(
+      `Rolling back would overwrite files whose exact bytes relay cannot save, because git changes them when it stores them (line endings, a clean filter or Git LFS): ${list(problems.converted)}. Move them or delete them yourself, then try again.`,
+    );
+  }
+  for (const flag of ["assume-unchanged", "skip-worktree"] as const) {
+    const keys = [...problems.flagged[flag]].sort();
+    if (keys.length === 0) continue;
+    const words = keys.map((key) => shellWord(Buffer.from(key, "latin1").toString("utf8"))).join(" ");
+    lines.push(
+      `relay cannot roll back files marked ${flag} in your index, because git does not show their changes: ${list(keys)}. Clear the flag with git update-index --no-${flag} -- ${words}, then try again.`,
+    );
+  }
+  return lines;
 }
 
 // Checks the folders on the way to the entry's path, from the top. Returns the first one relay
@@ -127,18 +208,46 @@ export function filesInTheWay(root: string, plan: Plan, unsaved: Set<string>): s
 function checkFolders(
   root: string,
   entry: PlanEntry,
-  deleted: Set<string>,
+  deleted: Map<string, PlanEntry>,
   unsaved: Set<string>,
 ): "clear" | "deleted first" | { blocking: string } {
   for (const folder of folders(entry.raw)) {
-    const name = folder.toString("utf8");
-    if (unsaved.has(`${name}/`)) return { blocking: `${name}/` };
+    const key = folder.toString("latin1");
+    if (unsaved.has(`${key}/`)) return { blocking: `${key}/` };
     const stat = lstat(root, folder);
     if (stat === undefined) return "clear";
     if (stat.isDirectory()) continue;
-    return entry.action === "delete" || !deleted.has(name) ? { blocking: name } : "deleted first";
+    return entry.action === "delete" || !deleted.has(key) ? { blocking: key } : "deleted first";
   }
   return "clear";
+}
+
+// Whether the file at a path the plan adds is a file the plan deletes under a name that differs
+// only in case, which a file system that ignores case shows under both names.
+function sameFileAsDeleted(root: string, entry: PlanEntry, stat: Stats, deleted: Map<string, PlanEntry>): boolean {
+  for (const [key, other] of deleted) {
+    if (key.toLowerCase() !== entry.key.toLowerCase()) continue;
+    const otherStat = lstat(root, other.raw);
+    if (otherStat !== undefined && otherStat.dev === stat.dev && otherStat.ino === stat.ino) return true;
+  }
+  return false;
+}
+
+// Whether a flagged file on disk differs from the version the index holds. A file that is not on
+// disk, as in a sparse checkout, does not count.
+function differsFromIndex(root: string, key: string, file: FlaggedFile): boolean {
+  const raw = Buffer.from(key, "latin1");
+  const stat = lstat(root, raw);
+  if (stat === undefined) return false;
+  if (file.mode === LINK_MODE) return !stat.isSymbolicLink() || blobId(readlinkSync(absolute(root, raw), { encoding: "buffer" }), file.object) !== file.object;
+  if (!FILE_MODES.has(file.mode) || !stat.isFile()) return true;
+  return blobId(readFileSync(absolute(root, raw)), file.object) !== file.object;
+}
+
+// The object name git gives these bytes as a blob, without filters, with the hash of `like` (40
+// hexadecimal characters for SHA-1, 64 for SHA-256).
+function blobId(bytes: Buffer, like: string): string {
+  return createHash(like.length === 64 ? "sha256" : "sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
 }
 
 // Step 7: saves the current files as a pre_rollback checkpoint, or reuses the latest checkpoint
@@ -158,8 +267,8 @@ export async function saveUndoPoint(repo: Repository, settings: RollbackSettings
 
 // Whether the files saved in the undo checkpoint are the ones the plan was made from.
 export async function sameFiles(repo: Repository, prepared: Prepared, undo: SaveResult): Promise<boolean> {
-  const again = unsavedPaths({ leftOut: undo.leftOut, secretLike: undo.secretLike }, prepared.plan, prepared.flagged);
-  const sameUnsaved = again.size === prepared.unsaved.size && [...again].every((path) => prepared.unsaved.has(path));
+  const before = new Set(prepared.snapshot.unsavedKeys);
+  const sameUnsaved = undo.unsavedKeys.length === before.size && undo.unsavedKeys.every((key) => before.has(key));
   return sameUnsaved && (await readPlan(repo, prepared.snapshot.tree, undo.tree)).entries.length === 0;
 }
 
@@ -210,13 +319,24 @@ function deletePlanned(root: string, plan: Plan): void {
   }
 }
 
-// Step 10: the paths that still differ from the target, apart from .relay/, submodules and files
-// relay has not saved.
+// Step 10: the paths that still differ from the target, apart from .relay/, submodules, files
+// relay has not saved, files the target left out, and files that were there before but not in the
+// snapshot, such as files that were ignored before the rollback restored an older .gitignore.
 export async function checkResult(repo: Repository, settings: RollbackSettings, prepared: Prepared): Promise<string[]> {
   const after = await currentSnapshot(repo, settings);
-  const plan = await readPlan(repo, after.tree, prepared.target.commit);
-  const ignored = new Set([...prepared.unsaved, ...unsavedPaths(after, plan, prepared.flagged)]);
-  return plan.entries.map((entry) => entry.path).filter((path) => !isUnsaved(path, ignored));
+  const plan = await readPlan(repo, after.tree, prepared.target.commit, prepared.targetLeftOut);
+  const planned = new Set(prepared.plan.entries.map((entry) => entry.key));
+  const appeared = (await readPlan(repo, prepared.snapshot.tree, after.tree)).entries
+    .filter((entry) => entry.action === "add" && !planned.has(entry.key))
+    .map((entry) => entry.key);
+  const ignored = new Set([
+    ...prepared.unsaved,
+    ...after.unsavedKeys,
+    ...prepared.flagged.keys(),
+    ...plan.submodules.map((key) => `${key}/`),
+    ...appeared,
+  ]);
+  return plan.entries.filter((entry) => !isUnsaved(entry.key, ignored)).map((entry) => show(entry.key));
 }
 
 // Step 11: the rollback event and state.json. Events hold counts and numbers, never file contents.
@@ -245,57 +365,86 @@ async function currentSnapshot(repo: Repository, settings: RollbackSettings): Pr
   });
 }
 
-// What changes from tree `from` to commit or tree `to`, outside .relay/.
-async function readPlan(repo: Repository, from: string, to: string): Promise<Plan> {
+// What changes from tree `from` to commit or tree `to`, outside .relay/ and apart from the paths
+// in `leftOut`.
+async function readPlan(repo: Repository, from: string, to: string, leftOut = new Set<string>()): Promise<Plan> {
   const result = await git(repo, ["diff-tree", "-r", "-z", "--no-renames", "--raw", from, to, "--", ".", ":(exclude).relay"]);
   if (result.code !== 0) throw gitFailed("relay could not compare your files with the checkpoint", result.stderr);
   // Each change is ":<old mode> <new mode> <old object> <new object> <status>", then the path.
   const parts = splitNul(Buffer.from(result.stdout));
   const plan: Plan = { entries: [], submodules: [] };
   for (let i = 0; i + 1 < parts.length; i += 2) {
-    const [oldMode, newMode, , , status] = decoder.decode(parts[i]!).slice(1).split(" ");
+    const [oldMode, newMode, oldObject, , status] = decoder.decode(parts[i]!).slice(1).split(" ") as [string, string, string, string, string];
     const raw = parts[i + 1]!;
-    const path = raw.toString("utf8");
+    const key = raw.toString("latin1");
     if (!safePath(raw)) {
       throw new CommandError(ExitCode.Failed, [
-        `relay refused the path ${quote(path)}, because it leads outside the project or into .git. relay changed nothing.`,
+        `relay refused the path ${quote(show(key))}, because it leads outside the project or into .git. relay changed nothing.`,
       ]);
     }
     // The pathspec leaves out .relay; this also leaves out .RELAY and the like, which a file
     // system that ignores case treats as the same folder.
-    if (path.split("/")[0]!.toLowerCase() === ".relay") continue;
-    if (oldMode === SUBMODULE_MODE || newMode === SUBMODULE_MODE) plan.submodules.push(path);
-    else plan.entries.push({ action: status === "D" ? "delete" : status === "A" ? "add" : "modify", path, raw });
+    if (key.split("/")[0]!.toLowerCase() === ".relay" || isLeftOut(key, leftOut)) continue;
+    if (oldMode === SUBMODULE_MODE || newMode === SUBMODULE_MODE) plan.submodules.push(key);
+    else plan.entries.push({ action: status === "D" ? "delete" : status === "A" ? "add" : "modify", key, raw, oldMode, oldObject });
   }
   return plan;
 }
 
-function unsavedPaths(snapshot: Pick<Snapshot, "leftOut" | "secretLike">, plan: Plan, flagged: string[]): Set<string> {
-  return new Set([
-    ...snapshot.leftOut.map((file) => file.path),
-    ...snapshot.secretLike,
-    ...flagged,
-    ...plan.submodules.map((path) => `${path}/`),
-  ]);
+// The paths the target checkpoint left out: its Relay-Left-Out trailers, which stop after 50, and
+// the left_out list of its checkpoint_saved event, which is complete.
+function leftOutOf(job: JobRef, target: CheckpointInfo): Set<string> {
+  const paths = new Set(target.leftOut);
+  let events: ReturnType<typeof readEvents> = [];
+  try {
+    events = readEvents(job);
+  } catch {
+    // Without a readable event log, the trailers are all relay knows.
+  }
+  for (const event of events) {
+    const { number, commit, left_out } = event.data;
+    if (event.type !== "checkpoint_saved" || number !== target.number || commit !== target.commit || !Array.isArray(left_out)) continue;
+    for (const path of left_out) if (typeof path === "string") paths.add(path);
+  }
+  return paths;
+}
+
+// Whether a key is a path in `leftOut` or lies in a folder there. The trailers write paths as
+// printable text, the event as plain text.
+function isLeftOut(key: string, leftOut: Set<string>): boolean {
+  if (leftOut.size === 0) return false;
+  const text = Buffer.from(key, "latin1").toString("utf8");
+  const names = [text, ...[...text.matchAll(/\//g)].map((match) => text.slice(0, match.index + 1))];
+  return names.some((name) => leftOut.has(name) || leftOut.has(printable(name)));
 }
 
 // The files of the person's index marked assume-unchanged (a lowercase tag in git ls-files -v) or
-// skip-worktree (tag S). ls-files only reads the index.
-async function flaggedPaths(repo: Repository): Promise<string[]> {
-  const result = await git(repo, ["ls-files", "-z", "-v"]);
+// skip-worktree (tag S or s), with the mode and object the index holds. ls-files only reads the
+// index. Each entry is "<tag> <mode> <object> <stage>\t<path>".
+async function flaggedFiles(repo: Repository): Promise<Map<string, FlaggedFile>> {
+  const result = await git(repo, ["ls-files", "-z", "-v", "-s"]);
   if (result.code !== 0) throw gitFailed("relay could not read your index", result.stderr);
-  return splitNul(Buffer.from(result.stdout))
-    .map((entry) => entry.toString("utf8"))
-    .filter((entry) => entry.startsWith("S ") || /^[a-z] /.test(entry))
-    .map((entry) => entry.slice(2));
+  const flagged = new Map<string, FlaggedFile>();
+  for (const entry of splitNul(Buffer.from(result.stdout))) {
+    const tab = entry.indexOf(0x09);
+    const [tag, mode, object] = entry.subarray(0, tab).toString("latin1").split(" ") as [string, string, string];
+    if (tag !== "S" && tag !== "s" && !/^[a-z]$/.test(tag)) continue;
+    flagged.set(entry.subarray(tab + 1).toString("latin1"), { flag: tag.toLowerCase() === "s" ? "skip-worktree" : "assume-unchanged", mode, object });
+  }
+  return flagged;
 }
 
-function isUnsaved(path: string, unsaved: Set<string>): boolean {
-  if (unsaved.has(path)) return true;
-  for (let end = path.indexOf("/"); end !== -1; end = path.indexOf("/", end + 1)) {
-    if (unsaved.has(path.slice(0, end + 1))) return true;
+function isUnsaved(key: string, unsaved: Set<string>): boolean {
+  if (unsaved.has(key)) return true;
+  for (let end = key.indexOf("/"); end !== -1; end = key.indexOf("/", end + 1)) {
+    if (unsaved.has(key.slice(0, end + 1))) return true;
   }
   return false;
+}
+
+// A key as the person reads it.
+function show(key: string): string {
+  return printable(Buffer.from(key, "latin1").toString("utf8"));
 }
 
 // A relative path inside the worktree: no empty, "." or ".." part, no leading "/", and no .git.
@@ -316,13 +465,13 @@ function realFolders(root: string, raw: Buffer): boolean {
   return folders(raw).every((folder) => lstat(root, folder)?.isDirectory() === true);
 }
 
-// Every file and link inside a folder, without following symbolic links.
+// The keys of every file and link inside a folder, without following symbolic links.
 function filesUnder(root: string, raw: Buffer): string[] {
   const found: string[] = [];
   for (const name of readdirSync(absolute(root, raw), { encoding: "buffer" })) {
     const path = Buffer.concat([raw, Buffer.from("/"), name]);
     if (lstat(root, path)?.isDirectory()) found.push(...filesUnder(root, path));
-    else found.push(path.toString("utf8"));
+    else found.push(path.toString("latin1"));
   }
   return found;
 }

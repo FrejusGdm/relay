@@ -199,6 +199,61 @@ test("a file marked assume-unchanged, whose changes a checkpoint does not see, i
   scratch.write("tracked.txt", "version 3, saved nowhere\n");
   const result = await changesNothing(["rollback", "2", "--yes"]);
   expect(result.code).toBe(8);
-  expect(result.stderr).toStartWith("Rolling back would overwrite files relay has not saved: tracked.txt. ");
+  expect(result.stderr).toBe(
+    "relay cannot roll back files marked assume-unchanged in your index, because git does not show their changes: tracked.txt. Clear the flag with git update-index --no-assume-unchanged -- tracked.txt, then try again.\n",
+  );
   expect(readFileSync(join(scratch.repo, "tracked.txt"), "utf8")).toBe("version 3, saved nowhere\n");
 });
+
+test("an edited file marked assume-unchanged is not reported as already matching the checkpoint", async () => {
+  scratch = await setUpJob();
+  scratch.write("tracked.txt", "version 1\n");
+  scratch.git("add", "tracked.txt");
+  scratch.git("commit", "-q", "-m", "add tracked.txt");
+  expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+  scratch.git("update-index", "--assume-unchanged", "tracked.txt");
+  scratch.write("tracked.txt", "version 3, saved nowhere\n");
+  const result = await changesNothing(["rollback", "2", "--yes"]);
+  expect(result.code).toBe(8);
+  expect(result.stdout).not.toContain("Nothing to roll back");
+  expect(result.stderr).toContain("marked assume-unchanged");
+  expect(readFileSync(join(scratch.repo, "tracked.txt"), "utf8")).toBe("version 3, saved nowhere\n");
+});
+
+test("a file whose bytes git converts when it stores them (line endings) is refused, so undo stays exact", async () => {
+  scratch = await setUpJob();
+  scratch.write(".gitattributes", "* text=auto\n");
+  scratch.git("add", ".gitattributes");
+  scratch.git("commit", "-q", "-m", "add .gitattributes");
+  expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+  writeFileSync(join(scratch.repo, "win.txt"), "line one\r\nline two\r\n");
+  const result = await changesNothing(["rollback", "2", "--yes"]);
+  expect(result.code).toBe(8);
+  expect(result.stderr).toStartWith("Rolling back would overwrite files whose exact bytes relay cannot save");
+  expect(result.stderr).toContain("win.txt");
+  expect(readFileSync(join(scratch.repo, "win.txt"), "utf8")).toBe("line one\r\nline two\r\n");
+});
+
+// macOS file systems refuse names that are not valid UTF-8, so this case only exists elsewhere.
+test.skipIf(process.platform === "darwin")(
+  "two names that are not valid UTF-8 are told apart, so an ignored file in the way still stops the rollback",
+  async () => {
+    scratch = await setUpJob();
+    scratch.write("d", "a file named d\n");
+    expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+    rmSync(join(scratch.repo, "d"));
+    mkdirSync(join(scratch.repo, "d"));
+    const name = (byte: number, suffix: string) => Buffer.concat([Buffer.from(join(scratch.repo, "d") + "/"), Buffer.from([byte]), Buffer.from(suffix)]);
+    writeFileSync(name(0xff, ".txt"), "saved\n");
+    writeFileSync(name(0xfe, ".ign"), "ignored, saved nowhere\n");
+    scratch.write(".gitignore", `${readFileSync(join(scratch.repo, ".gitignore"), "utf8")}*.ign\n`);
+    // captureState() reads names as text, so this test checks the files itself.
+    const refsBefore = relayRefs(scratch);
+    const result = await relay(scratch, ["rollback", "2", "--yes"]);
+    expect(result.code).toBe(8);
+    expect(result.stderr).toStartWith("Rolling back would overwrite files relay has not saved: ");
+    expect(readFileSync(name(0xfe, ".ign"), "utf8")).toBe("ignored, saved nowhere\n");
+    expect(readFileSync(name(0xff, ".txt"), "utf8")).toBe("saved\n");
+    expect(relayRefs(scratch)).toEqual(refsBefore);
+  },
+);

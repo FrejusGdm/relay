@@ -4,8 +4,8 @@
 import { join } from "node:path";
 import { listCheckpoints } from "../../checkpoint/list";
 import {
-  applyPlan, checkResult, filesInTheWay, prepareRollback, recordRollback, resolveTarget, sameFiles, saveUndoPoint,
-  type Prepared, type RollbackSettings,
+  applyPlan, checkResult, findProblems, hasProblems, prepareRollback, problemLines, recordRollback, resolveTarget, sameFiles,
+  saveUndoPoint, type Prepared, type RollbackSettings,
 } from "../../checkpoint/rollback";
 import { openJob } from "../../checkpoint/save";
 import { onInterrupt, wasInterrupted } from "../../core/cleanup";
@@ -125,13 +125,11 @@ async function rollBack(ctx: CommandContext, repo: Repository, job: JobRef): Pro
   return ExitCode.Ok;
 }
 
-// Stops with exit code 8 when the plan would write or delete a file relay has not saved.
+// Stops with exit code 8 when the plan would write or delete a file whose content relay has not
+// saved exactly.
 function refuseUnsaved(repo: Repository, prepared: Prepared): void {
-  const paths = filesInTheWay(repo.worktreeRoot, prepared.plan, prepared.unsaved);
-  if (paths.length === 0) return;
-  throw new CommandError(ExitCode.UnsavedFiles, [
-    `Rolling back would overwrite files relay has not saved: ${paths.map(printable).join(", ")}. Move them or delete them yourself, then try again.`,
-  ]);
+  const problems = findProblems(repo.worktreeRoot, prepared);
+  if (hasProblems(problems)) throw new CommandError(ExitCode.UnsavedFiles, problemLines(problems));
 }
 
 function planLines(prepared: Prepared, now: Date): string[] {
@@ -141,7 +139,7 @@ function planLines(prepared: Prepared, now: Date): string[] {
   return [
     `Roll back to checkpoint ${target.number} · ${target.commit.slice(0, 7)} (${target.message === null ? when : `${when}, ${quote(target.message)}`})`,
     "",
-    ...plan.entries.map((entry) => `  ${entry.action.padEnd(6)}  ${printable(entry.path)}`),
+    ...plan.entries.map((entry) => `  ${entry.action.padEnd(6)}  ${printable(Buffer.from(entry.key, "latin1").toString("utf8"))}`),
     "",
     `${count} ${count === 1 ? "file will" : "files will"} change. Your branch, commits and staged changes stay as they are.`,
     "relay saves your current files as a checkpoint first, so you can undo this.",

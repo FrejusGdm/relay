@@ -2,7 +2,7 @@
 // undo checkpoint, deletions, writing through a temporary index, the result check, the event and
 // state.json. Every test checks that nothing of the person's other than working-tree files changed.
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from "bun:test";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { watchGitCalls } from "../../src/git/run";
 import { MAIN } from "../helpers/cli";
@@ -262,4 +262,47 @@ test("in a linked worktree, a rollback changes only that worktree's files", asyn
   expect(readFileSync(join(worktree, "wt-only.txt"), "utf8")).toBe("at checkpoint 2\n");
   expect(personGitState(worktree)).toEqual(gitBefore);
   expect(personState(scratch.repo)).toEqual(main);
+});
+
+test("a file the target checkpoint left out for its size is not restored to an older version", async () => {
+  scratch = await setUpJob("full", 1);
+  scratch.write("data.bin", "version 1, committed\n");
+  scratch.git("add", "data.bin");
+  scratch.git("commit", "-q", "-m", "add data.bin");
+  writeFileSync(join(scratch.repo, "data.bin"), Buffer.alloc(2 * MB, 7));
+  scratch.write("notes.txt", "notes at checkpoint 2\n");
+  expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+  scratch.write("data.bin", "version 3, small again\n");
+  scratch.write("notes.txt", "notes after checkpoint 2\n");
+  const result = await relay(scratch, ["rollback", "2", "--yes"]);
+  expect(result.code).toBe(0);
+  expect(readFileSync(join(scratch.repo, "notes.txt"), "utf8")).toBe("notes at checkpoint 2\n");
+  expect(readFileSync(join(scratch.repo, "data.bin"), "utf8")).toBe("version 3, small again\n");
+});
+
+test("a file that was ignored before the rollback does not make the result check fail", async () => {
+  scratch = await setUpJob();
+  scratch.write("notes.txt", "notes at checkpoint 2\n");
+  expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+  scratch.write(".gitignore", `${readFileSync(join(scratch.repo, ".gitignore"), "utf8")}cache.txt\n`);
+  scratch.write("cache.txt", "ignored cache\n");
+  scratch.write("notes.txt", "notes after checkpoint 2\n");
+  const result = await relay(scratch, ["rollback", "2", "--yes"]);
+  expect(result.code).toBe(0);
+  expect(readFileSync(join(scratch.repo, "notes.txt"), "utf8")).toBe("notes at checkpoint 2\n");
+  expect(readFileSync(join(scratch.repo, "cache.txt"), "utf8")).toBe("ignored cache\n");
+});
+
+// macOS file systems ignore case by default, so README.md and Readme.md are one file there. git
+// sees the rename, and the file at the added path is the file the plan deletes.
+test.skipIf(process.platform !== "darwin")("a rename that changes only the case of a name is rolled back", async () => {
+  scratch = await setUpJob();
+  scratch.write("Readme.md", "readme at checkpoint 2\n");
+  expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
+  renameSync(join(scratch.repo, "Readme.md"), join(scratch.repo, "README.md"));
+  const result = await relay(scratch, ["rollback", "2", "--yes"]);
+  expect(result.stderr).not.toContain("has not saved");
+  expect(result.code).toBe(0);
+  expect(readdirSync(scratch.repo)).toContain("Readme.md");
+  expect(readdirSync(scratch.repo)).not.toContain("README.md");
 });
