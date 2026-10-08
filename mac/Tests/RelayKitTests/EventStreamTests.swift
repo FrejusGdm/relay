@@ -15,8 +15,10 @@ struct EventStreamTests {
         }
         #expect(outputs == [
             .retry(1000),
+            .comment,
             .event(SSEEvent(id: "7", type: "job", data: "line one\nline two")),
             .event(SSEEvent(id: "8", type: "message", data: "x")),
+            .comment,
             .event(SSEEvent(id: "8", type: "worker", data: "{}")),
         ])
 
@@ -65,6 +67,7 @@ struct EventStreamTests {
             }
             sent += chunk.utf8.count
             feed.push(chunk)
+            #expect(try await events.next()?.payload == .keepAlive)
             for expected in (id - 299)...id {
                 let event = try #require(try await events.next())
                 #expect(event.id == expected)

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs on macOS. Downloads the fonts named in DESIGN.md from their official sources into mac/Resources/Fonts and
 # checks each file against its SHA-256 before copying it (mac/Resources/Fonts/SOURCES.md).
-# Font files are never committed: the Satoshi license forbids sharing them through a repository.
+# Font files are never committed; the repository holds only their addresses and checksums.
 set -eu
 cd "$(dirname "$0")/.."
 dest=Resources/Fonts
@@ -21,15 +21,13 @@ take() {
   cp "$tmp/$1/$2" "$dest/$3"
 }
 
-fetch https://api.fontshare.com/v2/fonts/download/satoshi satoshi
 fetch https://github.com/uswds/public-sans/releases/download/v2.001/public-sans-v2.001.zip public-sans
 fetch https://github.com/IBM/plex/releases/download/%40ibm/plex-mono%402.5.0/ibm-plex-mono.zip plex-mono
 
-take satoshi Satoshi_Complete/Fonts/OTF/Satoshi-Bold.otf Satoshi-Bold.otf 50e4f9b7c1864c50761d729d6001bfac708c80457fa6fc41559a8ab1bd2573ff
-take satoshi Satoshi_Complete/License/FFL.txt Satoshi-LICENSE.txt 145e7fe2429a3336ba215c070ef722000e01348a3e1baaa127e871bb5012f554
 take public-sans fonts/otf/PublicSans-Regular.otf PublicSans-Regular.otf 89cca4915bd88489323ad0d0107f7cd1dc81164416584f3c3c6da00e187cd581
 take public-sans fonts/otf/PublicSans-Medium.otf PublicSans-Medium.otf dd903e97179c1e8293a30f2a50474819cac10ab18579aa5f1b63cb72f23a50dc
 take public-sans fonts/otf/PublicSans-SemiBold.otf PublicSans-SemiBold.otf 57af521ce5bc5a3495293f83051765c32d45d04696218bf0cff2ac66a65ba849
+take public-sans fonts/otf/PublicSans-Bold.otf PublicSans-Bold.otf ecc6d33b958f2966c57bc6aaae3741781b82e6a9f77e09b15c284d6827e2ce6e
 take public-sans OFL.txt PublicSans-LICENSE.txt 157a9e77f7580246e97c769490e2e977ae94399f9d30f4556015c41fe8c28bac
 take plex-mono ibm-plex-mono/fonts/complete/otf/IBMPlexMono-Regular.otf IBMPlexMono-Regular.otf 372fe8f8a459baef84ee346b0a478084e80c46bd299a0c27bcb0f3412f5a9d28
 take plex-mono ibm-plex-mono/fonts/complete/otf/IBMPlexMono-Medium.otf IBMPlexMono-Medium.otf f7db820bddfbf7fce52946e69fee89a150938d401d82850cdf975b2c4c31b97b

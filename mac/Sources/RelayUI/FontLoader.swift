@@ -2,14 +2,15 @@ import CoreText
 import Foundation
 import os
 
-/// Registers the fonts of `DESIGN.md` for this process (design.md decision 13). When a font is
+/// Registers the app's fonts for this process: Public Sans and IBM Plex Mono (design.md decision
+/// 13; Satoshi is not shipped). When a font is
 /// missing, SwiftUI falls back to the system font and the failure is written to the unified log.
 public enum FontLoader {
     public static let postScriptNames = [
-        "Satoshi-Bold",
         "PublicSans-Regular",
         "PublicSans-Medium",
         "PublicSans-SemiBold",
+        "PublicSans-Bold",
         "IBMPlexMono",
         "IBMPlexMono-Medm",
     ]

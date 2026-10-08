@@ -19,8 +19,12 @@ public final class FakeDaemon: @unchecked Sendable {
         case raw([UInt8])
         /// A file of `Tests/Fixtures/api/` as a JSON answer.
         case fixture(String, status: Int = 200, streamSeq: Int? = nil)
+        /// This JSON text as an answer.
+        case json(String, status: Int = 200, streamSeq: Int? = nil)
         /// The head of an event stream, then whatever the test pushes into the feed.
         case feed(EventFeed)
+        /// A new feed for each request, kept in `openedFeeds`.
+        case newFeedPerRequest
     }
 
     public let home: String
@@ -31,6 +35,7 @@ public final class FakeDaemon: @unchecked Sendable {
     private var recorded: [Request] = []
     private var connectionBytes: [Int] = []
     private var feeds: [EventFeed] = []
+    private var newFeeds: [EventFeed] = []
     private var stopped = false
     private var versionPID: Int32 = 4121
     private var versionStartedAt = "2026-10-07T12:02:11.402Z"
@@ -81,6 +86,16 @@ public final class FakeDaemon: @unchecked Sendable {
 
     public var requests: [Request] {
         lock.withLock { recorded }
+    }
+
+    /// The feeds made for `newFeedPerRequest` replies, in the order of the requests.
+    public var openedFeeds: [EventFeed] {
+        lock.withLock { newFeeds }
+    }
+
+    /// The requests for `method` and `path`.
+    public func requests(_ method: String, _ path: String) -> [Request] {
+        requests.filter { $0.method == method && $0.path == path }
     }
 
     /// How many bytes each finished connection sent, in order.
@@ -170,12 +185,18 @@ public final class FakeDaemon: @unchecked Sendable {
         case .fixture(let name, let status, let streamSeq):
             let body = (try? Fixtures.bytes("api/\(name)")) ?? Array("fixture \(name) is missing".utf8)
             write(client, Self.jsonAnswer(status: status, body: body, streamSeq: streamSeq))
+        case .json(let text, let status, let streamSeq):
+            write(client, Self.jsonAnswer(status: status, body: Array(text.utf8), streamSeq: streamSeq))
         case .feed(let feed):
             lock.withLock { feeds.append(feed) }
-            write(client, Array("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n".utf8))
-            while let chunk = feed.next() {
-                if !write(client, chunk) { break }
+            stream(feed, to: client)
+        case .newFeedPerRequest:
+            let feed = EventFeed()
+            lock.withLock {
+                feeds.append(feed)
+                newFeeds.append(feed)
             }
+            stream(feed, to: client)
         case nil:
             if method == "GET" && path == "/v1/version" {
                 write(client, Self.jsonAnswer(status: 200, body: versionBody(), streamSeq: nil))
@@ -183,6 +204,13 @@ public final class FakeDaemon: @unchecked Sendable {
                 let body = #"{"error":{"code":"not_found","message":"There is no \#(path)."}}"#
                 write(client, Self.jsonAnswer(status: 404, body: Array(body.utf8), streamSeq: nil))
             }
+        }
+    }
+
+    private func stream(_ feed: EventFeed, to client: Int32) {
+        write(client, Array("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n".utf8))
+        while let chunk = feed.next() {
+            if !write(client, chunk) { break }
         }
     }
 

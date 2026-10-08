@@ -18,13 +18,13 @@ struct HTTPTransport: Sendable {
 
     /// Sends `request` and reads the whole answer, all within `timeout` seconds.
     func send(_ request: [UInt8], timeout: Double) throws -> HTTPResponse {
-        let deadline = clock.now.addingTimeInterval(timeout)
+        let deadline = clock.instant.advanced(by: .seconds(timeout))
         let socket = try open(timeout: timeout)
         defer { socket.close() }
         try socket.writeAll(request)
         var reader = HTTPResponseReader(mode: .wholeBody)
         while !reader.isComplete {
-            if clock.now >= deadline { throw HTTPError.timedOut }
+            if clock.instant >= deadline { throw HTTPError.timedOut }
             guard let bytes = try socket.read(waitingAtMost: Self.pollInterval) else { continue }
             if bytes.isEmpty {
                 try reader.finish()
@@ -48,16 +48,16 @@ struct HTTPTransport: Sendable {
         isCancelled: () -> Bool,
         onBody: ([UInt8]) throws -> Void
     ) throws {
-        let deadline = clock.now.addingTimeInterval(headTimeout)
+        let deadline = clock.instant.advanced(by: .seconds(headTimeout))
         let socket = try open(timeout: headTimeout)
         defer { socket.close() }
         try socket.writeAll(request)
         var reader = HTTPResponseReader(mode: .streaming)
-        var lastBytes = clock.now
+        var lastBytes = clock.instant
         while !reader.isComplete {
             if isCancelled() { throw CancellationError() }
-            let now = clock.now
-            if reader.head == nil ? now >= deadline : now.timeIntervalSince(lastBytes) >= inactivityLimit {
+            let now = clock.instant
+            if reader.head == nil ? now >= deadline : lastBytes.duration(to: now) >= .seconds(inactivityLimit) {
                 throw HTTPError.timedOut
             }
             guard let bytes = try socket.read(waitingAtMost: Self.pollInterval) else { continue }
@@ -65,7 +65,7 @@ struct HTTPTransport: Sendable {
                 try reader.finish()
                 break
             }
-            lastBytes = clock.now
+            lastBytes = clock.instant
             let body = try reader.feed(bytes)
             if !body.isEmpty { try onBody(body) }
         }

@@ -326,10 +326,10 @@ runner, never on a developer's Mac.
 ```mermaid
 flowchart TD
   pkg["mac/Package.swift<br/>no package dependencies"]
-  kit["Sources/RelayKit/<br/>Socket/: finding and checking relay.sock, the peer check<br/>HTTP/: requests and the response reader<br/>API/: models, decoding, DaemonClient<br/>Events/: the server-sent events parser and stream"]
-  ui["Sources/RelayUI/<br/>FontLoader.swift, Theme.swift"]
-  app["Sources/Relay/<br/>RelayApp.swift: the menu-bar app"]
-  support["Tests/Support/<br/>FakeDaemon, FixedClock, Fixtures"]
+  kit["Sources/RelayKit/<br/>Socket/: finding and checking relay.sock, the peer check<br/>HTTP/: requests and the response reader<br/>API/: models, decoding, DaemonClient<br/>Events/: the server-sent events parser and stream<br/>Store/: RelayStore, the state that follows the daemon<br/>Card/: CardModel, every word the card shows"]
+  ui["Sources/RelayUI/<br/>TinyCard, ExpandedCard, WorkerRow, MenuCard<br/>Theme, Typography, Glyph, Motion, FontLoader"]
+  app["Sources/Relay/<br/>RelayApp.swift: the menu-bar scene and AppDelegate"]
+  support["Tests/Support/<br/>FakeDaemon, FixedClock, Fixtures, Sample"]
   fixtures["Tests/Fixtures/api/<br/>JSON answers in the daemon's shapes"]
   tests["Tests/RelayKitTests/, Tests/RelayUITests/"]
   scripts["scripts/fetch-fonts.sh, make-app.sh, smoke-test.sh<br/>Support/Info.plist, Resources/Fonts/SOURCES.md"]
@@ -349,8 +349,9 @@ flowchart TD
 
 The diagram shows the folders of the Mac app and how they depend on each other. `RelayKit` has no
 SwiftUI and holds everything that talks to the daemon: it checks that the socket folder is private
-and that the daemon runs as the same user before it sends a byte. `RelayUI` holds the views and
-the design tokens, and `Relay` is the app itself. The tests run against `FakeDaemon`, a small
+and that the daemon runs as the same user before it sends a byte. Its `RelayStore` keeps the
+app's copy of the daemon's state, and `CardModel` turns that state into every word of the card,
+so the views in `RelayUI` hold no rules. `Relay` is the app itself. The tests run against `FakeDaemon`, a small
 Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
-downloads the fonts, runs the tests, builds and signs `Relay.app` ad hoc, starts it for five
-seconds, and uploads the zipped app and the screenshots.
+downloads the fonts, runs the tests (which also render the cards to PNG files), builds and signs
+`Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots.

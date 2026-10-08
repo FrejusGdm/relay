@@ -17,6 +17,8 @@ public struct SSEParser: Sendable {
         case event(SSEEvent)
         /// A `retry:` line: the wait before reconnecting, in milliseconds.
         case retry(Int)
+        /// A comment line, such as the daemon's `: ping` every 15 seconds.
+        case comment
     }
 
     private var line: [UInt8] = []
@@ -69,7 +71,10 @@ public struct SSEParser: Sendable {
             dispatch(&outputs)
             return
         }
-        if current[0] == 58 { return }
+        if current[0] == 58 {
+            outputs.append(.comment)
+            return
+        }
         eventBytes += current.count + 1
         try checkSize()
         let field: ArraySlice<UInt8>

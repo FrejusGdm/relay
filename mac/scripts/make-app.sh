@@ -14,7 +14,10 @@ rm -rf build
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Fonts"
 cp "$bin" "$app/Contents/MacOS/Relay"
 sed -e "s/@VERSION@/$version/" -e "s/@BUILD@/$build/" Support/Info.plist > "$app/Contents/Info.plist"
-cp Resources/Fonts/*.otf Resources/Fonts/*.ttf Resources/Fonts/*-LICENSE.txt "$app/Contents/Resources/Fonts/" 2>/dev/null || true
+for font in PublicSans-Regular.otf PublicSans-Medium.otf PublicSans-SemiBold.otf PublicSans-Bold.otf \
+  PublicSans-LICENSE.txt IBMPlexMono-Regular.otf IBMPlexMono-Medium.otf IBMPlexMono-LICENSE.txt; do
+  cp "Resources/Fonts/$font" "$app/Contents/Resources/Fonts/"
+done
 plutil -lint "$app/Contents/Info.plist"
 codesign --force --sign - --timestamp=none "$app"
 codesign --verify --strict --verbose=2 "$app"

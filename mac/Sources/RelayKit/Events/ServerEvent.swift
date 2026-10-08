@@ -10,6 +10,8 @@ public struct ServerEvent: Equatable, Sendable {
         case shutdown
         /// The wait before reconnecting that the stream asked for.
         case retry(milliseconds: Int)
+        /// A comment line such as `: ping`, which shows the stream is alive.
+        case keepAlive
         /// A `hook` event, a type this app does not know, or data that did not decode. Its `id`
         /// still moves the app's place in the stream.
         case ignored(type: String)
@@ -28,6 +30,8 @@ public struct ServerEvent: Equatable, Sendable {
         switch output {
         case .retry(let milliseconds):
             self.init(id: nil, payload: .retry(milliseconds: milliseconds))
+        case .comment:
+            self.init(id: nil, payload: .keepAlive)
         case .event(let event):
             let id = event.id.flatMap { text in
                 !text.isEmpty && text.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }) ? Int(text) : nil

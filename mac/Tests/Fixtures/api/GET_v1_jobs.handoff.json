@@ -4,7 +4,7 @@
       "id": "3f9a2c1d",
       "title": "Build authentication",
       "state": "running",
-      "project_root": "/Users/dev/projects/app",
+      "project_root": "/Users/dev/projects/auth",
       "project_missing": false,
       "current_worker": {
         "id": "5d2e8f01",

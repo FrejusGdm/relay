@@ -33,8 +33,8 @@ public struct Account: Decodable, Equatable, Sendable {
     public let providerName: String
     public let account: String
     public let configured: Bool
-    public let availability: Availability
-    public let usage: [UsageItem]
+    public var availability: Availability
+    public var usage: [UsageItem]
 }
 
 public struct Checkpoint: Decodable, Equatable, Sendable {
@@ -67,8 +67,8 @@ public struct Job: Decodable, Equatable, Sendable {
     public let state: String?
     public let projectRoot: String
     public let projectMissing: Bool
-    public let currentWorker: Worker?
-    public let lastCheckpoint: Checkpoint?
+    public var currentWorker: Worker?
+    public var lastCheckpoint: Checkpoint?
     public let updatedAt: Date
 }
 
