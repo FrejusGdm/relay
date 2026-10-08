@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { COMMANDS } from "../../src/cli/commands/registry";
 import { route } from "../../src/cli/router";
 import { runRelayInProcess, UNBUILT, WITH_UNBUILT } from "../helpers/cli";
+import packageJson from "../../package.json";
 
 const golden = (name: string) => readFileSync(join(import.meta.dir, "golden", `${name}.txt`), "utf8");
 const notBuilt = (name: string) =>
@@ -81,7 +82,7 @@ describe("Command help", () => {
 
 describe("Version", () => {
   test("relay --version", async () => {
-    expect(await runRelayInProcess(["--version"])).toEqual({ code: 0, stdout: "relay 0.1.0\n", stderr: "" });
+    expect(await runRelayInProcess(["--version"])).toEqual({ code: 0, stdout: `relay ${packageJson.version}\n`, stderr: "" });
   });
 });
 
