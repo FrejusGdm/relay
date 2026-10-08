@@ -176,8 +176,9 @@ behind a small platform module (`docs/research/architecture.md` section 1, "Risk
   `LOCK_UN = 8` (same values on macOS and Linux):
   - `tryLock(path): LockHandle | null` opens the file (`O_RDWR | O_CREAT`, 0600) and calls
     `flock(fd, LOCK_EX | LOCK_NB)`; `null` when it is held elsewhere.
-  - `lock(path, timeoutMs): LockHandle` retries `tryLock` every 10 ms; after `timeoutMs` it throws
-    `LockTimeout`.
+  - `lock(path, timeoutMs): Promise<LockHandle>` retries `tryLock` every 10 ms; after `timeoutMs`
+    it throws `LockTimeout`. It is asynchronous because phase 2's `withEventsLock`, its first user,
+    is.
   - `LockHandle.release()` calls `flock(fd, LOCK_UN)` and closes the file.
 
 Why `flock`: the kernel releases it when the process dies, so a crash never leaves a stale lock
@@ -341,7 +342,7 @@ PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
 PRAGMA busy_timeout = 2000;
 
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);       -- built_at, daemon_version
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);       -- built_at, daemon_version, stream_epoch
 CREATE TABLE projects (
   root_path    TEXT PRIMARY KEY,                -- absolute worktree root
   missing      INTEGER NOT NULL DEFAULT 0,      -- 1 when the folder was not found at the last rebuild
@@ -356,6 +357,8 @@ CREATE TABLE jobs (
   last_checkpoint_number INTEGER,
   last_checkpoint_commit TEXT,
   last_checkpoint_at     TEXT,
+  last_checkpoint_kind   TEXT,                   -- so a Job answer needs no git call
+  last_checkpoint_message TEXT,
   updated_at             TEXT NOT NULL
 );
 CREATE TABLE targets (
@@ -385,7 +388,8 @@ CREATE TABLE workers (
   started_at          TEXT NOT NULL,
   ended_at            TEXT,
   exit_code           INTEGER,
-  end_reason          TEXT
+  end_reason          TEXT,
+  found_gone_at       TEXT                    -- when the daemon found the process gone without an end
 );
 CREATE INDEX workers_by_job ON workers(job_id, started_at DESC);
 CREATE TABLE event_cursors (
@@ -493,6 +497,7 @@ depth from `docs/research/security.md` section 1, "Recommendation", item 2). Err
 | 500 | `engine_failed` | the engine's message |
 | 500 | `internal_error` | "Something went wrong inside relay. Details are in the daemon log." |
 | 503 | `shutting_down` | "The relay daemon is stopping." |
+| 503 | `too_many_streams` | "The relay daemon already serves 32 event streams." |
 
 `src/api/engine-errors.ts` maps the engines' typed errors (the same errors phase 2 maps to exit
 codes in `src/cli/exit-codes.ts`) to these rows.
@@ -505,7 +510,7 @@ endpoints the brief asks for. Job IDs in paths must match `^[0-9a-f]{8}$` and ta
 
 | Method and path | Response |
 |---|---|
-| `GET /v1/version` | `200` `{"api":"v1","daemon_version":"0.5.0","pid":4121,"started_at":"…","schema_version":1,"capabilities":["accounts","jobs","events.sse","jobs.checkpoint","jobs.switch","hooks"],"agents_running":[]}` |
+| `GET /v1/version` | `200` `{"api":"v1","daemon_version":"0.5.0","pid":4121,"started_at":"…","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","jobs.checkpoint","jobs.switch","hooks"],"agents_running":[]}` |
 | `GET /v1/providers` | `200` `{"providers":[{"id":"claude","name":"Claude Code","accounts":[Account…]},{"id":"codex","name":"Codex","accounts":[…]}]}` |
 | `GET /v1/accounts` | `200` `{"accounts":[Account…]}` sorted by `target` |
 | `GET /v1/accounts/{target}` | `200` `{"account":Account}` or `404 target_not_found` |
@@ -541,8 +546,17 @@ Checkpoint {"number":7,"commit":"912ec1…(40 hex)","ref":"refs/relay/jobs/3f9a2
 
 `Worker.state` is computed when read: `ended` when `ended_at` is set; otherwise `running` when
 `process.kill(pid, 0)` succeeds, `stopped` when it fails with `ESRCH` (the process is gone and no
-end was recorded), and `starting` when `pid` is `null`. `Checkpoint` fields follow phase 2's
-`src/checkpoint/list.ts`; if it returns more fields they are passed through.
+end was recorded, or the daemon found it gone), and `starting` when `pid` is `null`. `Checkpoint`
+fields follow phase 2's `src/checkpoint/list.ts`; `GET /v1/jobs/{job}/checkpoints` also passes
+through its `head` and `left_out`.
+
+Every `GET` answer except `/v1/events` carries the header `Relay-Stream-Seq`: the highest
+`stream_events.seq` whose change the answer already shows, read in the same SQLite read transaction
+as the data. The Mac app needs it to order a snapshot against the events it receives
+(`add-mac-menu-bar-app` design decision 17, requirement A). `stream_epoch` in `GET /v1/version` is
+a random ID stored in `meta` when the database is created, so it changes whenever the index (and
+with it the numbering of `stream_events`) is rebuilt; the Mac app needs it to tell a rebuilt
+stream from a restart that kept its history (requirement C).
 
 ### 15. Server-sent events
 
@@ -555,7 +569,7 @@ retry: 1000
 
 id: 4181
 event: availability
-data: {"target":"claude:work","availability":{…}}
+data: {"target":"claude:work","provider":"claude","provider_name":"Claude Code","account":"work","configured":true,"availability":{…},"usage":[]}
 
 id: 4182
 event: checkpoint
@@ -565,12 +579,22 @@ data: {"job_id":"3f9a2c1d","checkpoint":{…}}
 ```
 
 Event types: `job` (a job was added or its fields changed; data is the Job), `worker` (Worker),
-`checkpoint`, `availability` (Account), `hook` (job ID, provider, event), `reset` (the requested
-position is older than the oldest retained `seq`; data `{}`; the client reloads with the GET
-endpoints), `shutdown`. Each change is written to `stream_events` first, and its `seq` is the SSE
-`id`. On connect, the server replays rows with `seq > since` (sending `reset` first when
-`since < oldest seq - 1`), then sends new rows as they are inserted. A comment line `: ping` every
-15 seconds keeps the connection alive. At most 32 clients; the 33rd gets `503`.
+`checkpoint` (`{job_id, checkpoint}`), `availability` (the whole Account, the same object as
+`GET /v1/accounts/{target}` returns), `hook` (job ID, provider, event), `reset` (the requested
+position is not in the retained rows; data `{"stream_epoch": …}`; the client reloads with the GET
+endpoints), `shutdown` (data `{}`). Each change is written to `stream_events` in the same
+transaction as the index change, and its `seq` is the SSE `id`. On connect, the server replays rows
+with `seq > since`, then sends new rows as they are committed. It sends `reset` first, and then
+every retained row, when `since < oldest seq - 1` or when `since` is greater than the newest
+`seq`; the second case is a cursor from a rebuilt database, which the Mac app needs to detect
+(`add-mac-menu-bar-app` design decision 17, requirement B). A comment line `: ping` every 15
+seconds keeps the connection alive. At most 32 clients; the 33rd gets `503 too_many_streams`.
+
+The `availability` data was described two ways in this design (the Account, and an example with
+only `target` and `availability`); it is the whole Account, so a client decodes one shape for the
+stream and the GET endpoints. When the daemon's 2-second check finds that a worker's process is
+gone and no `worker_ended` was recorded, it sets `found_gone_at` and sends one `worker` event with
+state `stopped`; the Mac app needs this to stop polling for such changes (requirement D).
 
 ### 16. Versioning
 

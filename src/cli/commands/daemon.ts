@@ -32,14 +32,21 @@ async function runAction(ctx: CommandContext): Promise<number> {
     case "run": {
       // Loaded only here, so other commands never load the listener.
       const { runDaemon } = await import("../../daemon/main");
-      return runDaemon({ relayHome: ctx.relayHome, env: ctx.env, logLevel: ctx.logLevel, err: ctx.io.err });
+      return runDaemon({
+        relayHome: ctx.relayHome,
+        env: ctx.env,
+        logLevel: ctx.logLevel,
+        config: ctx.config,
+        homedir: ctx.homedir,
+        err: ctx.io.err,
+      });
     }
     case "start":
       return start(ctx);
     case "stop":
-      return stop(ctx);
+      return stopDaemon(ctx);
     case "restart": {
-      const code = await stop(ctx);
+      const code = await stopDaemon(ctx);
       return code === ExitCode.Ok ? start(ctx) : code;
     }
     case "status":
@@ -65,16 +72,19 @@ async function start(ctx: CommandContext): Promise<number> {
     case "not_responding":
       return notResponding(ctx, runtimeDir(ctx.env, ctx.relayHome));
     case "failed":
-      ctx.io.err(`relay could not start its background service. Details are in ${printable(logPath(ctx))}.\n`);
-      return ExitCode.DaemonNotRunning;
+      return couldNotStart(ctx);
   }
 }
 
-async function stop(ctx: CommandContext): Promise<number> {
+// relay daemon stop. With quiet, only problems are printed (relay doctor --reindex uses it).
+export async function stopDaemon(ctx: CommandContext, quiet = false): Promise<number> {
+  const out = (text: string) => {
+    if (!quiet) ctx.io.out(text);
+  };
   const runDir = runtimeDir(ctx.env, ctx.relayHome);
   checkRuntimeDir(runDir);
   if (daemonLockHolder(runDir) === null) {
-    ctx.io.out("relay daemon is not running\n");
+    out("relay daemon is not running\n");
     return ExitCode.Ok;
   }
   const answer = await getVersion(runDir, ANSWER_MS);
@@ -90,7 +100,7 @@ async function stop(ctx: CommandContext): Promise<number> {
   // microseconds, the signal reaches the new process.
   const holder = daemonLockHolder(runDir);
   if (holder === null) {
-    ctx.io.out("relay daemon stopped\n");
+    out("relay daemon stopped\n");
     return ExitCode.Ok;
   }
   if (holder.pid !== null && holder.pid !== answer.pid) {
@@ -109,7 +119,7 @@ async function stop(ctx: CommandContext): Promise<number> {
   const deadline = Date.now() + STOP_WAIT_MS;
   while (Date.now() < deadline) {
     if (!processExists(answer.pid) || daemonLockHolder(runDir) === null) {
-      ctx.io.out("relay daemon stopped\n");
+      out("relay daemon stopped\n");
       return ExitCode.Ok;
     }
     await Bun.sleep(STOP_POLL_MS);
@@ -156,6 +166,11 @@ function processExists(pid: number): boolean {
   } catch (error) {
     return (error as { code?: string }).code !== "ESRCH";
   }
+}
+
+export function couldNotStart(ctx: CommandContext): number {
+  ctx.io.err(`relay could not start its background service. Details are in ${printable(logPath(ctx))}.\n`);
+  return ExitCode.DaemonNotRunning;
 }
 
 function logPath(ctx: CommandContext): string {

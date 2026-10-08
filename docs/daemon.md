@@ -6,10 +6,11 @@ socket (a special file that only programs on the same computer can connect to). 
 network port. The behaviour comes from the OpenSpec change `add-daemon-api-and-status`
 (`openspec/changes/add-daemon-api-and-status/`).
 
-Today the daemon starts, stops, keeps to one copy per relay folder, checks every connection, and
-answers `GET /v1/version`. The later task groups of the change add the index of jobs and
-accounts, the other endpoints, the event stream and the hook events, and each one extends this
-page. `docs/api.md` will describe every endpoint.
+Today the daemon starts, stops, keeps to one copy per relay folder, checks every connection,
+keeps an index of jobs, workers, checkpoints and accounts in SQLite, follows the job files as
+commands change them, and answers the read endpoints and the live event stream that
+`docs/api.md` describes. The checkpoint and switch endpoints and the hook events come with the
+later task groups of the change, and each one extends this page.
 
 ## Where its files are
 
@@ -19,6 +20,9 @@ page. `docs/api.md` will describe every endpoint.
     relay.sock                   the API socket, mode 0600
     daemon.lock                  locked by the running daemon for its whole life
     daemon.pid                   {"pid","started_at","version","socket"} of the running daemon
+  relay.db, relay.db-wal, relay.db-shm   the index (a cache), mode 0600
+  projects.list                  the known project roots, one per line
+  locks/<job>.events.lock        held for the moment one event is appended to a job's log
   logs/daemon.log                the daemon's log, JSON lines, 10 MB x 5 files
   logs/daemon.stderr.log         what the detached daemon prints, such as a crash trace
 ```
@@ -162,11 +166,62 @@ You can talk to the daemon yourself with `curl`:
 
 ```
 $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/version
-{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"capabilities":[],"agents_running":[]}
+{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse"],"agents_running":[]}
 ```
 
 `capabilities` lists the groups of endpoints the daemon offers. Clients check it, not the version
-number, before they use an endpoint. It is empty until the later task groups add endpoints.
+number, before they use an endpoint. `docs/api.md` describes every endpoint.
+
+## The index and how it stays current
+
+```mermaid
+flowchart LR
+  subgraph files["The source of truth"]
+    config["config.toml: accounts"]
+    list["projects.list: project roots"]
+    relayfiles["each project's .relay/state.json<br/>and .relay/events.jsonl"]
+    refs["git refs refs/relay/jobs/..."]
+    avail["accounts/&lt;provider&gt;-&lt;name&gt;/availability.json"]
+  end
+  writers["relay init, checkpoint, rollback<br/>and later commands"] -->|"appendEvent, one line at a time<br/>under the events lock"| relayfiles
+  writers -->|"relay init adds the root"| list
+  files -->|"rebuild when relay.db is missing,<br/>damaged or of an old version"| db[("relay.db")]
+  relayfiles -->|"new lines, on a file change<br/>and every 2 seconds"| db
+  db --> api["GET answers with Relay-Stream-Seq"]
+  db --> stream["stream_events: the event stream"]
+```
+
+The diagram shows where the index comes from. `relay.db` is only a cache: everything in it can be
+rebuilt from `config.toml`, `projects.list`, each project's `.relay/` files and the checkpoint refs
+in git. When the daemon starts and the file is missing, it builds a new one. When the file is
+damaged, the daemon renames it to `relay.db.broken-<time>` first; when it has an older schema
+version, the daemon deletes it. The log then says `Rebuilt the index from <n> projects.`
+
+While it runs, the daemon watches each job's `events.jsonl` and also checks it every 2 seconds.
+It reads only the complete lines added since its last read, so a line still being written waits
+for the next check, and a line that is not valid JSON is skipped and logged as
+`invalid_event_line`. When the file shrank or was replaced by another file, the daemon rebuilds
+that job from scratch (`job_rebuilt` in the log). The same check picks up roots added to
+`projects.list`, and finds workers whose process ended without a recorded end, which the event
+stream then reports once as `stopped`. Every change to the index is written, in the same
+transaction, as a row of the event stream, so the `Relay-Stream-Seq` header of a `GET` answer and
+the event `id`s describe the same history.
+
+Several relay processes may append to a job's `events.jsonl` at the same moment: the command in
+the terminal and, later, the daemon. Each append holds an `flock` lock on
+`locks/<job>.events.lock` while it reads the last event `id` and writes the next line, so `id`s
+stay in order and lines never mix. The kernel releases the lock when its holder dies.
+
+`relay doctor --reindex` forces a rebuild. It stops the daemon (as `relay daemon stop` does),
+deletes `relay.db` and its write-ahead log files, starts the daemon again, and prints:
+
+```
+$ relay doctor --reindex
+Rebuilt the index from .relay/ files in 2 projects.
+```
+
+Nothing about a job is lost, because nothing lives only in the index. If the daemon cannot start
+again, the command prints the same message as `relay daemon start` and exits with code 10.
 
 ## Reading the log
 
@@ -184,7 +239,9 @@ $ jq -c 'select(.level == "warn" or .level == "error")' ~/.relay/logs/daemon.log
 
 The main messages are `daemon_started` (with `socket` and `schema_version`), `daemon_stopping`
 (with the `signal`), `daemon_stopped`, `daemon_refused` (with the `reason` printed on standard
-error) and `peer_rejected` (a warning with the connecting `uid`). The log never holds environment
+error), `peer_rejected` (a warning with the connecting `uid`), `Rebuilt the index from <n>
+projects.`, `job_rebuilt`, `project_indexed`, `invalid_event_line` and `config_reloaded` (after a
+`SIGHUP`, which makes the daemon read the accounts in `config.toml` again). The log never holds environment
 variables, request bodies or headers, or hook fields outside the hook allow list.
 
 ## The security limit

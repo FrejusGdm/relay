@@ -7,6 +7,7 @@ import { versionRoute } from "../../src/api/routes/version";
 import { startApiServer } from "../../src/api/server";
 import type { LogFields, Logger } from "../../src/core/log";
 import { VERSION } from "../../src/core/version";
+import { openDatabase, streamEpoch } from "../../src/state/db";
 import { removeTempRelayHomes, tempRelayHome } from "../helpers/relay-home";
 
 afterAll(removeTempRelayHomes);
@@ -28,9 +29,10 @@ const STARTED = "2026-10-08T12:00:00.000Z";
 function startServer(allowedUid?: number) {
   const socketPath = join(tempRelayHome(), "relay.sock");
   const log = memoryLog();
-  const router = createRouter([versionRoute({ pid: process.pid, started_at: STARTED, schema_version: 1 })]);
+  const { db } = openDatabase(tempRelayHome());
+  const router = createRouter([versionRoute({ pid: process.pid, started_at: STARTED, schema_version: 1 }, db)]);
   const server = startApiServer({ socketPath, router, log, allowedUid });
-  return { socketPath, log, server };
+  return { socketPath, log, server, db };
 }
 
 // Sends raw bytes and collects everything the server writes until it closes the connection.
@@ -56,7 +58,7 @@ async function rawExchange(socketPath: string, bytes: string): Promise<string> {
 }
 
 describe("the API server", () => {
-  const { socketPath, log, server } = startServer();
+  const { socketPath, log, server, db } = startServer();
   afterAll(() => server.stop(100));
   const call = (path: string, init: RequestInit = {}) => fetch(`http://relay${path}`, { ...init, unix: socketPath });
 
@@ -65,13 +67,15 @@ describe("the API server", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("connection")).toBe("close");
     expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(response.headers.get("relay-stream-seq")).toBe("0");
     expect(await response.json()).toEqual({
       api: "v1",
       daemon_version: VERSION,
       pid: process.pid,
       started_at: STARTED,
       schema_version: 1,
-      capabilities: [],
+      stream_epoch: streamEpoch(db),
+      capabilities: ["accounts", "jobs", "events.sse"],
       agents_running: [],
     });
     expect(log.entries).toContainEqual(

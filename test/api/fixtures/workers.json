@@ -1,0 +1,32 @@
+{
+  "workers": [
+    {
+      "id": "w2",
+      "job_id": "3f9a2c1d",
+      "target": "codex:personal",
+      "mode": "headless",
+      "state": "starting",
+      "pid": null,
+      "provider_session_id": null,
+      "from_handoff": true,
+      "started_at": "2026-10-07T14:03:00.000Z",
+      "ended_at": null,
+      "exit_code": null,
+      "end_reason": null
+    },
+    {
+      "id": "w1",
+      "job_id": "3f9a2c1d",
+      "target": "claude:work",
+      "mode": "interactive",
+      "state": "stopped",
+      "pid": 2147483000,
+      "provider_session_id": "s1",
+      "from_handoff": false,
+      "started_at": "2026-10-07T14:02:00.000Z",
+      "ended_at": null,
+      "exit_code": null,
+      "end_reason": null
+    }
+  ]
+}

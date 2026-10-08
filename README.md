@@ -69,6 +69,7 @@ in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
 | [docs/daemon.md](docs/daemon.md) | The background service: its files, the `relay daemon` commands and the private socket |
 | [docs/adapters.md](docs/adapters.md) | How relay starts, watches and stops Claude Code and Codex, and the events adapters report |
 | [docs/testing-adapters.md](docs/testing-adapters.md) | The fake agents and scenario files that tests use instead of real providers |
+| [docs/api.md](docs/api.md) | The daemon's local API: every endpoint, the event stream and the errors |
 | `DESIGN.md`, `docs/design/` | The design direction and its working preview |
 | `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |
 | `openspec/` | Project rules (`config.yaml`) and detailed change proposals for the first version |

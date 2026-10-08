@@ -1,0 +1,17 @@
+{
+  "account": {
+    "target": "codex:personal",
+    "provider": "codex",
+    "provider_name": "Codex",
+    "account": "personal",
+    "configured": true,
+    "availability": {
+      "status": "unknown",
+      "reason": null,
+      "retry_at": null,
+      "measured_at": null,
+      "source": null
+    },
+    "usage": []
+  }
+}
