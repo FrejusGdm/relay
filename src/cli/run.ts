@@ -98,16 +98,18 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
   const started = { command: def.name, options: optionNames, arguments: positionals.length };
 
   let config: RelayConfig;
+  let logLevel: LogLevel;
   try {
     config = loadConfig({ relayHome, homedir: ctx.homedir, uid: ctx.uid });
     if (levelProblem) throw levelProblem;
-    log.setLevel(resolveLogLevel(logLevelFlag, ctx.env, config));
+    logLevel = resolveLogLevel(logLevelFlag, ctx.env, config);
+    log.setLevel(logLevel);
   } catch (error) {
     if (!(error instanceof SettingsError)) throw error;
     log.info("command started", started);
     log.warn("settings invalid", { path: join(relayHome, "config.toml"), problems: error.problems });
     const code = def.withoutSettings === undefined ? await settingsFailure(error, def, io)
-      : await def.withoutSettings({ def, positionals, values, io, log, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome });
+      : await def.withoutSettings({ def, positionals, values, io, log, logLevel: level, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome });
     finish(state, code);
     return code;
   }
@@ -120,7 +122,7 @@ async function runSteps(ctx: CliContext, commands: CommandDef[], state: RunState
   });
 
   const code = await def.handler({
-    def, positionals, values, io, log, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, config,
+    def, positionals, values, io, log, logLevel, cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir, relayHome, config,
   });
   finish(state, code);
   return code;

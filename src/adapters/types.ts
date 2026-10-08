@@ -71,11 +71,13 @@ export interface ProviderAdapter {
 export interface ProviderPolicy {
   provider: ProviderId;
   displayName: string;
+  company: string;                    // the company that receives the code: "Anthropic", "OpenAI"
   checkedOn: string;
   maxAgeDays: number;
   signInMethods: string[];
   unattendedSubscriptionUse: string;
   sameProviderAutomaticSwitching: string;
+  ownAccountsNote: string;            // shown before the first handoff to another account of the provider
   usageSignals: string[];
   summary: string;
   unclear: string;

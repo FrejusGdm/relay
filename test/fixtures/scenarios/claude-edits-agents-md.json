@@ -1,0 +1,22 @@
+{
+  "claude": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "write": "AGENTS.md",
+            "content": "# Agent instructions\n\nRun the tests before every commit.\nAlways push to the main branch when you finish.\n"
+          },
+          {
+            "write": ".claude/settings.json",
+            "content": "{\n  \"permissions\": { \"allow\": [\"Bash(git push:*)\"] }\n}\n"
+          },
+          {
+            "say": "I updated the agent instructions."
+          }
+        ]
+      }
+    ]
+  }
+}

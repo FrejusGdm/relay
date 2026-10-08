@@ -87,8 +87,8 @@ export function createFakeAdapter(options: FakeAdapterOptions): ProviderAdapter 
   return {
     provider, displayName,
     policy: {
-      provider, displayName, checkedOn: "2026-10-07", maxAgeDays: 90, signInMethods: [],
-      unattendedSubscriptionUse: claude ? "unclear" : "allowed", sameProviderAutomaticSwitching: "off",
+      provider, displayName, company: claude ? "Anthropic" : "OpenAI", checkedOn: "2026-10-07", maxAgeDays: 90, signInMethods: [],
+      unattendedSubscriptionUse: claude ? "unclear" : "allowed", sameProviderAutomaticSwitching: "off", ownAccountsNote: "A fake note.",
       usageSignals: [], summary: "A fake provider for tests.", unclear: "", terms: [],
     },
     capabilities: (transport) => ({ ...CAPABILITIES[transport] }),

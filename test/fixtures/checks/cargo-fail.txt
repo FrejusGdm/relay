@@ -1,0 +1,32 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (target/debug/deps/relay-8f32a4)
+
+running 203 tests
+test text::removes_invisible_characters ... ok
+test notes::reads_structured_notes ... FAILED
+test notes::requests_real_provider ... ignored
+
+failures:
+
+---- notes::reads_structured_notes stdout ----
+thread 'notes::reads_structured_notes' panicked at src/notes.rs:42:5:
+assertion `left == right` failed
+  left: ""
+ right: "Continue the task"
+
+failures:
+    notes::reads_structured_notes
+
+test result: FAILED. 200 passed; 1 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/handoff.rs (target/debug/deps/handoff-9a1c73)
+
+running 32 tests
+test keeps_task_description ... ok
+test starts_next_worker ... ok
+test uses_real_provider ... ignored
+
+test result: ok. 31 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+error: 1 target failed:
+    `--lib`

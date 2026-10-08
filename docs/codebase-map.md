@@ -2,7 +2,9 @@
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, task groups 1 to 4 of
-`add-handoff-evaluation`, and task groups 1 to 7 of `add-website`.
+`add-relay-switch` (except tasks 1.5, 2.3 and 3.5), task groups 1 to 7 of
+`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 6, 9 and 10 of
+`add-daemon-api-and-status`, and task groups 1 to 3 of `add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
 `docs/first-version-index.md` lists every file that the six first-version changes will add, and
@@ -14,21 +16,27 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, hook.ts,<br/>hooks.ts, statusline.ts, account.ts,<br/>providers.ts, policy.ts, not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, run.ts, hook.ts,<br/>hooks.ts, statusline.ts, daemon.ts, doctor.ts,<br/>status.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
     hooks["src/hooks/<br/>hook-command.ts, fields.ts, spool.ts: relay hook<br/>install.ts: relay's entries in settings files<br/>statusline.ts: relay statusline claude<br/>fold.ts: hook events into availability"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml<br/>edit.ts: the one writer of config.toml"]
-    platform["src/platform/<br/>toml.ts: the only Bun-specific call<br/>clock.ts: now() and, for tests, setClock()"]
-    adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>mapper.ts, worker.ts: shared parts of the workers<br/>claude/: adapter, stream mapper, headless and<br/>interactive workers, hook mapper<br/>codex/: adapter, rpc, protocol, app-server and<br/>exec mappers and workers, interactive worker<br/>each: policy.toml, tested-versions.json"]
+    platform["src/platform/<br/>toml.ts: the TOML parser<br/>clock.ts: now() and, for tests, setClock()<br/>libc.ts: the only bun:ffi import<br/>peer-credentials.ts: who is on a socket<br/>file-lock.ts: flock locks"]
+    adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>mapper.ts, worker.ts: shared parts of the workers<br/>claude/: adapter, stream mapper, headless and<br/>interactive workers, hook mapper<br/>codex/: adapter, rpc, protocol, app-server and<br/>exec mappers and workers, interactive worker<br/>each: policy.toml, tested-versions.json;<br/>codex/protocol-used.json"]
     policies["src/policies/<br/>schema.ts, load.ts: the policy files<br/>switching.ts: mayAutoSwitch"]
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
-    daemon["src/daemon/<br/>empty until add-daemon-api-and-status"]
+    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list"]
+    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs, events"]
+    status["src/status/<br/>model.ts: rows, roles, closing sentence<br/>render-text.ts, render-json.ts, time-format.ts<br/>sources.ts: the saved state without the daemon"]
+    hooks["src/hooks/<br/>mapping.ts: what a hook event says about an account"]
+    state["src/state/<br/>schema.sql, db.ts: relay.db<br/>index-builder.ts, apply-event.ts: filling it<br/>queries.ts, availability.ts: reading it<br/>projects-list.ts: projects.list"]
+    client["src/client/<br/>api-client.ts: the only fetch, over the socket<br/>ensure-daemon.ts: starts the daemon"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
     job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock, the events lock<br/>and the config lock<br/>exclude.ts: the /.relay/ exclude line"]
     secrets["src/secrets/<br/>scan.ts: the gitleaks scans<br/>names.ts: secret-like file names<br/>redact.ts: secret-looking values in facts"]
     text["src/text/<br/>invisible.ts: the one list<br/>of invisible characters"]
     runfolder["src/run/<br/>run.ts: relay run, from the checks to the exit code<br/>job-context.ts: the job of this checkout<br/>instructions.ts: relay's fixed instructions<br/>worker-record.ts: the worker records<br/>progress.ts: the lines of a headless run"]
+    handoff["src/handoff/<br/>the parts of relay switch: account.ts, settings.ts, files.ts,<br/>checks.ts and check-parsers/, notes-request.ts, notes-parse.ts,<br/>notes-build.ts, context.ts, claims.ts, fence.ts,<br/>render-checkpoint.ts, verify-file.ts, scan.ts, ask.ts,<br/>instruction-files.ts, permission.ts, allow-list.ts"]
   end
 
   subgraph test["test/"]
@@ -40,8 +48,10 @@ flowchart TD
     coretests["core/: paths, relay folder, settings and log tests<br/>fixtures/config/: settings files"]
     fake["fixtures/fake-provider/<br/>guard programs, fake agent, scenarios"]
     buildtests["build/: no-network.test.ts"]
+    daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
     runtests["run/: relay run with the fake agents,<br/>headless, interactive and end to end"]
+    handofftests["handoff/, config/: the handoff parts<br/>handoff/job.ts, asker.ts: a job and a question function<br/>fixtures/scenarios/: fake agents in a handoff<br/>fixtures/checks/, fixtures/checkpoint-md/:<br/>test outputs and checkpoint.md files"]
     adaptertests["adapters/, accounts/, policies/, docs/:<br/>adapter core, accounts, policies and document tests<br/>adapters/contract.ts, fixtures.ts, registry.ts:<br/>the contract suite<br/>fixtures/providers/: the provider fixtures<br/>helpers/child.ts, helpers/fake-programs.ts"]
   end
 
@@ -77,12 +87,31 @@ flowchart TD
   jobtests -->|"check"| job
   jobtests -->|"check"| secrets
   jobtests -->|"check"| checkpoint
+  commands -->|"daemon.ts starts, stops and asks through"| client
+  client -->|"starts relay daemon run"| daemon
+  client -->|"GET /v1/version over relay.sock"| api
+  daemon -->|"serves the API with"| api
+  daemon -->|"locks daemon.lock with"| platform
+  api -->|"checks each connection's user with"| platform
+  daemontests -->|"check"| daemon
+  daemontests -->|"check"| api
   adapters -->|"reads the time from"| platform
   accounts -->|"finds the home and relay folders with"| core
   fakes -->|"fake-adapter.ts implements the interface of"| adapters
   adaptertests -->|"start fake-claude through process.ts"| fakes
   adaptertests -->|"check"| adapters
   adaptertests -->|"check"| accounts
+  daemontests -->|"check"| state
+  commands -->|"status.ts builds its view with"| status
+  status -->|"asks the daemon through"| client
+  status -->|"without the daemon, indexes in memory with"| state
+  status -->|"reads spooled hooks with"| hooks
+  daemon -->|"opens, rebuilds and follows the index with"| state
+  api -->|"answers from"| state
+  state -->|"reads checkpoints with"| checkpoint
+  state -->|"reads state.json with"| job
+  commands -->|"init.ts adds the project to projects.list with"| state
+  checkpoint -->|"save.ts adds the project of every job it finds to projects.list with"| state
   commands -->|"account.ts, providers.ts use"| adapters
   commands -->|"account.ts manages"| accounts
   commands -->|"account.ts writes config.toml through"| config
@@ -97,6 +126,10 @@ flowchart TD
   runfolder -->|"starts and watches the agent through"| adapters
   runfolder -->|"checks the account and its sign-in with"| accounts
   runfolder -->|"takes the worker lock and appends events with"| job
+  handoff -->|"saves, scans and reads through"| checkpoint
+  handoff -->|"asks the outgoing agent through"| adapters
+  handoff -->|"adds to the allow list through"| config
+  handofftests -->|"check, with fakes from"| handoff
 ```
 
 The diagram shows how the pieces connect. `bun run relay` starts `src/cli/main.ts`, which passes
@@ -107,8 +140,9 @@ argument counts. In this version every handler is `not-built.ts`, except `hook.t
 `relay hook`, `init.ts` for `relay init`, `checkpoint.ts` for `relay checkpoint`,
 `checkpoints.ts` for `relay checkpoints`, `rollback.ts` for `relay rollback`, which restores an
 earlier checkpoint's files after saving an undo checkpoint, `accept-git-changes.ts` for
-`relay accept-git-changes`, `account.ts` for `relay account`, `providers.ts` for
-`relay providers`, `policy.ts` for `relay policy show` and `run.ts` for `relay run`. `--version` prints the version from `src/core/version.ts`, which reads the
+`relay accept-git-changes`, `daemon.ts` for `relay daemon`, `account.ts` for `relay account`,
+`providers.ts` for `relay providers`, `policy.ts` for `relay policy show` and `run.ts` for
+`relay run`. `--version` prints the version from `src/core/version.ts`, which reads the
 `version` field of `package.json`. `docs/cli.md` describes the command line and its exit codes.
 
 Before a command's handler runs, `runCli` finds the relay folder with `src/core/paths.ts`,
@@ -128,8 +162,43 @@ files" section of `docs/cli.md` describes the events, the fields and what is nev
 
 `src/platform/` holds calls that only work on Bun, so that a later move to another runtime
 changes one folder, and `clock.ts`, the one clock that every comparison with a reset time or a
-file's age reads. `src/adapters/providers.ts` names the two supported providers, `claude` and
-`codex`. `src/daemon/` only holds a README until the change named in the diagram fills it.
+file's age reads. `src/platform/libc.ts` is the only file that calls into the C library through
+`bun:ffi`: `peer-credentials.ts` uses it to ask the kernel which user is on the other end of a
+socket, and `file-lock.ts` uses it for `flock` locks, which the kernel releases when their holder
+dies. `src/adapters/providers.ts` names the two supported providers, `claude` and `codex`.
+
+`src/cli/commands/daemon.ts` is `relay daemon`. `relay daemon run` loads `src/daemon/main.ts`,
+which checks the runtime directory with `src/daemon/paths.ts`, takes the daemon lock and writes
+the pid file with `src/daemon/singleton.ts`, logs to `logs/daemon.log` through
+`src/daemon/log.ts`, and starts the listener in `src/api/server.ts`. The listener checks each
+connecting user, hands the bytes to the small HTTP/1.1 layer in `src/api/http1.ts`, and that layer
+passes each request to `src/api/router.ts`, which finds the handler in `src/api/routes/` and
+builds error answers with `src/api/errors.ts`. The other `relay daemon` actions, and
+`relay doctor --reindex` in `src/cli/commands/doctor.ts`, run in the command's own process:
+`src/client/ensure-daemon.ts` starts a detached daemon, and `src/client/api-client.ts` asks a
+running one for its version or its jobs, after it has checked that the runtime directory is
+private and the socket is the user's own.
+
+Before it listens, `main.ts` opens `relay.db` with `src/state/db.ts`, which creates it from
+`src/state/schema.sql` when it is missing, damaged or of an old version; `src/state/index-builder.ts`
+then fills it from `config.toml`, `projects.list` (`src/state/projects-list.ts`), each project's
+`.relay/` files and the checkpoint refs, which it reads with `src/checkpoint/list.ts`.
+`src/state/apply-event.ts` is the one place that turns an event of the earlier phases into rows.
+`src/daemon/follow.ts` reads new lines of each `events.jsonl` and new roots in `projects.list`, and
+writes each change to the event stream in `src/api/sse.ts`. The routes read the index through
+`src/state/queries.ts`, with `src/state/availability.ts` for the stale reset rule, and
+`src/api/snapshot.ts` adds the `Relay-Stream-Seq` header. `src/cli/commands/status.ts` is `relay status`: it finds the job, asks the daemon through
+`src/client/api-client.ts`, or else builds the saved state with `src/status/sources.ts` (an index
+in memory, a read-only `relay.db` and the hook spool read with `src/hooks/mapping.ts`), turns the
+data into rows with `src/status/model.ts`, and prints them with `src/status/render-text.ts` or
+`render-json.ts`. `src/client/ensure-daemon.ts` also has `ensureDaemon`, which `relay run` and
+`relay switch` will call. `docs/daemon.md` describes the daemon,
+its files, the index, `relay status` and the checks on the way to an answer in diagrams, and `docs/api.md` describes
+every endpoint. The tests in `test/platform/`, `test/daemon/`, `test/api/`, `test/state/`,
+`test/client/` and `test/status/` (with its golden files in `test/status/golden/`) use the
+short relay folders and test daemons from `test/helpers/relay-home.ts`, because a socket path may
+have at most 103 bytes on macOS; `test/api/fixtures/` holds the expected answers of the read
+endpoints.
 
 `src/adapters/` holds the adapter interface of `add-provider-adapters` in `types.ts` and the
 registry that gives each provider's adapter in `registry.ts`. `process.ts` is the only code that starts an agent process:
@@ -225,8 +294,8 @@ each settings file in a new relay folder from `makeRelayHome`, or read one from
 `test/fixtures/config/`. A credential value in a test is built at run time, so none is committed.
 
 `test/build/no-network.test.ts` searches every file under `src/` and fails when relay's code could
-open a network connection, other than to relay's own socket (`src/client/`) or to T3 Code on this
-computer (`src/t3/client.ts` and `src/t3/oauth.ts`). `scripts/smoke-test.sh` runs a built `relay` program and checks its
+open a network connection, other than to relay's own socket (`src/client/`, and the listener in
+`src/api/server.ts`) or to T3 Code on this computer (`src/t3/client.ts` and `src/t3/oauth.ts`). `scripts/smoke-test.sh` runs a built `relay` program and checks its
 version, its help, its exit code and its log file. The workflow in `.github/workflows/ci.yml`
 runs the type check and the tests, builds the program for Linux and macOS, runs the smoke test on
 each, and scans the dependencies and the git history. `.github/dependabot.yml` asks GitHub to
@@ -245,8 +314,9 @@ files with `src/job/files.ts` and `src/job/state.ts`, adds the exclude line with
 `src/job/exclude.ts`, records the git trust record with `src/git/trust.ts`, and appends the first
 event with `appendEvent` from `src/job/events.ts`. That function is the only code that writes
 `events.jsonl`, and `test/job/single-writer.test.ts` fails if another source file does.
-`src/job/lock.ts` holds the job lock, the short events lock and the config lock, which
-`src/core/config/edit.ts` holds while it changes `config.toml`, under `RELAY_HOME/locks/`, and
+`src/job/lock.ts` holds the job lock, the short events lock (an `flock` lock) and the config
+lock, which `src/core/config/edit.ts` holds while it changes `config.toml`, under
+`RELAY_HOME/locks/`, and
 `src/job/names.ts` names the job files for the modules that need the list. `src/text/invisible.ts`
 removes invisible characters from the job title, and `src/git/trust.ts` uses the same list to
 mark them in its report. `src/secrets/scan.ts` runs gitleaks on text relay builds itself, and
@@ -254,6 +324,19 @@ mark them in its report. `src/secrets/scan.ts` runs gitleaks on text relay build
 actions registered in `src/core/cleanup.ts`: the scan removes its temporary files and stops
 gitleaks, and `relay init` removes what it had created. `docs/checkpoints.md` describes
 both flows in diagrams.
+
+`src/handoff/` holds the parts of `relay switch` that `add-relay-switch` builds before its switch
+engine. `account.ts` turns the command's argument into an account, and `settings.ts` keeps each
+job's mode, permission ceiling and checks in `RELAY_HOME/jobs/<job>/handoff-settings.json`, written
+through `files.ts`. `checks.ts` runs the job's checks and `check-parsers/` reads their counts.
+`notes-request.ts` asks the outgoing agent for notes through its adapter and `notes-parse.ts` reads
+them; `notes-build.ts` and `context.ts` gather the facts relay holds itself from the event log and
+git; `claims.ts` compares the notes with those facts. `render-checkpoint.ts` writes
+`.relay/checkpoint.md` with the fence from `fence.ts`, and `verify-file.ts` counts the rows of
+`.relay/verify.md`. `scan.ts` passes everything a handoff writes or sends to the secret scan.
+`instruction-files.ts`, `permission.ts` and `allow-list.ts` hold the questions and refusals that run
+before the outgoing agent is stopped, and `ask.ts` is how they ask. `docs/handoff.md` shows the
+order of a handoff and its safety checks in a diagram.
 
 `relay init` then saves the first checkpoint, and `src/cli/commands/checkpoint.ts` saves the next
 ones. Both call `saveCheckpoint` in `src/checkpoint/save.ts`, the one function that saves a
@@ -287,80 +370,143 @@ messages.
 
 `eval/handoff/` holds the opt-in evaluation of `add-handoff-evaluation`. It is a separate Bun
 program, run with `bun run eval:handoff <command>`, and is never compiled into the `relay` binary.
-Today it has its command line, its git runner, its JUnit reader, the fixture check, the four
-fixture tasks, the plan files, the `plan` command and the checks that `run` makes before it starts.
+It has its command line, the four fixture tasks, the plan files, the checks that `run` makes
+before it starts, the runner that performs baseline and handoff runs through `relay`, and the
+summary with its decision rules. Its own tests use a stub `relay` instead of the real program, so
+they start no agent.
 
 ```mermaid
 flowchart TD
   script["package.json script eval:handoff"]
-  home["$RELAY_EVAL_HOME<br/>targets.toml, campaigns/&lt;name&gt;/campaign.json"]
+  home["$RELAY_EVAL_HOME<br/>targets.toml, campaigns/&lt;name&gt;/campaign.json,<br/>runs/&lt;run-id&gt;/result.json, summary.md, summary.csv,<br/>work/&lt;run-id&gt;/repo while a run lasts"]
+  relay["relay program<br/>$RELAY_BIN or relay on PATH"]
 
   subgraph eval["eval/handoff/"]
     main["src/main.ts<br/>the five commands and the usage text"]
     plan["src/plan.ts<br/>reads plans and targets.toml, lists the runs, estimates the time"]
-    campaign["src/campaign.ts<br/>the run command so far, campaign.json"]
+    campaign["src/campaign.ts<br/>the run command: confirmation, campaign.json,<br/>resuming, progress lines, exit codes"]
     guards["src/guards.ts<br/>CI, terminal, fixture, disk checks and the confirmation"]
+    runner["src/runner.ts<br/>one baseline or handoff run"]
+    relaycli["src/relay-cli.ts<br/>every relay command the harness runs"]
+    events["src/events.ts<br/>event types and the events.jsonl reader"]
+    interrupt["src/interrupt.ts<br/>steps:P and the two event points"]
+    scratch["src/scratch.ts and src/safety.ts<br/>scratch repository, four safety values,<br/>bypass flags, contamination, cleanup"]
+    snapshot["src/snapshot.ts<br/>per-step snapshots under refs/relay-eval/steps/"]
+    measure["src/measure.ts, src/rework.ts, src/claims.ts<br/>tests on an export, rework, verify.md"]
+    result["src/result.ts<br/>result.json and attempt files"]
+    summary["src/summary.ts<br/>summarize and annotate"]
     fixtures["src/fixtures.ts<br/>reads task.toml, runs check-fixtures"]
     junit["src/junit.ts<br/>counts passed and failed tests in JUnit XML"]
-    gitrun["src/git.ts<br/>runs git without hooks or fsmonitor"]
-    pyrunner["runners/unittest_junit.py<br/>runs Python tests and writes JUnit XML"]
+    gitrun["src/git.ts<br/>runs git without hooks or fsmonitor; exports commits"]
     plans["plans/<br/>smoke.toml, standard.toml, full.toml"]
-    tasks["tasks/<br/>rate-limiter, ledger-import, job-queue, markdown-toc:<br/>task.toml, task.md, .start/, .acceptance/, solution/"]
-    etests["test/<br/>unit tests, golden/, data/junit/ and data/fixtures/"]
+    tasks["tasks/<br/>rate-limiter, ledger-import, job-queue, markdown-toc"]
+    stub["test/bin/relay<br/>the stub relay that plays scenario files"]
   end
 
   script --> main
   main -->|"plan"| plan
   main -->|"run"| campaign
+  main -->|"summarize, annotate"| summary
   main -->|"check-fixtures"| fixtures
-  plan -->|"reads"| plans
-  plan -->|"reads expected minutes from task.toml"| tasks
-  plan -->|"reads targets.toml"| home
-  campaign -->|"expands the plan with"| plan
   campaign -->|"checks before asking yes"| guards
-  campaign -->|"writes campaign.json"| home
-  guards -->|"git status of the fixtures through"| gitrun
-  fixtures -->|"copies .start/, solution/, .acceptance/ to a temporary folder"| tasks
-  fixtures -->|"runs bun test, or Python tests through"| pyrunner
-  fixtures -->|"reads the results with"| junit
-  etests -->|"test"| main
+  campaign -->|"each pending run"| runner
+  runner --> scratch
+  runner -->|"follows .relay/events.jsonl with"| events
+  runner -->|"decides when to switch with"| interrupt
+  runner -->|"baselines"| snapshot
+  runner --> measure
+  runner -->|"writes"| result
+  runner -->|"init, run, switch, checkpoint, status"| relaycli
+  relaycli --> relay
+  stub -.->|"stands in for, in tests"| relay
+  measure -->|"reads reports with"| junit
+  scratch -->|"git archive of .start/"| tasks
+  scratch --> gitrun
+  snapshot --> gitrun
+  measure --> gitrun
+  summary -->|"reads result files"| home
+  result --> home
+  plan -->|"reads"| plans
+  fixtures --> tasks
 ```
 
-The diagram shows the parts of the harness that exist so far. `bun run eval:handoff` starts
-`src/main.ts`. `summarize` and `annotate` still print `Not built yet.`, and an unknown command
-prints the usage text and exits with code 2.
+The diagram shows how the parts of the harness depend on each other. `bun run eval:handoff`
+starts `src/main.ts`, which hands each command to its module. Only `src/relay-cli.ts` starts the
+`relay` program, and only `src/git.ts` starts git. In the tests, `$RELAY_BIN` points at the stub
+in `test/bin/`, shown with a dotted line.
 
 `plan <plan>` reads a plan file from `plans/` through `src/plan.ts`, and the founder's
 `targets.toml` from `$RELAY_EVAL_HOME` (by default `~/.relay-eval`), which maps each role of the
 plan, such as `claude`, to one of his relay accounts. It expands the plan into the ordered list of
 runs: all baselines first, then all handoffs, with repetition 1 of every run before any
 repetition 2. It prints the number of runs, the accounts and the expected agent time, and starts
-nothing. A role that `targets.toml` does not map stops it with exit code 3. The `full` plan has
-four optional handoffs to the role `claude_second`, which it leaves out when that role is not
-mapped.
+nothing.
 
-`run <plan>` makes every check that must pass before the evaluation spends a subscription. It
-refuses when `CI` is set or standard input is not a terminal, reads the plan and the targets, and
-stops when an existing campaign's `campaign.json` records a different plan hash, when a fixture
-has uncommitted changes, or when less than 1 GB is free. These checks live in `src/guards.ts`.
-Then it names the companies and accounts that will receive the fixture code and the expected
-time, and asks the founder to type `yes`. After a `yes`, `src/campaign.ts` writes `campaign.json`
-for a new campaign. Running the runs comes in a later task group, so for now `run` then prints
-`Not built yet.`
+`run <plan>` first makes every check that must pass before the evaluation spends a subscription
+(`src/guards.ts`): it refuses when `CI` is set or standard input is not a terminal, and stops when
+an existing campaign's `campaign.json` records a different plan hash or accounts, when a fixture
+has uncommitted changes, or when less than 1 GB is free. It skips every run that already has a
+`result.json`, and runs whose last attempt was a harness error unless `--retry-errors` is given.
+Then it names the companies and accounts that will receive the fixture code, asks the founder to
+type `yes`, writes `campaign.json` for a new campaign, looks for `relay`, and gives each pending run
+to `src/runner.ts`. It stops at once with exit code 5 when a target reaches its limit, 130 after
+Ctrl-C, and 1 when relay started an agent with a permission bypass flag.
+
+```mermaid
+sequenceDiagram
+  participant H as runner.ts
+  participant S as scratch repository
+  participant R as relay run
+  participant W as relay switch
+  H->>S: git archive of .start/, one commit, the person's note in NOTES.md
+  H->>S: relay init, .relay/task.md, record the four safety values, snapshot 0
+  H->>R: relay run with the first target, --headless --json
+  loop every 500 ms
+    H->>S: read new lines of .relay/events.jsonl
+    Note over H: count steps, snapshot after each step of a baseline,<br/>watch for a bypass flag, the fixture path and the time limit
+  end
+  H->>W: at the interrupt point, relay switch to the next target, --yes --json
+  W->>R: relay run stops the first agent and starts the next one
+  R-->>H: exits when the next agent ends
+  H->>S: relay checkpoint --message "eval final" --json
+  H->>H: tests on exports of the final and handoff checkpoints, rework, verify.md
+  H->>S: recheck the four safety values
+  H->>H: write result.json, then remove the work folder and relay's job worktrees
+```
+
+The sequence shows one handoff run. A baseline run is the same without `relay switch`; instead the
+runner snapshots the working tree after every step into `refs/relay-eval/steps/<n>` with a
+temporary index, and afterwards measures the snapshots at 25, 50 and 75 percent of its steps as
+control points. A handoff run switches after the step chosen by `src/interrupt.ts` from the median
+step count of the completed baselines. Every test run happens in a temporary export made with
+`git archive`, where the hidden acceptance tests are added as `__acceptance__/`, so they never
+reach a folder an agent works in. Snapshot 0 holds the starting tree with the person's note, and
+rework is measured from it. The four safety values are the `main` tip, its reflog, the index
+entries from `git ls-files -s` and `NOTES.md`; any change is a safety violation in the result. The
+index is compared by its entries, so a `git status` that only rewrites the index's stat cache is
+not a violation. Runs stopped by a limit, by Ctrl-C
+or by a harness error are saved as `attempt-<n>.json` and stay pending.
+
+`summarize <campaign>` reads only the result files through `src/summary.ts`. It writes
+`summary.csv` with one row per run and `summary.md` with a header, a verdict and a rule table per
+handoff direction, the outcomes per task, run kind, direction and point, and the runs that need a
+look. `annotate <campaign> <run-id> <text>` saves a note in that run's `result.json`, and the next
+summary lists it.
 
 `check-fixtures` reads each task's `task.toml` through `src/fixtures.ts`. For each task it copies
 the starting repository from `.start/` to a temporary folder, runs the visible tests, then adds the
 hidden acceptance tests as `__acceptance__/` and runs them. It does the same again with the
 reference solution from `solution/` copied over the start. Every run writes JUnit XML, which
 `src/junit.ts` reads with Bun's `HTMLRewriter`. Python tasks write that XML through
-`runners/unittest_junit.py`. A task is ready when its visible tests pass, enough acceptance tests
-fail at the start, and every test passes with the solution. Three tasks are TypeScript on Bun and
-`markdown-toc` is Python with only the standard library, and none needs an installation or the
-network.
+`runners/unittest_junit.py`. None of the four tasks needs an installation or the network.
 
-`src/git.ts` is the one place where the harness runs git. It turns off hooks and
-`core.fsmonitor` and sets the author `relay eval`. Today the fixture check of `run` uses it; later
-task groups use it for the scratch repositories.
+`test/bin/relay` is a stub of the `relay` program for the harness's tests. It implements
+`--version`, `init`, `run`, `checkpoint`, `checkpoints`, `switch` and `status` with the JSON that
+the real commands print, writes `.relay/events.jsonl` and checkpoint commits under `refs/relay/`,
+and plays the agents' edits and commands from the scenario file named by `RELAY_STUB_SCENARIO`.
+The tests build a committed copy of the harness in a temporary folder, so runs can export fixtures
+with `git archive` even where the checkout is not a git repository. `test/data/campaigns/` holds
+four sample campaigns, and `test/golden/` the summaries they must produce.
 
 A bare `bun test` at the repository root also runs the harness's own tests, because `bunfig.toml`
 sets the whole repository as the test root (see the website section below), and
@@ -379,3 +525,42 @@ checks that Playwright runs. `site/scripts/` holds the font download script, the
 of a running copy of the site, and the deployment script. `bunfig.toml` sets the test root to the whole repository so that
 `bun test` finds `site/test/`. `docs/website.md` describes the files with a diagram and says how to
 get the fonts and run the checks.
+
+## The Mac app
+
+`mac/` holds the menu-bar app of the OpenSpec change `add-mac-menu-bar-app`. It is a Swift package
+that is built and tested only by the `.github/workflows/mac-app.yml` workflow on GitHub's macOS
+runner, never on a developer's Mac.
+
+```mermaid
+flowchart TD
+  pkg["mac/Package.swift<br/>no package dependencies"]
+  kit["Sources/RelayKit/<br/>Socket/: finding and checking relay.sock, the peer check<br/>HTTP/: requests and the response reader<br/>API/: models, decoding, DaemonClient<br/>Events/: the server-sent events parser and stream<br/>Store/: RelayStore, the state that follows the daemon<br/>Card/: CardModel, every word the card shows"]
+  ui["Sources/RelayUI/<br/>TinyCard, ExpandedCard, WorkerRow, MenuCard<br/>Theme, Typography, Glyph, Motion, FontLoader"]
+  app["Sources/Relay/<br/>RelayApp.swift: the menu-bar scene and AppDelegate"]
+  support["Tests/Support/<br/>FakeDaemon, FixedClock, Fixtures, Sample"]
+  fixtures["Tests/Fixtures/api/<br/>JSON answers in the daemon's shapes"]
+  tests["Tests/RelayKitTests/, Tests/RelayUITests/"]
+  scripts["scripts/fetch-fonts.sh, make-app.sh, smoke-test.sh<br/>Support/Info.plist, Resources/Fonts/SOURCES.md"]
+  ci[".github/workflows/mac-app.yml"]
+  daemon["relay daemon<br/>~/.relay/run/relay.sock"]
+
+  pkg --> kit
+  pkg --> ui
+  pkg --> app
+  ui --> kit
+  app --> ui
+  kit -->|"HTTP/1.1 over the Unix socket only"| daemon
+  tests --> support
+  support -->|"serves"| fixtures
+  ci -->|"downloads fonts, runs swift test, builds Relay.app"| scripts
+```
+
+The diagram shows the folders of the Mac app and how they depend on each other. `RelayKit` has no
+SwiftUI and holds everything that talks to the daemon: it checks that the socket folder is private
+and that the daemon runs as the same user before it sends a byte. Its `RelayStore` keeps the
+app's copy of the daemon's state, and `CardModel` turns that state into every word of the card,
+so the views in `RelayUI` hold no rules. `Relay` is the app itself. The tests run against `FakeDaemon`, a small
+Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
+downloads the fonts, runs the tests (which also render the cards to PNG files), builds and signs
+`Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots.

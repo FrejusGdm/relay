@@ -1,0 +1,17 @@
+{
+  "account": {
+    "target": "claude:work",
+    "provider": "claude",
+    "provider_name": "Claude Code",
+    "account": "work",
+    "configured": true,
+    "availability": {
+      "status": "rate_limited",
+      "reason": "Claude Code reported a rate limit",
+      "retry_at": null,
+      "measured_at": "2026-10-07T14:02:11.402Z",
+      "source": "hook"
+    },
+    "usage": []
+  }
+}

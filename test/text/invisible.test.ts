@@ -11,6 +11,7 @@ const RANGES: [number, number][] = [
   [0x202a, 0x202e],
   [0x2060, 0x2064],
   [0x2066, 0x2069],
+  [0xfe00, 0xfe0f],
   [0xfeff, 0xfeff],
   [0xe0000, 0xe007f],
   [0xe0100, 0xe01ef],
@@ -23,7 +24,7 @@ test.each(RANGES.flatMap(([first, last]) => [first, last]).map((code) => [code.t
   },
 );
 
-test.each([0x00ac, 0x00ae, 0x200a, 0x2010, 0x2027, 0x202f, 0x2065, 0x206a, 0xe0080, 0xe01f0].map((code) => [code.toString(16).toUpperCase(), code] as const))(
+test.each([0x00ac, 0x00ae, 0x200a, 0x2010, 0x2027, 0x202f, 0x2065, 0x206a, 0xfdff, 0xfe10, 0xe0080, 0xe01f0].map((code) => [code.toString(16).toUpperCase(), code] as const))(
   "U+%s, next to a range, is kept",
   (_, code) => {
     const text = `a${String.fromCodePoint(code)}b`;

@@ -5,8 +5,10 @@ The source is in `src/cli/`. In this version every command shows its help and ch
 arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
 `relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
-`relay statusline`, which `docs/hooks.md` describes, and `relay run`, which the section "Running an
-agent" of `docs/adapters.md` describes; the other commands do not yet. The change named in the "Built by" column builds each one.
+`relay statusline`, which `docs/hooks.md` describes, `relay daemon` and
+`relay doctor --reindex`, which `docs/daemon.md` describes, and `relay run`, which the section
+"Running an agent" of `docs/adapters.md` describes; the other commands do not yet. The change
+named in the "Built by" column builds each one.
 
 ## Commands
 
@@ -19,7 +21,7 @@ agent" of `docs/adapters.md` describes; the other commands do not yet. The chang
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
 | `accept-git-changes` | `relay accept-git-changes` | none | `add-checkpoint-engine` |
 | `switch` | `relay switch <provider[:account]>` | 1 | `add-relay-switch` |
-| `status` | `relay status` | none | `add-daemon-api-and-status` |
+| `status` | `relay status [--job <id>] [--json]` | none | `add-daemon-api-and-status` |
 | `account` | `relay account <list\|add\|status\|login\|remove> [<provider> <name> \| <provider:name>]` | 1 to 3 | `add-provider-adapters` |
 | `providers` | `relay providers [--json]` | none | `add-provider-adapters` |
 | `policy` | `relay policy show <provider>` | 2 | `add-provider-adapters` |
@@ -216,7 +218,9 @@ the log has stopped, an unexpected error prints only its first line, `relay: une
 - Errors and the "not built yet" message go to standard error. Every line there starts with
   `relay: `, except hint lines, which start with `Run "relay`, and the messages of
   `add-checkpoint-engine` commands, which relay prints exactly as that change's specs give them.
-- relay prints no colour codes.
+- relay prints no colour codes. `relay status` is the one command that styles text: on a terminal,
+  when `NO_COLOR` is unset and `TERM` is not `dumb`, it shows the current account's row in bold and
+  limited accounts' rows dim. Its words carry the same information without the styling.
 - Values that relay repeats in a message, such as an unknown command or option, are quoted as JSON
   strings, so a newline or a terminal escape sequence appears as `\n` or `\u001b`.
 - When the reader of standard output goes away, for example in `relay --help | head -1`, relay
@@ -238,13 +242,15 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 6 | `Busy` | Another relay command is working on the job. |
 | 7 | `NeedsPerson` | relay needs the person: a question without a terminal and without `--yes`, a "no", or a command that must be run at a terminal. |
 | 8 | `UnsavedFiles` | A rollback would overwrite or delete files relay has not saved. |
+| 10 | `DaemonNotRunning` | The relay daemon is not running or could not start. |
 | 20 | `ProviderMissing` | The provider's program is not installed, or older than the oldest version relay was tested with. |
 | 21 | `NoSuchAccount` | The account is not in `config.toml`. |
 | 22 | `NotSignedIn` | The account is not signed in, its sign-in did not finish, or its key variable is not set. |
 | 23 | `LimitReached` | The agent stopped at a usage or rate limit. |
 | 24 | `AgentFailed` | The agent failed, crashed or asked for a permission. |
 | 25 | `Refused` | Refused by a relay rule: full access, the project's allow list, or a session started on another account. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 10 by `add-daemon-api-and-status`, 31 to 33 by `add-relay-switch`, 40 to 42 by `add-t3-limit-rules`. The other numbers are free. |
+| 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 31 and 33 by `add-relay-switch`, 40 to 42 by `add-t3-limit-rules`. The other numbers are free. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |

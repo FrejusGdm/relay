@@ -4,6 +4,8 @@ export interface Io {
   out(text: string): void;
   err(text: string): void;
   stdinIsTTY: boolean;
+  // Whether standard output is a terminal; relay status styles its rows only then.
+  stdoutIsTTY: boolean;
   // Whether a person can answer a question: standard input and standard output are both terminals.
   isTerminal: boolean;
   // Reads standard input until its end, maxBytes or timeoutMs, whichever comes first, and then
@@ -19,6 +21,7 @@ export function processIo(): Io {
     out: (text) => writeAll(1, text),
     err: (text) => writeAll(2, text),
     stdinIsTTY: process.stdin.isTTY === true,
+    stdoutIsTTY: process.stdout.isTTY === true,
     isTerminal: process.stdin.isTTY === true && process.stdout.isTTY === true,
     readStdin: (maxBytes, timeoutMs) => readBounded(maxBytes, timeoutMs),
     readLine: async () => readLineSync(),

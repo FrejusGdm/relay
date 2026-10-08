@@ -199,6 +199,21 @@ the rule description says `(switch_to is ignored)`. The target still has to pass
 provider and T3 mapping checks. relay refuses automatic switches between two Claude accounts
 or between two Codex accounts, following each provider's terms.
 
+### `[handoff]`
+
+These settings control `relay switch`, the handoff to another agent or account. `docs/handoff.md`
+describes the handoff step by step.
+
+| Setting | Type | Default | Meaning |
+|---|---|---|---|
+| `ask_for_summary` | `true` or `false` | `true` | Whether relay asks the outgoing agent to write handoff notes. With `false`, relay always builds the notes itself from the event log and the repository. Asking costs a little usage on the outgoing account. |
+| `summary_timeout_seconds` | whole number from 10 to 900 | `120` | How long relay waits for the outgoing agent's notes before it stops that agent and builds the notes itself. |
+| `stop_timeout_seconds` | whole number from 5 to 300 | `30` | How long relay waits for the outgoing agent to stop before it kills it. |
+| `check_timeout_seconds` | whole number from 10 to 7200 | `600` | How long each of the job's checks may run before relay stops it. |
+| `start_check_seconds` | whole number from 1 to 60 | `5` | How long the next agent must keep running before relay counts its start as successful. |
+
+The defaults also apply when `[handoff]` is absent.
+
 ### Paths
 
 `profile_dir`, a project's `path` and each `t3.projects` entry accept an absolute path, `~`, or
@@ -304,6 +319,7 @@ what your terminal shows. `[[projects]]` entries are counted from 1, as in `proj
 | Two T3 instances with one account | `the same account as t3.instances.claude.` |
 | A limit window is unknown | `unknown window. Use five_hour or seven_day.` |
 | A threshold is not a whole number from 1 to 100 | `must be a whole number from 1 to 100.` |
+| A `[handoff]` time is outside its range | `must be a whole number from 10 to 900.` (with the range of that setting) |
 | A limit action is unknown | `must be "wait", "switch" or "notify".` |
 | `action = "switch"` has no `switch_to` | `is required when action is "switch".` |
 | A switch target uses the same Claude provider | `relay does not move work between two Claude accounts on its own. Anthropic's terms say plan limits assume ordinary, individual use.` |

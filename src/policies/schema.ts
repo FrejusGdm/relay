@@ -6,8 +6,8 @@ import type { ProviderId, ProviderPolicy } from "../adapters/types";
 export class PolicyError extends Error {}
 
 const FIELDS = [
-  "provider", "display_name", "checked_on", "max_age_days", "sign_in_methods", "unattended_subscription_use",
-  "same_provider_automatic_switching", "usage_signals", "summary", "unclear", "terms",
+  "provider", "display_name", "company", "checked_on", "max_age_days", "sign_in_methods", "unattended_subscription_use",
+  "same_provider_automatic_switching", "own_accounts_note", "usage_signals", "summary", "unclear", "terms",
 ] as const;
 const UNATTENDED = ["allowed", "api_key_only", "unclear"];
 const MAX_AGE_DAYS = 90;
@@ -29,7 +29,7 @@ export function parsePolicy(raw: unknown, file: string): ProviderPolicy {
   for (const field of FIELDS) if (!Object.hasOwn(table, field)) fail(`${field} is required.`);
 
   if (!(PROVIDERS as readonly unknown[]).includes(table.provider)) fail(`provider must be one of ${PROVIDERS.join(", ")}.`);
-  for (const field of ["display_name", "summary", "unclear"] as const) {
+  for (const field of ["display_name", "company", "own_accounts_note", "summary", "unclear"] as const) {
     if (!isText(table[field])) fail(`${field} must be text.`);
   }
   const checkedOn = table.checked_on;
@@ -60,11 +60,13 @@ export function parsePolicy(raw: unknown, file: string): ProviderPolicy {
   return {
     provider: table.provider as ProviderId,
     displayName: table.display_name as string,
+    company: table.company as string,
     checkedOn: checkedOn as string,
     maxAgeDays: maxAge as number,
     signInMethods: table.sign_in_methods as string[],
     unattendedSubscriptionUse: table.unattended_subscription_use as string,
     sameProviderAutomaticSwitching: "off",
+    ownAccountsNote: table.own_accounts_note as string,
     usageSignals: table.usage_signals as string[],
     summary: (table.summary as string).trim(),
     unclear: (table.unclear as string).trim(),

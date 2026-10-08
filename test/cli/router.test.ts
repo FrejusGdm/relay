@@ -3,16 +3,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { COMMANDS } from "../../src/cli/commands/registry";
 import { route } from "../../src/cli/router";
-import { runRelayInProcess } from "../helpers/cli";
+import { runRelayInProcess, UNBUILT, WITH_UNBUILT } from "../helpers/cli";
 
 const golden = (name: string) => readFileSync(join(import.meta.dir, "golden", `${name}.txt`), "utf8");
 const notBuilt = (name: string) =>
   `relay: ${name} is not built yet. This version only reads your settings and shows help.\n`;
 
 describe("Command set", () => {
-  test("relay status is handled as the status command", async () => {
-    const result = await runRelayInProcess(["status"]);
-    expect(result).toEqual({ code: 69, stdout: "", stderr: notBuilt("status") });
+  test("a command name runs that command", async () => {
+    const result = await runRelayInProcess([UNBUILT], { commands: WITH_UNBUILT });
+    expect(result).toEqual({ code: 69, stdout: "", stderr: notBuilt(UNBUILT) });
   });
 
   test("the sixteen commands and help are recognized", () => {

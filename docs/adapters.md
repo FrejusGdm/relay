@@ -339,11 +339,13 @@ Each adapter carries a dated record of what relay may do under the provider's te
 | Field | Meaning |
 |---|---|
 | `provider`, `display_name` | The provider's ID and the name relay shows. |
+| `company` | The company that receives the code when a job moves to an account of this provider: `Anthropic` or `OpenAI`. `relay switch` names it in its first-handoff question. |
 | `checked_on` | The date someone last read the terms below, such as `"2026-10-07"`. |
 | `max_age_days` | After how many days the notes count as out of date: a whole number from 1 to 90. |
 | `sign_in_methods` | The ways an account can sign in. |
 | `unattended_subscription_use` | `allowed`, `api_key_only` or `unclear`. |
 | `same_provider_automatic_switching` | Always `off` in this version. |
+| `own_accounts_note` | The sentence `relay switch` prints before the first handoff to another account of the same provider. |
 | `usage_signals` | What relay reads to learn about usage limits. |
 | `summary`, `unclear` | relay's reading of the terms, and what they leave open. |
 | `[[terms]]` | At least one `title` and `url` of the provider's terms. |

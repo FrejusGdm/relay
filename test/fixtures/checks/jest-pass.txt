@@ -1,0 +1,13 @@
+PASS test/text.test.ts
+  invisible characters
+    ✓ removes invisible characters (1 ms)
+    ✓ keeps ordinary text (1 ms)
+PASS test/notes.test.ts
+  notes
+    ✓ reads structured notes (2 ms)
+
+Test Suites: 2 passed, 2 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        1.20 s
+Ran all test suites.
