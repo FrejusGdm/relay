@@ -111,7 +111,7 @@ The card SHALL show the titles and texts of design decision 9 when the app is co
 - **THEN** the card shows "No jobs yet" and "Run relay init in a project to start one."
 
 ### Requirement: Design tokens and type
-The views SHALL use the color tokens of `DESIGN.md` for light and dark appearance, following the system setting, and the typefaces Satoshi for the expanded title, Public Sans for text and IBM Plex Mono for hashes, job IDs, targets and commands, loaded from the app bundle.
+The views SHALL use the color tokens of `DESIGN.md` for light and dark appearance, following the system setting, and the typefaces Public Sans 700 for the expanded title (design decision 13), Public Sans for text and IBM Plex Mono for hashes, job IDs, targets and commands, loaded from the app bundle.
 
 #### Scenario: Dark appearance
 - **WHEN** the screenshots are rendered with the dark color scheme

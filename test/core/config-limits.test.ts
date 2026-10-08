@@ -23,7 +23,7 @@ describe("Rule settings", () => {
     [`[${key}]\nswitch_to = "codex:personal"`,
       `${key}.switch_to: T3 Code has no provider mapped to codex:personal. Run relay t3 connect to map it.`],
   ])("the CLI reports a settings problem with exit code 78: %s", async (text, problem) => {
-    const result = await runRelayInProcess(["status"], { relayHome: makeRelayHome(`${text}${accounts}`) });
+    const result = await runRelayInProcess(["providers"], { relayHome: makeRelayHome(`${text}${accounts}`) });
     expect(result.code).toBe(78);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain(`  ${problem}\n`);

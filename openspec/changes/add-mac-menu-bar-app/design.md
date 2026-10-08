@@ -167,7 +167,10 @@ rm -rf build
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Fonts"
 cp "$bin" "$app/Contents/MacOS/Relay"
 sed -e "s/@VERSION@/$version/" -e "s/@BUILD@/$build/" Support/Info.plist > "$app/Contents/Info.plist"
-cp Resources/Fonts/*.otf Resources/Fonts/*.ttf "$app/Contents/Resources/Fonts/" 2>/dev/null || true
+for font in PublicSans-Regular.otf PublicSans-Medium.otf PublicSans-SemiBold.otf PublicSans-Bold.otf \
+  PublicSans-LICENSE.txt IBMPlexMono-Regular.otf IBMPlexMono-Medium.otf IBMPlexMono-LICENSE.txt; do
+  cp "Resources/Fonts/$font" "$app/Contents/Resources/Fonts/"
+done
 plutil -lint "$app/Contents/Info.plist"
 codesign --force --sign - --timestamp=none "$app"
 codesign --verify --strict --verbose=2 "$app"
@@ -175,7 +178,8 @@ codesign --verify --strict --verbose=2 "$app"
 echo "Built mac/build/Relay-macOS.zip"
 ```
 
-`--sign -` is an ad-hoc signature: no identity, no Apple account. It covers `Info.plist` and the
+The fonts are copied by name, so a missing font fails the build instead of shipping the system
+font silently. `--sign -` is an ad-hoc signature: no identity, no Apple account. It covers `Info.plist` and the
 resources, which the linker's automatic signature of the executable does not. `ditto -c -k
 --keepParent` is Apple's tool for zipping bundles and keeps their metadata.
 
@@ -289,7 +293,8 @@ stream, 2 seconds until the response head has arrived, then no overall limit, on
 limit of 45 seconds between two reads that return bytes (the daemon sends `: ping` every 15
 seconds), set with `SO_RCVTIMEO` on that socket; 15 minutes for the switch `POST`, because the
 engine may ask the outgoing agent for notes (up to 120 seconds) and run the job's checks. A `POST`
-is never retried by the client.
+is never retried by the client. Every time limit is measured with a monotonic clock (`ContinuousClock`), so a
+change of the system time cannot end or stretch one; tests inject a clock they move by hand.
 
 ### 6. API models and decoding
 
@@ -393,7 +398,7 @@ Connection cycle (`RelayStore.run()`):
    snapshot numbers. Then apply the held events by the ordering rules above, then every new event as
    it arrives. The `id` of every event received, applied or skipped, becomes the cursor.
 4. When the stream ends or fails, or no byte (not even `: ping`) arrives for 45 seconds, close it
-   and wait: the stream's `retry` value (1,000 ms) the first time, then 2, 4, 8, 16 and at most 30
+   and wait: the stream's `retry` value (1,000 ms, and never more than 60 seconds) the first time, then 2, 4, 8, 16 and at most 30
    seconds. After any reconnect, go back to step 1, so a daemon that restarted or rebuilt its index
    is read again in full. The count of failed cycles goes back to zero only when a cycle is healthy:
    `version()` succeeded, every `GET` of step 3 succeeded, and the event stream answered `200` with
@@ -487,7 +492,7 @@ The expanded card (376 points wide, `.rc-card`), in the order `DESIGN.md` fixes:
 
 1. Head: "relay" with the glyph on the left; "Show less" and "Quit" text buttons on the right (the
    preview's "Pin" is out of scope).
-2. The job title (Satoshi 700, 23 pt, tracking −0.028 em) and the repository line.
+2. The job title (Public Sans 700, 23 pt, tracking −0.028 em; decision 13) and the repository line.
 3. The status line (13 pt, weight 500).
 4. The flow: the previous worker row (role "Previous worker"), the connector, the current worker
    row (role "Current worker", accent border and accent-soft background). Each row: provider name
@@ -549,8 +554,14 @@ The primary action opens a view; it never starts, stops or sends anything.
   `NSWorkspace.shared.activateFileViewerSelecting([project_root URL])`. When the project is missing,
   there is no primary action.
 
-The host is looked up each time the window opens, never in the background. Process lookups go
+The host is looked up each time the window opens, when the current worker's process ID changes
+(after a switch, or when a link's job arrives after its window opened), and each time a link window
+is shown again, never in the background. A host is used only for the process ID it was found for. Process lookups go
 through a `ProcessTable` protocol so tests can give a fake process tree.
+
+The checkpoint and switch sheets are shown in place of the card, inside the same window, until they
+close: a menu-bar window has no stable parent for a system sheet. The primary action's button
+carries the host's process ID, so pressing it activates that process and nothing else.
 
 "View checkpoint" opens a sheet: title "Checkpoint 7"; rows "Commit" (all 40 characters, IBM Plex
 Mono, selectable), "Saved" (time and age), "Kind" (`baseline` "First checkpoint", `manual` "Saved
@@ -573,6 +584,9 @@ The sheet:
   The person selects one.
 - Buttons "Cancel" and "Switch to codex:personal" (disabled until an account is selected).
 
+The request body is written as `{"target":"<target>","confirm_new_provider":<true or false>}`
+in that key order; the target has already matched the target pattern, so it needs no escaping.
+
 The flow (every message shown is the API's `message`, word for word):
 
 1. Send `POST /v1/jobs/{job}/switch` with `{"target":"codex:personal","confirm_new_provider":false}`.
@@ -592,6 +606,21 @@ The flow (every message shown is the API's `message`, word for word):
 6. No answer within 15 minutes, or a closed connection: "relay did not answer. The switch may still
    be running; this card updates when relay reports it." and "Close". No retry.
 
+Decided while building task 4.2 (2026-10-08, after review):
+
+- Return presses "Switch to …" only. "Send and switch" has no key, so pressing Return twice cannot
+  answer the provider question before the person has read it; Escape presses "Cancel" or "Close".
+- While the request runs, the left button reads "Close". It only hides the sheet: the request
+  continues, and a later question from the daemon appears when the person opens "Switch worker…"
+  again. "Cancel" ends the flow for good, and nothing more is sent after it.
+- "The switch may still be running" appears only when the connection closed before the answer or
+  the 15 minutes passed. When the app could not connect at all, the sheet says "The switch was not
+  sent, because relay is not running." with the command of decision 9; an answer the app cannot
+  read says that the switch may have run.
+- The `'\''` quoting of step 4 is right for sh, bash and zsh, but fish also reads a backslash
+  inside single quotes. When the project path contains a backslash or a control character, the
+  sheet shows the daemon's message without a command to copy.
+
 Before step 1 there is no extra "Are you sure?" dialog: `relay switch` has none, and choosing an
 account and pressing a button named after it is the deliberate act.
 
@@ -606,7 +635,9 @@ link returns `nil` and is ignored without a message.
 URLs. For each accepted job ID it shows one window (`NSWindow` with an `NSHostingView` of the
 expanded card for that job, title "relay", 376 points wide), reusing the window already open for
 the same job, and calls `NSApp.activate()`. An unknown job shows the API's `job_not_found` message
-in that window. The window's actions are the same as the menu-bar card's: opening a link never
+in that window; any other failure to load the job shows the API's message, or that relay is not
+running or did not answer, instead of "Connecting to relay…". The link is compared as text, so
+`relay://job:/…`, `relay://@job/…` and `relay://JOB/…` are ignored too. The window's actions are the same as the menu-bar card's: opening a link never
 sends a `POST`.
 
 An `NSWindow` made by the app delegate is used instead of a SwiftUI `WindowGroup` with
@@ -615,13 +646,18 @@ An `NSWindow` made by the app delegate is used instead of a SwiftUI `WindowGroup
 
 ### 13. Fonts
 
-`DESIGN.md` names Satoshi (headlines), Public Sans (text) and IBM Plex Mono (identifiers).
-`mac/Resources/Fonts/` holds Satoshi Bold, Public Sans Regular, Medium and SemiBold, and IBM Plex
-Mono Regular and Medium, each with its license file, and `SOURCES.md` with the download address and
-SHA-256 of each file. Public Sans and IBM Plex Mono use the SIL Open Font License, which allows
-bundling. Satoshi comes from Fontshare under the ITF Free Font License; task 1.2 reads that license
-and, if it does not allow bundling in an app, uses Public Sans 700 for the title and lists the
-change under "Needs Josué" in the private task board.
+`DESIGN.md` names Satoshi (headlines), Public Sans (text) and IBM Plex Mono (identifiers). The app
+ships Public Sans Regular, Medium, SemiBold and Bold, and IBM Plex Mono Regular and Medium, each
+with its license file. Both use the SIL Open Font License, which allows bundling. No font file is
+committed: `mac/scripts/fetch-fonts.sh` downloads them from their official releases in the
+workflow and checks each file against the SHA-256 recorded in `mac/Resources/Fonts/SOURCES.md`.
+
+Satoshi is not shipped, and the expanded title uses Public Sans 700 instead (decided 2026-10-08,
+during task 1.2). Satoshi comes from Fontshare under the ITF Free Font License 2.0, which allows
+embedding the font in a desktop app but forbids making the font files available through a
+repository or a download service. The workflow uploads `Relay-macOS.zip`, with the font files
+inside, as an artifact of a public repository on every change, which is such a download. Josué
+may change this choice, for example with a license from the Indian Type Foundry.
 
 `FontLoader.register(directory:)` calls `CTFontManagerRegisterFontsForURL` with `.process` scope
 for every font file. The app passes `Bundle.main.resourceURL/Fonts`; tests pass `mac/Resources/Fonts`
@@ -690,6 +726,14 @@ jobs:
           persist-credentials: false
       - name: Tool versions
         run: sw_vers && xcodebuild -version && swift --version
+      - name: Package has no dependencies
+        working-directory: mac
+        run: |
+          swift package describe --type json > "$RUNNER_TEMP/package.json"
+          jq -e '(.dependencies | length) == 0 and ([.platforms[] | select(.name == "macos") | .version] == ["14.0"])' "$RUNNER_TEMP/package.json"
+      - name: Fonts
+        working-directory: mac
+        run: sh scripts/fetch-fonts.sh
       - name: Unit tests and screenshots
         working-directory: mac
         env:
@@ -697,7 +741,9 @@ jobs:
         run: swift test
       - name: Build Relay.app
         working-directory: mac
-        run: sh scripts/make-app.sh "${{ inputs.version || '0.0.0' }}" "${{ github.run_number }}"
+        env:
+          VERSION: ${{ inputs.version || '0.0.0' }}
+        run: sh scripts/make-app.sh "$VERSION" "$GITHUB_RUN_NUMBER"
       - name: Launch smoke test
         working-directory: mac
         run: sh scripts/smoke-test.sh build/Relay.app
@@ -715,6 +761,11 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 ```
+
+The "Fonts" step runs `mac/scripts/fetch-fonts.sh` (decision 13), and the "Package has no
+dependencies" step checks `swift package describe` as the `mac-app-build` spec requires. The
+release version reaches the bundle script through an environment variable, never written into the
+script itself.
 
 Why `macos-26` and not the `macos-latest` label: today they are the same image, but `-latest`
 moves to a new macOS over one to two months without notice, and `add-cli-scaffold` already pins

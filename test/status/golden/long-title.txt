@@ -1,0 +1,6 @@
+Move the whole authentication flow to the new s…   job 3f9a2c1d · checkpoint 912ec1 · 2 min ago
+
+claude:home      ────────────────   available · 9% used (5-hour window, checked 14:30)
+codex:personal   ────────────────   available · 40% used (5-hour window, checked 14:00) · 60% used (7-day window, checked Tue 09:00)
+
+No agent is working on this job.

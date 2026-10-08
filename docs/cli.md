@@ -7,8 +7,8 @@ real work, which `docs/checkpoints.md` describes, and so do `relay account`, `re
 `relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
 `relay statusline`, which `docs/hooks.md` describes, `relay run`, which the section "Running an
 agent" of `docs/adapters.md` describes, `relay switch`, which `docs/handoff.md` describes, and
-`relay daemon`, which `docs/daemon.md` describes; the other commands do not yet. The change named
-in the "Built by" column builds each one.
+`relay daemon` and `relay doctor --reindex`, which `docs/daemon.md` describes; the other commands
+do not yet. The change named in the "Built by" column builds each one.
 
 ## Commands
 
@@ -21,7 +21,7 @@ in the "Built by" column builds each one.
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
 | `accept-git-changes` | `relay accept-git-changes` | none | `add-checkpoint-engine` |
 | `switch` | `relay switch <provider[:account]>` | 1 | `add-relay-switch` |
-| `status` | `relay status` | none | `add-daemon-api-and-status` |
+| `status` | `relay status [--job <id>] [--json]` | none | `add-daemon-api-and-status` |
 | `account` | `relay account <list\|add\|status\|login\|remove> [<provider> <name> \| <provider:name>]` | 1 to 3 | `add-provider-adapters` |
 | `providers` | `relay providers [--json]` | none | `add-provider-adapters` |
 | `policy` | `relay policy show <provider>` | 2 | `add-provider-adapters` |
@@ -218,7 +218,9 @@ the log has stopped, an unexpected error prints only its first line, `relay: une
 - Errors and the "not built yet" message go to standard error. Every line there starts with
   `relay: `, except hint lines, which start with `Run "relay`, and the messages of
   `add-checkpoint-engine` commands, which relay prints exactly as that change's specs give them.
-- relay prints no colour codes.
+- relay prints no colour codes. `relay status` is the one command that styles text: on a terminal,
+  when `NO_COLOR` is unset and `TERM` is not `dumb`, it shows the current account's row in bold and
+  limited accounts' rows dim. Its words carry the same information without the styling.
 - Values that relay repeats in a message, such as an unknown command or option, are quoted as JSON
   strings, so a newline or a terminal escape sequence appears as `\n` or `\u001b`.
 - When the reader of standard output goes away, for example in `relay --help | head -1`, relay

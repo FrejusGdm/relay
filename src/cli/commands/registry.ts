@@ -8,6 +8,7 @@ import { account } from "./account";
 import { checkpoint } from "./checkpoint";
 import { checkpoints } from "./checkpoints";
 import { daemon } from "./daemon";
+import { doctor } from "./doctor";
 import { hook } from "./hook";
 import { hooksCommand } from "./hooks";
 import { init } from "./init";
@@ -17,6 +18,7 @@ import { providers } from "./providers";
 import { rollback } from "./rollback";
 import { run } from "./run";
 import { switchCommand } from "./switch";
+import { status } from "./status";
 import { statusline, statuslineWithoutSettings } from "./statusline";
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
@@ -209,17 +211,20 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "status",
-    usage: "relay status",
+    usage: "relay status [--job <id>] [--json]",
     argsUsage: "",
     summary: "Show the job, its workers, accounts and checkpoints",
-    details: [],
-    examples: ["relay status"],
-    options: [],
+    details: ["relay status works without the background service; it then shows the saved state."],
+    examples: ["relay status", "relay status --json", "relay status --job 3f9a2c1d"],
+    options: [
+      { name: "job", value: "<id>", description: "Show this job instead of the one in this folder" },
+      { name: "json", description: "Print the status as JSON" },
+    ],
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: status,
   },
   {
     name: "account",
@@ -368,7 +373,7 @@ export const COMMANDS: CommandDef[] = [
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: doctor,
   },
 ];

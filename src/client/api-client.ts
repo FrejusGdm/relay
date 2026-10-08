@@ -6,6 +6,7 @@
 import { lstatSync } from "node:fs";
 import { printable } from "../core/quote";
 import { runtimeDirIsPrivate, socketPath } from "../daemon/paths";
+import type { AccountView, JobView, WorkerView } from "../state/queries";
 
 export interface DaemonVersion {
   daemon_version: string;
@@ -47,6 +48,45 @@ export async function getVersion(runDir: string, timeoutMs: number): Promise<Dae
       return null;
     }
     return { daemon_version: body.daemon_version, pid: body.pid!, started_at: body.started_at };
+  } catch {
+    return null;
+  }
+}
+
+// GET /v1/jobs: the project root of each indexed job, or null without an answer. Throws
+// UntrustedRuntime as request() does.
+export async function getJobRoots(runDir: string, timeoutMs: number): Promise<string[] | null> {
+  const response = await request(runDir, "/v1/jobs", timeoutMs);
+  try {
+    if (response?.status !== 200) return null;
+    const body = (await response.json()) as { jobs?: { project_root?: unknown }[] } | null;
+    if (!Array.isArray(body?.jobs)) return null;
+    return body.jobs.flatMap((job) => (typeof job?.project_root === "string" ? [job.project_root] : []));
+  } catch {
+    return null;
+  }
+}
+
+// What relay status needs from the daemon: the job, its workers and the accounts, each asked with
+// its own time limit. Returns null when the daemon does not answer, and { job: null } when it
+// answers but has not indexed the job yet. Throws UntrustedRuntime as request() does.
+export async function getStatusSources(
+  runDir: string,
+  jobId: string,
+  timeoutMs: number,
+): Promise<{ job: JobView | null; workers: WorkerView[]; accounts: AccountView[] } | null> {
+  const job = await request(runDir, `/v1/jobs/${jobId}`, timeoutMs);
+  if (job === null) return null;
+  if (job.status === 404) return { job: null, workers: [], accounts: [] };
+  const workers = await request(runDir, `/v1/jobs/${jobId}/workers`, timeoutMs);
+  const accounts = await request(runDir, "/v1/accounts", timeoutMs);
+  if (job.status !== 200 || workers?.status !== 200 || accounts?.status !== 200) return null;
+  try {
+    return {
+      job: ((await job.json()) as { job: JobView }).job,
+      workers: ((await workers.json()) as { workers: WorkerView[] }).workers,
+      accounts: ((await accounts.json()) as { accounts: AccountView[] }).accounts,
+    };
   } catch {
     return null;
   }

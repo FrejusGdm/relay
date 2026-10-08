@@ -3,7 +3,9 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, 
 import { join } from "node:path";
 import pkg from "../../package.json";
 import { COMMANDS } from "../../src/cli/commands/registry";
-import { runRelay, runRelayInProcess } from "../helpers/cli";
+import { policyText } from "../../src/cli/commands/policy";
+import { policyOf } from "../../src/policies/load";
+import { runRelay, runRelayInProcess, UNBUILT, WITH_UNBUILT } from "../helpers/cli";
 import { makeRelayHome } from "../helpers/home";
 
 const ONE_ACCOUNT = '[accounts."claude:personal"]\n';
@@ -34,10 +36,15 @@ function snapshot(relayHome: string): Record<string, string> {
 
 const messages = (relayHome: string, file?: string) => entries(relayHome, file).map((entry) => entry.msg);
 
+// Tests that start relay as its own process cannot pass a test-only command. They use relay policy
+// show claude, a built command that only prints fixed text.
+const POLICY = ["policy", "show", "claude"];
+const policyOutput = () => policyText(policyOf("claude")).map((line) => `${line}\n`).join("");
+
 describe("Log file locations", () => {
   test("the first command creates logs/ with mode 0700 and cli.log with mode 0600", async () => {
     const relayHome = makeRelayHome();
-    expect((await runRelay(["status"], { env: { RELAY_HOME: relayHome } })).code).toBe(69);
+    expect((await runRelay(POLICY, { env: { RELAY_HOME: relayHome } })).code).toBe(0);
     expect(statSync(join(relayHome, "logs")).mode & 0o777).toBe(0o700);
     expect(statSync(join(relayHome, "logs", "cli.log")).mode & 0o777).toBe(0o600);
     expect(readdirSync(join(relayHome, "logs"))).toEqual(["cli.log"]);
@@ -57,7 +64,7 @@ describe("Log file locations", () => {
     );
   });
 
-  test.each([[["status", "--help"]], [["help", "status"]], [["--help"]], [["--version"]], [["status", "extra"]], [["nope"]]])(
+  test.each([[["providers", "--help"]], [["help", "providers"]], [["--help"]], [["--version"]], [["providers", "extra"]], [["nope"]]])(
     "relay %p creates and changes no log file",
     async (args) => {
       const empty = makeRelayHome();
@@ -65,7 +72,7 @@ describe("Log file locations", () => {
       expect(existsSync(join(empty, "logs"))).toBe(false);
 
       const used = makeRelayHome();
-      await runRelayInProcess(["status"], { relayHome: used });
+      await runRelayInProcess(["providers"], { relayHome: used });
       const before = snapshot(used);
       await runRelayInProcess(args, { relayHome: used });
       expect(snapshot(used)).toEqual(before);
@@ -105,7 +112,7 @@ describe("hook usage error level", () => {
 describe("Line format", () => {
   test("every line parses as JSON with the six leading keys", async () => {
     const relayHome = makeRelayHome(ONE_ACCOUNT);
-    await runRelay(["status"], { env: { RELAY_HOME: relayHome } });
+    await runRelay(["providers"], { env: { RELAY_HOME: relayHome } });
     // A folder outside any repository, so relay checkpoint stops before it saves anything.
     await runRelay(["checkpoint", "-m", "x"], { env: { RELAY_HOME: relayHome }, cwd: relayHome });
     const all = entries(relayHome);
@@ -150,9 +157,9 @@ describe("Command events", () => {
 
   test("missing settings are logged with exists false", async () => {
     const relayHome = makeRelayHome();
-    await runRelayInProcess(["status"], { relayHome });
+    await runRelayInProcess([UNBUILT, "codex:personal"], { relayHome, commands: WITH_UNBUILT });
     expect(entries(relayHome)).toEqual([
-      expect.objectContaining({ msg: "command started", command: "status", options: [], arguments: 0 }),
+      expect.objectContaining({ msg: "command started", command: UNBUILT, options: [], arguments: 1 }),
       expect.objectContaining({ msg: "settings loaded", exists: false, accounts: 0, projects: 0 }),
       expect.objectContaining({ msg: "command finished", exit_code: 69 }),
     ]);
@@ -160,9 +167,9 @@ describe("Command events", () => {
 
   test("settings with problems are logged as a count at level warn", async () => {
     const relayHome = makeRelayHome('colour = "blue"\n[log]\nlevel = "loud"\n');
-    expect((await runRelayInProcess(["status"], { relayHome })).code).toBe(78);
+    expect((await runRelayInProcess(["providers"], { relayHome })).code).toBe(78);
     expect(entries(relayHome)).toEqual([
-      expect.objectContaining({ level: "info", msg: "command started", command: "status" }),
+      expect.objectContaining({ level: "info", msg: "command started", command: "providers" }),
       expect.objectContaining({
         level: "warn",
         msg: "settings invalid",
@@ -178,7 +185,7 @@ describe("Command events", () => {
   test("an invalid RELAY_LOG_LEVEL is logged as invalid settings without its value", async () => {
     const relayHome = makeRelayHome();
     const value = planted("level");
-    expect((await runRelayInProcess(["status"], { relayHome, env: { RELAY_LOG_LEVEL: value } })).code).toBe(78);
+    expect((await runRelayInProcess(["providers"], { relayHome, env: { RELAY_LOG_LEVEL: value } })).code).toBe(78);
     expect(messages(relayHome)).toEqual(["command started", "settings invalid", "command finished"]);
     expect(entries(relayHome)[1]).toMatchObject({ problems: 1 });
     expect(allLogs(relayHome)).not.toContain(value);
@@ -186,7 +193,7 @@ describe("Command events", () => {
 
   test("an invalid RELAY_LOG_LEVEL is a settings error even with --log-level", async () => {
     const relayHome = makeRelayHome();
-    const result = await runRelayInProcess(["status", "--log-level", "debug"], { relayHome, env: { RELAY_LOG_LEVEL: "loud" } });
+    const result = await runRelayInProcess(["providers", "--log-level", "debug"], { relayHome, env: { RELAY_LOG_LEVEL: "loud" } });
     expect(result.code).toBe(78);
     expect(messages(relayHome)).toEqual(["command started", "settings invalid", "command finished"]);
   });
@@ -209,12 +216,12 @@ describe("Command events", () => {
 describe("Unexpected errors are logged", () => {
   test("a thrown TypeError is logged with its name and stack frames, without its message", async () => {
     const commands = COMMANDS.map((def) =>
-      def.name === "status"
+      def.name === "providers"
         ? { ...def, handler: async () => { throw new TypeError("x is undefined"); } }
         : def,
     );
     const relayHome = makeRelayHome();
-    const result = await runRelayInProcess(["status"], { commands, relayHome });
+    const result = await runRelayInProcess(["providers"], { commands, relayHome });
     const file = join(relayHome, "logs", "cli.log");
     expect(result).toEqual({
       code: 70,
@@ -232,12 +239,12 @@ describe("Unexpected errors are logged", () => {
   test("a planted value in an error message, also on several lines, never reaches the log", async () => {
     const value = planted("sk-ant");
     const commands = COMMANDS.map((def) =>
-      def.name === "status"
+      def.name === "providers"
         ? { ...def, handler: async () => { throw new Error(`failed: ${value}\n    at ${value}`); } }
         : def,
     );
     const relayHome = makeRelayHome();
-    const result = await runRelayInProcess(["status"], { commands, relayHome });
+    const result = await runRelayInProcess(["providers"], { commands, relayHome });
     expect(result.code).toBe(70);
     expect(result.stderr).toContain(value);
     expect(messages(relayHome)).toContain("unexpected error");
@@ -246,12 +253,12 @@ describe("Unexpected errors are logged", () => {
 
   test("without a working log, the error message does not point to a log file", async () => {
     const commands = COMMANDS.map((def) =>
-      def.name === "status" ? { ...def, handler: async () => { throw new TypeError("x is undefined"); } } : def,
+      def.name === "providers" ? { ...def, handler: async () => { throw new TypeError("x is undefined"); } } : def,
     );
     const relayHome = makeRelayHome();
     writeFileSync(join(relayHome, "logs"), "", { mode: 0o600 });
     const file = join(relayHome, "logs", "cli.log");
-    expect(await runRelayInProcess(["status"], { commands, relayHome })).toEqual({
+    expect(await runRelayInProcess(["providers"], { commands, relayHome })).toEqual({
       code: 70,
       stdout: "",
       stderr: `relay: could not write to the log ${file}: logs is not a folder. Continuing without it.\nrelay: unexpected error: x is undefined\n`,
@@ -277,20 +284,20 @@ describe("Unexpected errors are logged", () => {
 describe("Log levels", () => {
   test('log.level = "warn" hides command started', async () => {
     const relayHome = makeRelayHome('[log]\nlevel = "warn"\n');
-    expect((await runRelayInProcess(["status"], { relayHome })).code).toBe(69);
+    expect((await runRelayInProcess([UNBUILT], { relayHome, commands: WITH_UNBUILT })).code).toBe(69);
     expect(messages(relayHome)).not.toContain("command started");
     expect(messages(relayHome)).toEqual([]);
   });
 
   test('--log-level debug wins over log.level = "warn"', async () => {
     const relayHome = makeRelayHome('[log]\nlevel = "warn"\n');
-    await runRelayInProcess(["status", "--log-level", "debug"], { relayHome });
+    await runRelayInProcess(["providers", "--log-level", "debug"], { relayHome });
     expect(messages(relayHome)).toEqual(["command started", "settings loaded", "command finished"]);
   });
 
   test("RELAY_LOG_LEVEL=warn still logs invalid settings", async () => {
     const relayHome = makeRelayHome('colour = "blue"\n');
-    await runRelayInProcess(["status"], { relayHome, env: { RELAY_LOG_LEVEL: "warn" } });
+    await runRelayInProcess(["providers"], { relayHome, env: { RELAY_LOG_LEVEL: "warn" } });
     expect(messages(relayHome)).toEqual(["settings invalid"]);
   });
 });
@@ -305,10 +312,10 @@ describe("What logs never contain", () => {
       SOME_TOKEN: planted("token"),
     };
     const env = { RELAY_HOME: relayHome, ...secrets };
-    await runRelay(["status"], { env });
-    await runRelay(["switch", "codex:personal"], { env });
+    await runRelay(["providers"], { env });
+    await runRelay(POLICY, { env });
     await runRelay(["hook", "claude", "Stop"], { env, stdin: "{}" });
-    await runRelay(["status", "--log-level", "debug"], { env });
+    await runRelay(["providers", "--log-level", "debug"], { env });
     const text = allLogs(relayHome);
     expect(messages(relayHome)).toHaveLength(9);
     expect(messages(relayHome, "hook.log")).toHaveLength(4);
@@ -335,9 +342,9 @@ describe("What logs never contain", () => {
     const badSettings = makeRelayHome(
       `[accounts."claude:personal"]\napi_key = "${value}"\n[[projects]]\npath = "/tmp/${value}"\nallow = ["claude:personal"]\n`,
     );
-    await runRelay(["status"], { env: { RELAY_HOME: badSettings } });
+    await runRelay(["providers"], { env: { RELAY_HOME: badSettings } });
     const goodSettings = makeRelayHome(`${ONE_ACCOUNT}[[projects]]\npath = "/tmp/${value}"\nallow = ["claude:personal"]\n`);
-    await runRelay(["status"], { env: { RELAY_HOME: goodSettings } });
+    await runRelay(["providers"], { env: { RELAY_HOME: goodSettings } });
 
     expect(messages(relayHome).length).toBeGreaterThan(0);
     expect(entries(relayHome, "hook.log")).toContainEqual(
@@ -397,7 +404,7 @@ describe("Rotation", () => {
     mkdirSync(dir, { mode: 0o700 });
     writeFileSync(join(dir, "cli.log"), "a".repeat(10_485_700), { mode: 0o600 });
     for (const n of [1, 2, 3, 4, 5]) writeFileSync(join(dir, `cli.log.${n}`), `old ${n}\n`, { mode: 0o600 });
-    expect((await runRelayInProcess(["status"], { relayHome })).code).toBe(69);
+    expect((await runRelayInProcess([UNBUILT], { relayHome, commands: WITH_UNBUILT })).code).toBe(69);
     expect(statSync(join(dir, "cli.log.1")).size).toBe(10_485_700);
     expect(readFileSync(join(dir, "cli.log.5"), "utf8")).toBe("old 4\n");
     expect(existsSync(join(dir, "cli.log.6"))).toBe(false);
@@ -410,15 +417,15 @@ describe("Logging failures do not change the outcome", () => {
   const warning = (file: string, reason: string) =>
     `relay: could not write to the log ${file}: ${reason}. Continuing without it.\n`;
 
-  test("a read-only logs folder prints the warning once and exits 69", async () => {
+  test("a read-only logs folder prints the warning once and the command still succeeds", async () => {
     const relayHome = makeRelayHome(ONE_ACCOUNT);
     const dir = join(relayHome, "logs");
     mkdirSync(dir, { mode: 0o500 });
     try {
-      expect(await runRelay(["status"], { env: { RELAY_HOME: relayHome } })).toEqual({
-        code: 69,
-        stdout: "",
-        stderr: warning(join(dir, "cli.log"), "the logs folder has mode 0500, not 0700") + notBuilt("status"),
+      expect(await runRelay(POLICY, { env: { RELAY_HOME: relayHome } })).toEqual({
+        code: 0,
+        stdout: policyOutput(),
+        stderr: warning(join(dir, "cli.log"), "the logs folder has mode 0500, not 0700"),
       });
     } finally {
       chmodSync(dir, 0o700);
@@ -430,10 +437,10 @@ describe("Logging failures do not change the outcome", () => {
     const relayHome = makeRelayHome();
     writeFileSync(join(relayHome, "logs"), "", { mode: 0o600 });
     const file = join(relayHome, "logs", "cli.log");
-    expect(await runRelayInProcess(["status"], { relayHome })).toEqual({
+    expect(await runRelayInProcess([UNBUILT], { relayHome, commands: WITH_UNBUILT })).toEqual({
       code: 69,
       stdout: "",
-      stderr: warning(file, "logs is not a folder") + notBuilt("status"),
+      stderr: warning(file, "logs is not a folder") + notBuilt(UNBUILT),
     });
   });
 
@@ -442,10 +449,10 @@ describe("Logging failures do not change the outcome", () => {
     mkdirSync(join(relayHome, "logs"), { mode: 0o700 });
     const file = join(relayHome, "logs", "cli.log");
     expect(Bun.spawnSync(["mkfifo", "-m", "600", file]).exitCode).toBe(0);
-    expect(await runRelay(["status"], { env: { RELAY_HOME: relayHome } })).toEqual({
-      code: 69,
-      stdout: "",
-      stderr: warning(file, "it is not a regular file") + notBuilt("status"),
+    expect(await runRelay(POLICY, { env: { RELAY_HOME: relayHome } })).toEqual({
+      code: 0,
+      stdout: policyOutput(),
+      stderr: warning(file, "it is not a regular file"),
     });
   });
 
