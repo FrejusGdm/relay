@@ -34,7 +34,7 @@ test("a headless Codex run leaves a complete record with mode 0600", async () =>
     expect(statSync(join(folder, `${record!.worker_id}.json`)).mode & 0o777).toBe(0o600);
     expect(statSync(folder).mode & 0o777).toBe(0o700);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -65,7 +65,7 @@ test("the record is replaced through a new file each time, never rewritten in pl
     expect(readdirSync(folder)).toEqual([`${running.worker_id}.json`]);
     expect(workers(fixture)[0]).toMatchObject({ worker_id: running.worker_id, end_reason: "interrupted" });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -87,7 +87,7 @@ test("a second run in the same job is refused with exit 6 while the first one ru
     expect((await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], steps({ say: "Hi." }))).code).toBe(0);
     expect(readdirSync(join(fixture.relayHome, "locks")).filter((name) => name.includes("worker"))).toEqual([]);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -99,6 +99,6 @@ test("a worker lock left by a process that has ended is replaced", async () => {
     await Bun.write(path, JSON.stringify({ pid: gone, account: "codex:personal", started_at: new Date().toISOString() }));
     expect((await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], steps({ say: "Hi." }))).code).toBe(0);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });

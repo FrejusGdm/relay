@@ -53,6 +53,6 @@ test("relay run claude:work hits a limit, and codex:personal needs the person's 
     expect(statusAfter.filter((entry) => !statusBefore.includes(entry)).join(" ")).toContain("src/parser");
     expect(statusBefore.every((entry) => statusAfter.includes(entry))).toBe(true);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });

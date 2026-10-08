@@ -2,11 +2,11 @@
 // Lock files under $RELAY_HOME/locks/ (design.md decisions 10 and 12): the job lock, held by a
 // command that writes, the short events lock, held while one event is appended, the config lock,
 // held while config.toml is changed (add-provider-adapters, design decision 10), and the worker
-// lock, held while relay run supervises an agent (add-provider-adapters, design decision 15). A job,
-// config or worker lock file holds its owner as JSON. It is written to a temporary file first and
-// then linked into place, which fails when the lock exists, so a reader never sees half an owner.
-// The events lock is an flock lock instead (add-daemon-api-and-status, design decision 9): the
-// kernel releases it when its holder dies, so a crash never leaves it held.
+// lock, held while relay run supervises an agent (add-provider-adapters, design decision 15). A
+// job, config or worker lock file holds its owner as JSON. It is written to a temporary file first
+// and then linked into place, which fails when the lock exists, so a reader never sees half an
+// owner. The events lock is an flock lock instead (add-daemon-api-and-status, design decision 9):
+// the kernel releases it when its holder dies, so a crash never leaves it held.
 import { randomBytes } from "node:crypto";
 import { closeSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";

@@ -23,7 +23,7 @@ describe("exit 2", () => {
         code: 2, stdout: "", stderr: "Name an account, for example relay run claude:personal, or set defaults.account in config.toml.\n",
       });
     } finally {
-      fixture.cleanup();
+      await fixture.cleanup();
     }
   });
 
@@ -42,7 +42,7 @@ describe("exit 2", () => {
         .toBe("The prompt is too long to pass on the command line; put it in a file under .relay/ and refer to it.\n");
       expect(workers(fixture)).toEqual([]);
     } finally {
-      fixture.cleanup();
+      await fixture.cleanup();
     }
   });
 
@@ -61,7 +61,7 @@ describe("exit 2", () => {
       });
       expect(workers(fixture)).toEqual([]);
     } finally {
-      fixture.cleanup();
+      await fixture.cleanup();
     }
   });
 
@@ -72,7 +72,7 @@ describe("exit 2", () => {
         code: 2, stderr: "relay: You have two Codex accounts: codex:personal, codex:work. Name one, for example relay run codex:personal.\n",
       });
     } finally {
-      fixture.cleanup();
+      await fixture.cleanup();
     }
   });
 });
@@ -86,7 +86,7 @@ test("exit 20: the program is too old or missing", async () => {
     expect(await relayRun(fixture, ["codex:personal", "--headless", "--prompt", "Hi."], {}, { RELAY_CODEX_BIN: join(fixture.scratch.root, "missing") }))
       .toMatchObject({ code: 20, stderr: "Codex is not installed. Install it, then try again.\n" });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -97,7 +97,7 @@ test("exit 21: the account is not configured", async () => {
       code: 21, stderr: "claude:nope is not one of your accounts. See relay account list.\n",
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -112,7 +112,7 @@ test("exit 22: signed out, or the key variable is missing", async () => {
       code: 22, stderr: "claude:api needs $ANTHROPIC_API_KEY, which is not set.\n",
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -136,7 +136,7 @@ test("exit 25: full access, and an account the project's allow list does not nam
       stderr: 'codex:personal has not worked on this project before. Sending the repository to OpenAI needs your yes.\nRun "relay run codex:personal" in a terminal, or add --yes.\n',
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 }, 30_000);
 
@@ -150,7 +150,7 @@ test("exit 78: a profile folder other users can change", async () => {
       code: 78, stderr: `Other users can change ${profile}. Run chmod 700 on it, then try again.\n`,
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -166,7 +166,7 @@ test("a provider alone means its only account, and a changed policy is announced
       .toBe(policyOf("claude").checkedOn);
     expect((await relayRun(fixture, ["claude", "--headless", "--prompt", "Hi."], finish)).stdout).not.toContain(notice);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -188,6 +188,6 @@ test("a project entry added by another relay run after the settings were read is
     expect(allowOnProject(ctx, codex, fixture.scratch.repo, () => {})).toBe(false);
     expect(config(fixture).match(/\[\[projects\]\]/g)).toHaveLength(1);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
