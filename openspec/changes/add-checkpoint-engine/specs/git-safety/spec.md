@@ -164,11 +164,19 @@ Before any other git command in `relay checkpoint`, `relay checkpoints` and `rel
 - **THEN** relay stops with exit code 5 and names `~/.gitconfig` in the message
 
 ### Requirement: Accepting a git change needs the person at a terminal
-`relay accept-git-changes` SHALL print the same report, ask "Trust these changes? Type yes to continue:", and only on the answer `yes` rewrite the trust record and append a `git_changes_accepted` event. It SHALL refuse with exit code 7 when standard input or standard output is not a terminal.
+`relay accept-git-changes` SHALL print the refusal report without its last two lines and without the leading "Stopped: " (a sentence that then starts with a word starts with a capital letter), ask "Trust these changes? Type yes to continue:", and only on the answer `yes` read the settings and hooks again and, when they equal what the report described, write that state as the trust record and append a `git_changes_accepted` event. It SHALL refuse with exit code 7 when standard input or standard output is not a terminal. A terminal check cannot prove that a person answered: a program running as the person outside a sandbox can open its own pseudo-terminal, which is why agents must be sandboxed so they cannot write `RELAY_HOME`.
 
 #### Scenario: Accepted at a terminal
 - **WHEN** the person runs `relay accept-git-changes` in a terminal after a hook was added, and types `yes`
 - **THEN** relay prints "Trusted the current git configuration and hooks." and exits with code 0, and the next `relay checkpoint` succeeds
+
+#### Scenario: A change while relay waits for the answer
+- **WHEN** the person runs `relay accept-git-changes` in a terminal, and a hook is added or changed after the report is printed and before the person types `yes`
+- **THEN** relay prints "The git settings or hooks changed while relay was waiting. Nothing was trusted. Run relay accept-git-changes again.", exits with code 7, and does not change the trust record
+
+#### Scenario: A missing or damaged trust record
+- **WHEN** `git-trust.json` is missing, or is not a valid record (for example `{}` or `null`), and the person runs `relay accept-git-changes` in a terminal
+- **THEN** relay prints "The git trust record <path> is missing." (or "is damaged."), lists the settings that can run commands and the hooks that exist now, asks "Trust the current git configuration and hooks? Type yes to continue:", and on `yes` writes a new record and appends a `git_changes_accepted` event with `trust_record` set to `missing` or `damaged`
 
 #### Scenario: Run by an agent
 - **WHEN** `relay accept-git-changes` runs without a terminal

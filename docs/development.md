@@ -95,6 +95,18 @@ on this computer (`add-t3-limit-rules`): `src/t3/client.ts` may use `fetch`, and
 may use `fetch` and `Bun.serve` for the sign-in listener on `127.0.0.1`. The settings only accept
 a T3 address on `127.0.0.1` or `localhost`. Any other network use under `src/t3/` fails the check.
 
+`test/checkpoint/e2e.test.ts` builds the program with the `build:<system>-<processor>` script
+of `package.json` for the machine it runs on, writes it to a temporary folder, and runs it as a
+separate process on a scratch repository: `relay init`, a checkpoint, the list, a refused change
+to `core.fsmonitor`, a rollback and its undo. With `RELAY_TEST_GIT_LOG=1`, the program writes
+every git command it runs to `$RELAY_HOME/logs/git-calls.jsonl`. The runner writes a call there
+only after its allow list accepted it, so the log cannot show a refused call. The test therefore
+pins the exact set of git commands a whole job uses, none of which contacts a remote, so a new
+command fails the test until someone reviews it. It also checks that each call starts with
+relay's settings, that refs are written only through `update-ref --stdin`, and that every ref
+under `refs/relay/` belongs to the job. It
+needs git and gitleaks on `PATH`, like the other checkpoint tests.
+
 ## Continuous integration
 
 GitHub runs `.github/workflows/ci.yml` on every pull request and every push to `main`. A new
