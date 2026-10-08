@@ -1,0 +1,17 @@
+{
+  "plan": "standard",
+  "plan_sha256": "sample campaign, not a real plan hash",
+  "targets": {
+    "claude": "claude:personal",
+    "codex": "codex:personal"
+  },
+  "started_at": "2026-10-12T08:00:00.000Z",
+  "tools": {
+    "relay": "0.1.0",
+    "claude": "2.1.282",
+    "codex": "0.160.0",
+    "bun": "1.3.6",
+    "git": "2.39.0",
+    "python3": "3.11.3"
+  }
+}

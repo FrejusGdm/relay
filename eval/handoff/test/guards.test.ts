@@ -98,11 +98,11 @@ test("Declining confirmation creates nothing", async () => {
   expect(existsSync(join(home, "campaigns"))).toBe(false);
 }, 30000);
 
-test("Confirmation writes the campaign record before reporting the unbuilt runner", async () => {
+test("Confirmation writes the campaign record before looking for relay", async () => {
   const home = mappedHome();
   const result = await terminalRun(["run", "smoke", "--allow-dirty-fixtures", "--campaign", "test-campaign"], home, "yes");
-  expect(result.exitCode).toBe(1);
-  expect(result.output).toContain("Not built yet.");
+  expect(result.exitCode).toBe(3);
+  expect(result.output).toContain("relay was not found. Build it first or set RELAY_BIN.");
   const dir = join(home, "campaigns", "test-campaign");
   const record = await readCampaign(dir);
   expect(record).not.toBeNull();
@@ -135,7 +135,7 @@ test("Only and max-runs affect the confirmation but every account of the plan is
     "run", "smoke", "--only", "rate-limiter__baseline__claude__r1", "--max-runs", "1",
     "--campaign", "selected", "--allow-dirty-fixtures", "--retry-errors", "--keep-work",
   ], home, "yes");
-  expect(result.exitCode).toBe(1);
+  expect(result.exitCode).toBe(3);
   expect(result.output).toContain("about 15 minutes of agent time for 1 run.");
   expect(result.output).not.toContain("OpenAI");
   expect((await readCampaign(join(home, "campaigns", "selected")))?.targets).toEqual(fakeTargets);
