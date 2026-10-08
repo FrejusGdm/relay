@@ -1,6 +1,6 @@
 import { Client, StreamableHTTPClientTransport, UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/client";
 import { T3Error, T3_TOOLS } from "./client";
-import { removeConnection, writeConnection } from "./connection";
+import { readConnection, removeConnection, writeConnection } from "./connection";
 import type { SecretStore } from "./secrets";
 
 export interface SignInOptions {
@@ -69,7 +69,10 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     // Bun must never print an exception containing the request's authorization code.
     error() { return new Response(null, { status: 500 }); },
   });
+  let committing = false;
   const timer = setTimeout(() => {
+    // Once saving has started, it finishes or rolls back; a timeout must not race it.
+    if (committing) return;
     active = false;
     abort.abort();
     void listener.stop(true);
@@ -203,14 +206,31 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     verifier = undefined;
     authorizationCode = null;
     requireActive();
-    await options.store.set(options.url, token);
-    if (pendingRegistration) {
-      await options.store.set(`${options.url}#client`, JSON.stringify(pendingRegistration));
+    committing = true;
+    clearTimeout(timer);
+    // Save all three or none: remember what was there, and put it back if any write fails.
+    const clientName = `${options.url}#client`;
+    const previous = {
+      token: await options.store.get(options.url),
+      registration: await options.store.get(clientName),
+      record: readConnection(options.relayHome),
+    };
+    try {
+      await options.store.set(options.url, token);
+      if (pendingRegistration) await options.store.set(clientName, JSON.stringify(pendingRegistration));
+      writeConnection(options.relayHome, {
+        v: 1, url: options.url, connected_at: issuedAt.toISOString(),
+        expires_at: expiresAt.toISOString(), server_version: serverVersion,
+      });
+    } catch (error) {
+      await restore(options.store, options.url, previous.token).catch(() => {});
+      await restore(options.store, clientName, previous.registration).catch(() => {});
+      try {
+        if (previous.record) writeConnection(options.relayHome, previous.record);
+        else removeConnection(options.relayHome);
+      } catch { /* The error below already tells the person to connect again. */ }
+      throw error;
     }
-    writeConnection(options.relayHome, {
-      v: 1, url: options.url, connected_at: issuedAt.toISOString(),
-      expires_at: expiresAt.toISOString(), server_version: serverVersion,
-    });
     return { serverVersion, expiresAt };
   };
   try {
@@ -262,4 +282,9 @@ export async function openT3Browser(url: URL): Promise<void> {
   } catch { /* Do not repeat native process errors. */ }
   finally { clearTimeout(timer); }
   throw new Error("relay could not open your browser.");
+}
+
+async function restore(store: SecretStore, name: string, value: string | null): Promise<void> {
+  if (value === null) await store.delete(name);
+  else await store.set(name, value);
 }

@@ -392,3 +392,38 @@ test("the fake refuses a wrong pairing code and a wrong PKCE verifier", async ()
   await signIn(options);
   expect((await store.get(fake.url)) !== null).toBe(true);
 });
+
+test("a failed save puts back what was there, so token, registration and record stay consistent", async () => {
+  const { fake, store, options } = await setup();
+  const oldToken = `old-${crypto.randomUUID()}`;
+  await store.set(fake.url, oldToken);
+  const failing: SecretStore = {
+    get: (name) => store.get(name),
+    delete: (name) => store.delete(name),
+    async set(name, value) {
+      if (name.endsWith("#client")) throw new Error("The store is locked.");
+      await store.set(name, value);
+    },
+  };
+  await expect(signIn({ ...options, store: failing })).rejects.toThrow("relay could not connect to T3 Code. Run relay t3 connect again.");
+  expect(await store.get(fake.url)).toBe(oldToken);
+  expect(await store.get(`${fake.url}#client`)).toBeNull();
+  expect(readConnection(options.relayHome)).toBeNull();
+});
+
+test("a deadline that passes while saving does not interrupt the save or report a timeout", async () => {
+  const { fake, store, options } = await setup();
+  const slow: SecretStore = {
+    get: (name) => store.get(name),
+    delete: (name) => store.delete(name),
+    async set(name, value) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await store.set(name, value);
+    },
+  };
+  // The deadline is long enough for the browser step, and passes during the two slow writes.
+  const result = await signIn({ ...options, store: slow, callbackTimeoutMs: 500 });
+  expect(result.serverVersion).toBe("1.0.0");
+  expect(typeof (await store.get(fake.url))).toBe("string");
+  expect(readConnection(options.relayHome)?.url).toBe(fake.url);
+});
