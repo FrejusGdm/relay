@@ -17,10 +17,11 @@ export interface E2eFixture extends SwitchFixture {
   before: RepoState;
 }
 
-// `bunTest` is what the `bun test` check prints and its exit code.
-export async function e2eFixture(options: { allow?: string[]; accounts?: string; extra?: string; bunTest?: { output: string; code: number } } = {}): Promise<E2eFixture> {
+// `bunTest` is what the `bun test` check prints and its exit code. `allow: null` leaves the project
+// without an entry in config.toml.
+export async function e2eFixture(options: { allow?: string[] | null; accounts?: string; extra?: string; bunTest?: { output: string; code: number } } = {}): Promise<E2eFixture> {
   requireGitleaks();
-  const fixture = await switchFixture({ accounts: options.accounts ?? ACCOUNTS, allow: options.allow ?? ["claude:personal", "codex:personal"], extra: options.extra });
+  const fixture = await switchFixture({ accounts: options.accounts ?? ACCOUNTS, allow: options.allow === undefined ? ["claude:personal", "codex:personal"] : options.allow, extra: options.extra });
   for (const [provider, name] of [["claude", "personal"], ["claude", "work"], ["codex", "personal"]] as const) {
     startAccountRecord(fixture.relayHome, { id: `${provider}:${name}`, provider, name }, { policy_checked_on_seen: policyOf(provider).checkedOn });
   }

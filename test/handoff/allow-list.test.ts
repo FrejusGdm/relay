@@ -125,6 +125,50 @@ describe("First handoff to a new account asks first", () => {
   });
 });
 
+describe("One process records the answer", () => {
+  test("a write from settings read before another process added the account leaves config.toml as it is", async () => {
+    write(configText('["claude:personal"]'));
+    const stale = config();
+    const after = configText('["claude:personal", "codex:personal"]');
+    write(after);
+    const result = await checkAllowList({
+      asker: fakeAsker({ yes: true }), config: stale, configContext: ctx(), repo, from: account("claude:personal"), fromRunning: true, to: account("codex:personal"), command: "switch",
+    });
+    expect(result.allowed).toEqual({ account: "codex:personal", company: "OpenAI", how: "flag" });
+    expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(after);
+  });
+
+  test("a project without an entry in old settings is not given a second entry", async () => {
+    const after = configText('["claude:personal"]');
+    write(after.replace(scratch.repo, "/somewhere/else"));
+    const stale = config();
+    write(after);
+    await checkAllowList({
+      asker: fakeAsker({ yes: true }), config: stale, configContext: ctx(), repo, from: account("claude:personal"), fromRunning: true, to: account("codex:personal"), command: "switch",
+    });
+    expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(after.replace('allow = ["claude:personal"] #', 'allow = ["claude:personal", "codex:personal"] #'));
+  });
+
+  test("answers from relay switch in another terminal are used, and the relay run neither asks nor writes", async () => {
+    const before = configText('["claude:personal"]');
+    write(before);
+    const asker = { ...fakeAsker({ terminal: false }), preset: { newAccount: "flag" as const } };
+    const result = await check(asker, "codex:personal");
+    expect(result).toEqual({
+      allowed: { account: "codex:personal", company: "OpenAI", how: "flag" },
+      confirmations: [{ question: QUESTION, how: "flag" }],
+    });
+    expect(asker.said).toEqual([]);
+    expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(before);
+  });
+
+  test("without an answer for a new account, the relay run does not ask from its old settings", async () => {
+    write(configText('["claude:personal"]'));
+    const asker = { ...fakeAsker({ terminal: false }), preset: {} };
+    expect(await check(asker, "codex:personal")).toEqual({ allowed: null, confirmations: [] });
+  });
+});
+
 describe("The question needs a terminal or --yes", () => {
   test("a script without --yes is refused", async () => {
     write(configText('["claude:personal"]'));
