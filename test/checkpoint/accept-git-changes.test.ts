@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, setDefaultTimeout, test } from "bun:test
 import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { eventsText, events, jobId, relay, relayRefs, setUpJob } from "../helpers/job";
-import type { ScratchRepo } from "../helpers/scratch-repo";
+import { machineGitKeys, type ScratchRepo } from "../helpers/scratch-repo";
 import { requireGitleaks } from "../helpers/secrets";
 
 let scratch: ScratchRepo;
@@ -23,6 +23,16 @@ const trustFile = () => join(scratch.relayHome, "jobs", jobId(scratch), "git-tru
 const trustBytes = () => readFileSync(trustFile(), "utf8");
 const hook = (name: string) => join(scratch.repo, ".git", "hooks", name);
 const addHook = (name: string) => writeFileSync(hook(name), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
+// The output with the settings that come from this machine's own git files left out of the list
+// of settings, so the test sees only what it planted.
+function withoutMachineSettings(text: string): string {
+  const machine = machineGitKeys(scratch.repo);
+  return text
+    .split("\n")
+    .filter((line) => !/^  \S/.test(line) || !machine.has(line.trim().replace(/ \(.*\)$/, "")))
+    .join("\n");
+}
 
 async function checkpointCode(): Promise<number> {
   scratch.write("notes.txt", `changed ${relayRefs(scratch).length}\n`);
@@ -161,7 +171,7 @@ test.each(BROKEN)("a trust record that is %s can be written again after yes", as
   expect(await relay(scratch, ["checkpoint"], { quiet: true })).toEqual({ code: 5, stdout: "", stderr: `${message}\n` });
 
   const declined = await relay(scratch, ["accept-git-changes"], { terminal: { answer: "no" }, quiet: name !== "missing" });
-  expect(declined).toEqual({
+  expect({ ...declined, stdout: withoutMachineSettings(declined.stdout) }).toEqual({
     code: 7,
     stdout: [
       message,
@@ -189,12 +199,12 @@ test("without a record, an empty list says none", async () => {
   scratch = await setUpJob();
   rmSync(trustFile());
   const result = await relay(scratch, ["accept-git-changes"], { terminal: { answer: "no" }, quiet: true });
-  expect(result.stdout.split("\n").slice(2, 6)).toEqual([
-    "These settings can run commands or change where git writes files:",
-    "  none",
-    "These hooks exist:",
-    "  none",
-  ]);
+  const lines = withoutMachineSettings(result.stdout).split("\n");
+  const hooksAt = lines.indexOf("These hooks exist:");
+  expect(lines[hooksAt + 1]).toBe("  none");
+  // Only settings from this machine's own git files, left out above, may be listed.
+  const settings = lines.slice(lines.indexOf("These settings can run commands or change where git writes files:") + 1, hooksAt);
+  expect(settings.filter((line) => line !== "  none")).toEqual([]);
 });
 
 test("a readable trust record of another checkout is refused with exit code 3", async () => {
