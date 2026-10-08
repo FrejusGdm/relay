@@ -26,6 +26,9 @@ export interface Snapshot {
   secretLike: string[];
   // Untracked files whose names suggest secrets and that the person approved. They are in the tree.
   approvedSecretLike: string[];
+  // git's bytes of every path in leftOut and secretLike, as latin1 text, so that two names that
+  // are not valid UTF-8 never compare equal. relay rollback protects these paths.
+  unsavedKeys: string[];
 }
 
 const decoder = new TextDecoder();
@@ -69,6 +72,7 @@ export async function buildSnapshotTree(
     const leftOut: LeftOutFile[] = [];
     const secretLike: string[] = [];
     const approvedSecretLike: string[] = [];
+    const unsavedKeys: string[] = [];
     const excluded: Buffer[] = [];
     const seen = new Set<string>();
     for (const raw of [...untracked, ...modified]) {
@@ -79,17 +83,20 @@ export async function buildSnapshotTree(
       // git lists an untracked folder that holds a repository of its own as "<folder>/".
       if (path.endsWith("/")) {
         leftOut.push({ path, reason: "repository" });
+        unsavedKeys.push(key);
         excluded.push(raw.subarray(0, raw.length - 1));
         continue;
       }
       const stat = lstatSync(Buffer.concat([Buffer.from(`${repo.worktreeRoot}/`), raw]), { throwIfNoEntry: false });
       if (stat?.isFile() && stat.size > options.maxFileBytes) {
         leftOut.push({ path, reason: "size", bytes: stat.size });
+        unsavedKeys.push(key);
         excluded.push(raw);
       } else if (untrackedNames.has(key) && looksSecret(path)) {
         if (approved.has(path)) approvedSecretLike.push(path);
         else {
           secretLike.push(path);
+          unsavedKeys.push(key);
           excluded.push(raw);
         }
       }
@@ -122,7 +129,7 @@ export async function buildSnapshotTree(
     if (jobFiles.length > 0) await run(repo, ["add", "-f", "--sparse", "--", ...jobFiles], withIndex);
 
     const tree = decoder.decode((await run(repo, ["write-tree"], withIndex)).stdout).trim();
-    return { tree, leftOut, secretLike, approvedSecretLike };
+    return { tree, leftOut, secretLike, approvedSecretLike, unsavedKeys };
   } finally {
     removeFiles();
     forget();

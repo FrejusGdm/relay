@@ -1,14 +1,14 @@
 Usage
-  relay checkpoints
+  relay checkpoints [--json]
 
 List the job's checkpoints.
 Newest first.
 
 Examples
   relay checkpoints
+  relay checkpoints --json
 
 Options
+      --json               Print the list as JSON
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.
