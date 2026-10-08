@@ -293,16 +293,17 @@ test("a file that was ignored before the rollback does not make the result check
   expect(readFileSync(join(scratch.repo, "cache.txt"), "utf8")).toBe("ignored cache\n");
 });
 
-// macOS file systems ignore case by default, so README.md and Readme.md are one file there. git
+// macOS file systems ignore case by default, so Guide.md and GUIDE.md are one file there. git
 // sees the rename, and the file at the added path is the file the plan deletes.
 test.skipIf(process.platform !== "darwin")("a rename that changes only the case of a name is rolled back", async () => {
   scratch = await setUpJob();
-  scratch.write("Readme.md", "readme at checkpoint 2\n");
+  scratch.write("Guide.md", "guide at checkpoint 2\n");
   expect((await relay(scratch, ["checkpoint"], { quiet: true })).code).toBe(0);
-  renameSync(join(scratch.repo, "Readme.md"), join(scratch.repo, "README.md"));
+  renameSync(join(scratch.repo, "Guide.md"), join(scratch.repo, "GUIDE.md"));
   const result = await relay(scratch, ["rollback", "2", "--yes"]);
   expect(result.stderr).not.toContain("has not saved");
   expect(result.code).toBe(0);
-  expect(readdirSync(scratch.repo)).toContain("Readme.md");
-  expect(readdirSync(scratch.repo)).not.toContain("README.md");
+  expect(readdirSync(scratch.repo)).toContain("Guide.md");
+  expect(readdirSync(scratch.repo)).not.toContain("GUIDE.md");
+  expect(readFileSync(join(scratch.repo, "Guide.md"), "utf8")).toBe("guide at checkpoint 2\n");
 });
