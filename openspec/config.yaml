@@ -16,8 +16,9 @@ context: |
     reverse-engineered private APIs.
   - relay never reads, copies, stores, proxies or logs provider credentials,
     tokens or Keychain entries. Each account is a profile directory
-    (CLAUDE_CONFIG_DIR, CODEX_HOME), created with mode 0700, signed in through
-    the provider's own login command.
+    (CLAUDE_CONFIG_DIR, CODEX_HOME), created with mode 0700, signed in through    the provider's own login command. One exception, approved on
+    2026-10-08: the access token T3 Code issues to relay itself, kept only in
+    the operating system's credential store (see add-t3-limit-rules).
   - When starting an agent, relay removes credential environment variables
     (for example ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, OPENAI_API_KEY)
     unless the person configured that account to use them, so the right
