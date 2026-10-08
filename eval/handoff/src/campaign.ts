@@ -1,9 +1,12 @@
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { git } from "./git.ts";
 import { askYes, checkFixturesClean, checkFreeDisk, confirmationText, refuseUnattended } from "./guards.ts";
 import { evalHome, EvalError, expandPlan, expectedMinutes, loadPlan, loadTargets, planTargets } from "./plan.ts";
-import type { CommandIO, Plan } from "./plan.ts";
+import type { CommandIO, Plan, PlannedRun } from "./plan.ts";
+import { findRelay, Relay, toolVersions } from "./relay-cli.ts";
+import { lastAttemptStatus } from "./result.ts";
+import { runOne } from "./runner.ts";
 
 export interface CampaignRecord {
   plan: string;
@@ -62,39 +65,6 @@ export async function writeCampaign(dir: string, record: CampaignRecord): Promis
   await Bun.write(join(dir, "campaign.json"), `${JSON.stringify(record, null, 2)}\n`);
 }
 
-async function version(command: string[], cwd: string): Promise<string | null> {
-  try {
-    const child = Bun.spawn(command, { cwd, env: process.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
-    ]);
-    if (exitCode !== 0) return null;
-    const line = (stdout.trim() || stderr.trim()).split("\n")[0] ?? "";
-    return /\d+\.\d+[\w.+-]*/.exec(line)?.[0] ?? (line || null);
-  } catch {
-    return null;
-  }
-}
-
-// `--version` starts no agent and sends nothing to a provider. A program that is missing or fails
-// is recorded as null.
-async function toolVersions(): Promise<CampaignRecord["tools"]> {
-  const cwd = resolve(import.meta.dir, "..", "..", "..");
-  let gitVersion: string | null = null;
-  try {
-    const result = await git(cwd, ["--version"], { allowFailure: true });
-    if (result.exitCode === 0) gitVersion = result.stdout.trim().replace(/^git version /, "");
-  } catch {}
-  return {
-    relay: await version([process.env.RELAY_BIN || "relay", "--version"], cwd),
-    claude: await version(["claude", "--version"], cwd),
-    codex: await version(["codex", "--version"], cwd),
-    bun: Bun.version,
-    git: gitVersion,
-    python3: await version(["python3", "--version"], cwd),
-  };
-}
-
 export async function runCommand(args: string[], io: CommandIO & { readLine: () => Promise<string | null> }): Promise<number> {
   const usage = () => { io.err(`${io.usage}\n`); return 2; };
   const planArg = args[0];
@@ -126,8 +96,6 @@ export async function runCommand(args: string[], io: CommandIO & { readLine: () 
     runs = runs.filter((run) => run.id === only);
     if (runs.length === 0) throw new EvalError(`No run ${only} in plan ${plan.name}.`, 2);
   }
-  const maximum = options.get("--max-runs");
-  if (typeof maximum === "string") runs = runs.slice(0, Number(maximum));
   const givenName = options.get("--campaign");
   const name = typeof givenName === "string" ? givenName : defaultCampaignName(plan.name);
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
@@ -139,8 +107,22 @@ export async function runCommand(args: string[], io: CommandIO & { readLine: () 
     checkPlanUnchanged(record, plan);
     checkTargetsUnchanged(record, mapping, home);
   }
+  // A run with a result.json is done. A run whose last attempt was a harness error waits for
+  // --retry-errors.
+  runs = runs.filter((run) => {
+    const runDir = join(dir, "runs", run.id);
+    if (existsSync(join(runDir, "result.json"))) return false;
+    return options.has("--retry-errors") || lastAttemptStatus(runDir) !== "harness_error";
+  });
+  const maximum = options.get("--max-runs");
+  if (typeof maximum === "string") runs = runs.slice(0, Number(maximum));
+  if (runs.length === 0) {
+    io.out(`Nothing left to run in campaign ${name}.\n`);
+    return 0;
+  }
+  const repoRoot = resolve(import.meta.dir, "..", "..", "..");
   if (!options.has("--allow-dirty-fixtures")) {
-    await checkFixturesClean(resolve(import.meta.dir, "..", "..", ".."), [...new Set(runs.map((run) => run.task))]);
+    await checkFixturesClean(repoRoot, [...new Set(runs.map((run) => run.task))]);
   }
   await checkFreeDisk(home);
   io.out(confirmationText(runs, planTargets(runs, targets ?? {}), await expectedMinutes(runs, resolve(import.meta.dir, "..", "tasks"))));
@@ -148,9 +130,56 @@ export async function runCommand(args: string[], io: CommandIO & { readLine: () 
   if (!record) {
     await writeCampaign(dir, {
       plan: plan.name, plan_sha256: plan.sha256, targets: mapping,
-      started_at: new Date().toISOString(), tools: await toolVersions(),
+      started_at: new Date().toISOString(), tools: await toolVersions(process.env.RELAY_BIN || "relay", repoRoot),
     });
   }
-  io.err("Not built yet.\n");
-  return 1;
+  const relay = new Relay(findRelay());
+  const stop = new AbortController();
+  const onInterrupt = () => { stop.abort(); };
+  process.on("SIGINT", onInterrupt);
+  let exitCode = 0;
+  try {
+    for (const run of runs) {
+      if (stop.signal.aborted) {
+        io.err("Stopped. This run will start again next time.\n");
+        return 130;
+      }
+      io.out(`[${planned.indexOf(run) + 1} of ${planned.length}] ${describeRun(run, mapping)}\n`);
+      const { result, limit } = await runOne({
+        relay, home, campaign: name, campaignDir: dir, plan: plan.name, targets: mapping, repoRoot,
+        segmentLimitMs: plan.max_minutes_per_segment * 60_000,
+        allowDirtyFixtures: options.has("--allow-dirty-fixtures"), keepWork: options.has("--keep-work"),
+        stop: stop.signal, out: io.out,
+      }, run);
+      if (result.status === "stopped_by_person") {
+        io.err("Stopped. This run will start again next time.\n");
+        return 130;
+      }
+      if (result.safety.bypass_flags_seen) {
+        io.err("relay started an agent with a permission bypass flag. Stopped.\n");
+        return 1;
+      }
+      if (limit !== null) {
+        io.err(`${limit.target} reached its limit. It resets at ${limit.retryAt ?? "an unknown time"}. Run the same command again after that.\n`);
+        return 5;
+      }
+      if (result.status === "harness_error") {
+        io.err(`The harness failed on ${run.id}: ${result.notes} The run stays pending.\n`);
+        exitCode = 1;
+        continue;
+      }
+      io.out(result.status === "completed" ? `Saved result ${run.id}.\n` : `Saved result ${run.id} (${result.status}).\n`);
+    }
+  } finally {
+    process.off("SIGINT", onInterrupt);
+  }
+  return exitCode;
+}
+
+function describeRun(run: PlannedRun, targets: Record<string, string>): string {
+  const from = targets[run.from]!;
+  if (run.kind === "baseline") return `${run.task}, baseline on ${from}, repetition ${run.repetition}`;
+  const point = run.point!.startsWith("steps:") ? `${run.point!.slice("steps:".length)}% of steps`
+    : run.point === "event:first-test-run" ? "the first test run" : "an untested edit";
+  return `${run.task}, handoff from ${from} to ${targets[run.to!]!} at ${point}, repetition ${run.repetition}`;
 }
