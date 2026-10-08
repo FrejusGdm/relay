@@ -35,7 +35,7 @@ and decisions.
   it sends your code to that company.
 
 
-**Status:** early preview (v0.2.1): relay runs Claude Code or Codex on your own accounts, saves checkpoints, and hands a task from one to the other with `relay switch`. So far it has been tested with fake agents only. Read [VISION.md](VISION.md) for the idea,
+**Status:** early preview (v0.2.2): relay runs Claude Code or Codex on your own accounts, saves checkpoints, and hands a task from one to the other with `relay switch`. A first real handoff from Claude Code to Codex has worked; expect rough edges. Read [VISION.md](VISION.md) for the idea,
 [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the open decisions, and
 [DESIGN.md](DESIGN.md) for the design direction.
 
