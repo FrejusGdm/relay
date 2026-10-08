@@ -223,6 +223,51 @@ Rebuilt the index from .relay/ files in 2 projects.
 Nothing about a job is lost, because nothing lives only in the index. If the daemon cannot start
 again, the command prints the same message as `relay daemon start` and exits with code 10.
 
+## relay status
+
+`relay status` is the everyday view of a job. Run it anywhere in a project, or pass
+`--job <id>` from any folder. It prints the job, one lane per account and a closing sentence:
+
+```
+$ relay status
+Build authentication   job 3f9a2c1d · checkpoint 912ec1 · 2 min ago
+
+claude:work      ────────────┐      limit reached · reset unknown
+                             │
+codex:personal   ━━━━━━━━━━━━┷━━━   running · usage unknown
+claude:home      ────────────────   available · 9% used (5-hour window, checked 14:30)
+
+Continuing on Codex.
+```
+
+The first row is the account the job left, the step line joins it to the account the job moved
+to, and every other configured account follows in alphabetical order. Each row says what the
+account can do in one word (`running`, `stopped`, `available`, `limit reached`, `out of quota`,
+`unavailable` or `unknown`), then the reset time or the usage relay measured, window by window.
+relay never adds up usage across accounts, and it says `not measured` or `reset unknown` when it
+does not know. On a terminal the current row is bold and limited rows are dim; piped output has no
+escape codes. `relay status --json` prints the same view as one JSON object
+(`"schema": "relay.status/v1"`).
+
+```mermaid
+flowchart TD
+  start["relay status [--job id] [--json]"] --> find{"Is the folder in a relay project,<br/>or is --job in projects.list?"}
+  find -- no --> refuse["This folder is not in a relay project.<br/>exit 3"]
+  find -- yes --> ask{"Does the daemon answer within 300 ms<br/>and know the job?"}
+  ask -- yes --> api["The job, its workers and the accounts<br/>from the API"]
+  ask -- no --> files["Build the same index in memory from the job files,<br/>then add availability from a read-only relay.db<br/>and from hooks spooled while the daemon was down"]
+  api --> view["One view: rows, words, closing sentence"]
+  files --> view
+  view --> out["Text or JSON; without the daemon the text ends with<br/>Showing saved state. The relay daemon is not running."]
+```
+
+The diagram shows where `relay status` gets its data. It never starts the daemon. When the daemon
+answers, the view comes from the API. When it does not, relay reads the same files the daemon
+would, with the same code, so the answer is the same apart from the `daemon` field and the time it
+was made, and the text adds the line `Showing saved state. The relay daemon is not running.`
+Outside a project, without `--job`, the command prints `This folder is not in a relay project. Run
+relay init here, or pass --job <id>.` and exits with code 3.
+
 ## Reading the log
 
 Each line of `logs/daemon.log` is one JSON object with `ts`, `level`, `msg`, `pid`,

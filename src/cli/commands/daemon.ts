@@ -4,7 +4,7 @@
 // that holds the lock.
 import { join } from "node:path";
 import { checkRuntimeDir, getVersion, UntrustedRuntime } from "../../client/api-client";
-import { startDaemon } from "../../client/ensure-daemon";
+import { couldNotStartMessage, startDaemon } from "../../client/ensure-daemon";
 import { printable, quote } from "../../core/quote";
 import { runtimeDir, socketPath } from "../../daemon/paths";
 import { daemonLockHolder, pidPath, readPidFile } from "../../daemon/singleton";
@@ -114,11 +114,12 @@ export async function stopDaemon(ctx: CommandContext, quiet = false): Promise<nu
   } catch (error) {
     if ((error as { code?: string }).code !== "ESRCH") throw error;
   }
-  // Done when the daemon's process is gone or the lock is free; a daemon started meanwhile by
-  // another command may hold the lock again.
+  // Done when the daemon's process is gone. The daemon frees its lock a moment before it exits, and
+  // a daemon started meanwhile by another command may hold the lock again, so the lock alone does
+  // not say the process ended.
   const deadline = Date.now() + STOP_WAIT_MS;
   while (Date.now() < deadline) {
-    if (!processExists(answer.pid) || daemonLockHolder(runDir) === null) {
+    if (!processExists(answer.pid)) {
       out("relay daemon stopped\n");
       return ExitCode.Ok;
     }
@@ -169,7 +170,7 @@ function processExists(pid: number): boolean {
 }
 
 export function couldNotStart(ctx: CommandContext): number {
-  ctx.io.err(`relay could not start its background service. Details are in ${printable(logPath(ctx))}.\n`);
+  ctx.io.err(couldNotStartMessage(ctx.relayHome));
   return ExitCode.DaemonNotRunning;
 }
 

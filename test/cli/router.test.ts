@@ -10,9 +10,9 @@ const notBuilt = (name: string) =>
   `relay: ${name} is not built yet. This version only reads your settings and shows help.\n`;
 
 describe("Command set", () => {
-  test("relay status is handled as the status command", async () => {
-    const result = await runRelayInProcess(["status"]);
-    expect(result).toEqual({ code: 69, stdout: "", stderr: notBuilt("status") });
+  test("relay providers is handled as the providers command", async () => {
+    const result = await runRelayInProcess(["providers"]);
+    expect(result).toEqual({ code: 69, stdout: "", stderr: notBuilt("providers") });
   });
 
   test("the sixteen commands and help are recognized", () => {

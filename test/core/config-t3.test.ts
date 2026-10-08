@@ -18,7 +18,7 @@ describe("T3 settings", () => {
     ['[t3.instances.codex]\naccount = "codex:work"',
       't3.instances.codex.account: "codex:work" is not one of your accounts.'],
   ])("the CLI reports a settings problem with exit code 78: %s", async (text, problem) => {
-    const result = await runRelayInProcess(["status"], { relayHome: makeRelayHome(text) });
+    const result = await runRelayInProcess(["providers"], { relayHome: makeRelayHome(text) });
     expect(result.code).toBe(78);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain(`  ${problem}\n`);

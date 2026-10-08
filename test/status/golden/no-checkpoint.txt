@@ -1,0 +1,7 @@
+Build authentication   job 3f9a2c1d · no checkpoint yet
+
+codex:personal   ────────────────   unknown · not measured
+
+No agent is working on this job.
+
+Showing saved state. The relay daemon is not running.

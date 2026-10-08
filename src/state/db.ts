@@ -66,6 +66,15 @@ function create(path: string): Database {
   return db;
 }
 
+// An index in memory with the same schema, for relay status when the daemon does not answer.
+export function openMemoryDatabase(): Database {
+  const db = new Database(":memory:", { strict: true });
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec(schema);
+  db.prepare("INSERT INTO meta (key, value) VALUES ('stream_epoch', 'memory')").run();
+  return db;
+}
+
 function configure(db: Database): void {
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA synchronous = NORMAL");

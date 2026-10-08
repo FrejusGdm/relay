@@ -77,7 +77,7 @@ describe("the home folder", () => {
       if (name !== "RELAY_HOME" && value !== undefined) env[name] = value;
     }
     env.HOME = home;
-    const result = Bun.spawnSync([process.execPath, "--no-env-file", MAIN, "status"], { env });
+    const result = Bun.spawnSync([process.execPath, "--no-env-file", MAIN, "providers"], { env });
     expect(result.exitCode).toBe(69);
     expect(statSync(join(home, ".relay")).mode & 0o777).toBe(0o700);
   });

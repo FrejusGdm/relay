@@ -41,6 +41,7 @@ export async function runRelayInProcess(
       out: (text) => (stdout += text),
       err: (text) => (stderr += text),
       stdinIsTTY: false,
+      stdoutIsTTY: false,
       readStdinToEnd: async () => options.stdin ?? "",
       isTerminal: options.terminal !== undefined,
       readLine: async () => {

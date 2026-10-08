@@ -13,12 +13,13 @@ const missingRelayHome = () => join(makeRelayHome(), "missing");
 
 describe("Commands that are not built yet", () => {
   // Every command except hook reads the settings first; relay init, relay checkpoint, relay
-  // checkpoints, relay rollback, relay accept-git-changes, relay daemon and relay doctor are built.
+  // checkpoints, relay rollback, relay accept-git-changes, relay daemon, relay doctor and relay status
+  // are built.
   const readSettings = COMMANDS.filter((def) => def.name !== "hook");
   const unbuilt = readSettings.filter((def) => !def.built);
 
-  test("there are eight of them", () => {
-    expect(unbuilt).toHaveLength(8);
+  test("there are seven of them", () => {
+    expect(unbuilt).toHaveLength(7);
   });
 
   test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(
@@ -46,14 +47,14 @@ describe("Commands that are not built yet", () => {
 
   test("settings with problems print the problem report", async () => {
     const relayHome = makeRelayHome('colour = "blue"\n');
-    expect(await runRelayInProcess(["status"], { relayHome })).toEqual({
+    expect(await runRelayInProcess(["providers"], { relayHome })).toEqual({
       code: 78,
       stdout: "",
       stderr: `relay: ${join(relayHome, "config.toml")} has 1 problem:\n  colour: unknown setting.\nThe settings are described in docs/config.md.\n`,
     });
   });
 
-  test.each([[["status"]], [["status", "--log-level", "debug"]]])("an invalid RELAY_LOG_LEVEL fails relay %p", async (args) => {
+  test.each([[["providers"]], [["providers", "--log-level", "debug"]]])("an invalid RELAY_LOG_LEVEL fails relay %p", async (args) => {
     expect(await runRelayInProcess(args, { env: { RELAY_LOG_LEVEL: "loud" } })).toEqual({
       code: 78,
       stdout: "",
@@ -64,7 +65,7 @@ describe("Commands that are not built yet", () => {
   test("a credential in the settings is refused and never printed", async () => {
     const value = ["sk", "ant", "test", "123"].join("-");
     const relayHome = makeRelayHome(`[accounts."claude:personal"]\napi_key = "${value}"\n`);
-    const result = await runRelay(["status"], { env: { RELAY_HOME: relayHome } });
+    const result = await runRelay(["providers"], { env: { RELAY_HOME: relayHome } });
     expect(result.code).toBe(78);
     expect(result.stderr).toContain(
       `accounts."claude:personal".api_key: relay never stores credentials. Remove this key and sign in with the provider's own login command.`,
@@ -78,7 +79,7 @@ describe("Commands that are not built yet", () => {
 });
 
 describe("Help, version and usage errors touch nothing", () => {
-  test.each([[["--help"]], [["status", "--help"]], [["help", "run"]], [["--version"]], [["status", "extra"]], [["nope"]]])(
+  test.each([[["--help"]], [["providers", "--help"]], [["help", "run"]], [["--version"]], [["providers", "extra"]], [["nope"]]])(
     "relay %p leaves a missing relay folder missing",
     async (args) => {
       const relayHome = missingRelayHome();
@@ -103,7 +104,7 @@ describe("Help, version and usage errors touch nothing", () => {
 describe("Relay folder safety", () => {
   test("the first run creates the folder with mode 0700 and no settings file", async () => {
     const relayHome = missingRelayHome();
-    expect((await runRelay(["status"], { env: { RELAY_HOME: relayHome } })).code).toBe(69);
+    expect((await runRelay(["providers"], { env: { RELAY_HOME: relayHome } })).code).toBe(69);
     expect(statSync(relayHome).mode & 0o777).toBe(0o700);
     expect(existsSync(join(relayHome, "config.toml"))).toBe(false);
   });
@@ -111,7 +112,7 @@ describe("Relay folder safety", () => {
   test("a folder others can change is refused", async () => {
     const relayHome = makeRelayHome();
     chmodSync(relayHome, 0o777);
-    expect(await runRelayInProcess(["status"], { relayHome })).toEqual({
+    expect(await runRelayInProcess(["providers"], { relayHome })).toEqual({
       code: 78,
       stdout: "",
       stderr: `relay: other users can change ${relayHome}. Run "chmod 700 ${relayHome}" and try again.\n`,
@@ -120,7 +121,7 @@ describe("Relay folder safety", () => {
 
   test("a folder owned by someone else is refused", async () => {
     const relayHome = makeRelayHome();
-    expect(await runRelayInProcess(["status"], { relayHome, uid: process.getuid!() + 1 })).toEqual({
+    expect(await runRelayInProcess(["providers"], { relayHome, uid: process.getuid!() + 1 })).toEqual({
       code: 78,
       stdout: "",
       stderr: `relay: ${relayHome} belongs to another user. relay only uses a folder you own.\n`,
@@ -131,7 +132,7 @@ describe("Relay folder safety", () => {
     const relayHome = makeRelayHome("version = 1\n");
     chmodSync(relayHome, 0o600);
     try {
-      expect(await runRelayInProcess(["status"], { relayHome })).toEqual({
+      expect(await runRelayInProcess(["providers"], { relayHome })).toEqual({
         code: 78,
         stdout: "",
         stderr: `relay: you cannot read, write and open ${relayHome}. Run "chmod 700 ${relayHome}" and try again.\n`,
@@ -142,7 +143,7 @@ describe("Relay folder safety", () => {
   });
 
   test("a relative RELAY_HOME is refused", async () => {
-    expect(await runRelayInProcess(["status"], { relayHome: "relay-home" })).toEqual({
+    expect(await runRelayInProcess(["providers"], { relayHome: "relay-home" })).toEqual({
       code: 78,
       stdout: "",
       stderr: 'relay: RELAY_HOME must be an absolute path, not "relay-home".\n',
@@ -152,7 +153,7 @@ describe("Relay folder safety", () => {
   test("a settings file others can change is refused", async () => {
     const relayHome = makeRelayHome("version = 1\n", 0o666);
     const file = join(relayHome, "config.toml");
-    expect(await runRelayInProcess(["status"], { relayHome })).toEqual({
+    expect(await runRelayInProcess(["providers"], { relayHome })).toEqual({
       code: 78,
       stdout: "",
       stderr: `relay: other users can change ${file}. Run "chmod 600 ${file}" and try again.\n`,
