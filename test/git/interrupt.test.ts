@@ -20,17 +20,24 @@ beforeEach(() => {
   scratch.git("config", "filter.slow.clean", filter);
 });
 afterEach(() => {
-  if (existsSync(pidFile)) {
+  const pid = existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0;
+  // Process ID 0 would mean this test's own process group.
+  if (pid > 0) {
     try {
-      process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+      process.kill(pid, "SIGKILL");
     } catch {}
   }
   scratch.cleanup();
 });
 
+// The shell creates the file a moment before it writes the process ID, so wait for the ID itself.
 async function filterPid(): Promise<number> {
-  for (let i = 0; i < 250 && !existsSync(pidFile); i++) await Bun.sleep(20);
-  const text = existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : "";
+  let text = "";
+  for (let i = 0; i < 250; i++) {
+    text = existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : "";
+    if (text !== "") break;
+    await Bun.sleep(20);
+  }
   expect(text).not.toBe("");
   return Number(text);
 }
