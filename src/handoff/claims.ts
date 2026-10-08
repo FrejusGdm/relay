@@ -21,7 +21,8 @@ const FAIL = new Set(["fail", "fails", "failed", "failing", "red", "broken"]);
 export async function compareClaims(repo: Repository, input: {
   notes: ParsedNotes;
   checks: CheckResult[];
-  // The paths that changed between the worker's start checkpoint and the work checkpoint.
+  // The paths that changed between the worker's start checkpoint and the work checkpoint, job files
+  // under .relay/ included.
   changedWhileWorking: string[];
   workCheckpoint: string;
   from: Provider;

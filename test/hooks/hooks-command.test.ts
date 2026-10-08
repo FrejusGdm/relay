@@ -24,7 +24,9 @@ test("relay shows the entries and asks; no answer changes nothing", async () => 
   expect(no.stderr).toBe("Nothing changed.\n");
   expect(existsSync(settings)).toBe(false);
   const noTerminal = await runRelayInProcess(["hooks", "install", "claude:work"], { relayHome, env: { ...fakeEnv(), RELAY_BIN: RELAY } });
-  expect(noTerminal.code).toBe(7);
+  expect(noTerminal).toMatchObject({
+    code: 7, stderr: 'relay needs your yes to the question "Install these hooks?" and has no terminal to ask it in.\nRun the command again in a terminal, or add --yes.\n',
+  });
   const yes = await runRelayInProcess(["hooks", "install", "claude:work"], { relayHome, env: { ...fakeEnv(), RELAY_BIN: RELAY }, answers: ["y"] });
   expect(yes.code).toBe(0);
   expect(yes.stdout).toContain("Installed relay's hooks for claude:work.\n");

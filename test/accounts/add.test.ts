@@ -129,10 +129,13 @@ test("a missing provider program is refused with exit 20", async () => {
   expect(existsSync(join(relayHome, "config.toml"))).toBe(false);
 });
 
-test("without a terminal and without --yes relay asks for one and exits 7", async () => {
+test("without a terminal and without --yes relay names its question and exits 7", async () => {
   const relayHome = relayFolder();
   const result = await runRelayInProcess(["account", "add", "claude", "work"], { relayHome, env: fakeEnv() });
-  expect(result).toEqual({ code: 7, stdout: "", stderr: "relay needs your answer. Run again in a terminal, or add --yes.\n" });
+  expect(result).toEqual({
+    code: 7, stdout: "",
+    stderr: 'relay needs your yes to the question "Add claude:work?" and has no terminal to ask it in.\nRun the command again in a terminal, or add --yes.\n',
+  });
   expect(existsSync(join(relayHome, "profiles"))).toBe(false);
 });
 

@@ -171,7 +171,7 @@ function notResponding(ctx: CommandContext, runDir: string): number {
 }
 
 export function couldNotStart(ctx: CommandContext): number {
-  ctx.io.err(couldNotStartMessage(ctx.relayHome));
+  ctx.io.err(couldNotStartMessage(ctx.relayHome, ctx.env));
   return ExitCode.DaemonNotRunning;
 }
 

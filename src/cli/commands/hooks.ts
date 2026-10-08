@@ -11,7 +11,7 @@ import {
   readSettingsFile, relayProgram, removeHooks, removeStatusLine, writeSettings,
 } from "../../hooks/install";
 import { join } from "node:path";
-import { CommandError } from "../errors";
+import { CommandError, needsAnswer } from "../errors";
 import { ExitCode } from "../exit-codes";
 import type { CommandContext } from "./registry";
 
@@ -64,9 +64,7 @@ function out(ctx: CommandContext, lines: string[]): void {
 
 async function confirm(ctx: CommandContext, question: string): Promise<void> {
   if (ctx.values.yes === true) return;
-  if (!ctx.io.stdinIsTTY) {
-    throw new CommandError(ExitCode.NeedsPerson, ["relay needs your answer. Run again in a terminal, or add --yes."]);
-  }
+  if (!ctx.io.stdinIsTTY) throw needsAnswer(question);
   ctx.io.out(`${question} [y/N] `);
   const answer = (await ctx.io.readLine())?.trim().toLowerCase();
   if (answer !== "y" && answer !== "yes") throw new CommandError(ExitCode.NeedsPerson, ["Nothing changed."]);

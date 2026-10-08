@@ -101,6 +101,13 @@ relay: This switch needs a terminal. Run relay switch codex:personal in the proj
 | 33 | The agent did not stop, or its `relay run` did not answer | Stop the agent yourself, then switch again |
 | 130 | You pressed Control-C | The work checkpoint is kept; switch again |
 
+An interactive next agent has started when it is still running after `handoff.start_check_seconds`.
+A headless next agent has started as soon as it reports its session, writes a message, uses a tool
+or finishes a turn. relay stops a headless agent only when none of these happens within 60 seconds,
+and then exits with code 31 and the reason, for example `Codex · personal did not start: Codex did
+not report a session within 60 seconds.` An agent that has started is never stopped by this check,
+however long its first command runs.
+
 ## Differences from the earlier changes
 
 Task 1.1 compared the names this change uses with the code that phases 1 to 3 built. No name had to

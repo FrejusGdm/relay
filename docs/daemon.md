@@ -218,7 +218,11 @@ hooks have a receiver. The daemon they start is not their child in any way that 
 its own session, so it keeps running after the command and the terminal end. When it cannot start,
 for example because the runtime directory is not private, the command says so and goes on: `relay
 run` and `relay switch` work without the daemon, and the hooks then write to the spool, which the
-daemon reads when it next starts. `relay status` never starts the daemon. Under the test preload
+daemon reads when it next starts. The daemon's socket is `run/relay.sock` in the relay folder, and
+the operating system limits a socket path to 103 bytes on macOS and 107 bytes on Linux. With a
+longer `RELAY_HOME` the daemon cannot start, and the message names the reason directly:
+`relay could not start its background service: the socket path <path> is too long (at most 103
+bytes on macOS). Set RELAY_HOME to a shorter path.` `relay status` never starts the daemon. Under the test preload
 (`RELAY_TEST=1`), the commands start a daemon only when a test asks for one with
 `RELAY_TEST_START_DAEMON=1`, so the many tests of `relay run` and `relay switch` leave no daemon
 behind.

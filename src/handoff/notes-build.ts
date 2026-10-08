@@ -9,7 +9,7 @@ import { git } from "../git/run";
 import type { Repository } from "../git/repo";
 import { gitFailed, jobPrefix } from "../checkpoint/commit";
 import type { FailureReason } from "../adapters/types";
-import { changedPaths, checkpointHead } from "./context";
+import { changedJobFiles, changedPaths, checkpointHead } from "./context";
 
 // What relay recorded itself about the worker.
 export interface WorkerRecord {
@@ -32,6 +32,9 @@ export interface WorkerFacts {
   // The commit of the start checkpoint, or null when it is unknown.
   startCheckpoint: string | null;
   filesChanged: string[];
+  // The job files under .relay/ that changed in the same time, kept apart because relay's own files
+  // there change at every checkpoint.
+  jobFilesChanged: string[];
   commits: number;
 }
 
@@ -49,6 +52,7 @@ export async function workerFacts(
     howItEnded: howItEnded(record),
     startCheckpoint,
     filesChanged: startCheckpoint === null ? [] : await changedPaths(repo, startCheckpoint, input.workCheckpoint),
+    jobFilesChanged: startCheckpoint === null ? [] : await changedJobFiles(repo, startCheckpoint, input.workCheckpoint),
     commits: await commitsBetween(repo, startCheckpoint, input.workCheckpoint),
   };
 }

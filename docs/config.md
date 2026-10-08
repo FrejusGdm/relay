@@ -15,6 +15,10 @@ variable `RELAY_HOME` names another folder. An empty `RELAY_HOME` counts as unse
 - `RELAY_HOME` cannot be your home folder itself (`~`, `~/` or the same path written out), because
   relay changes the mode of its folder and keeps private files there:
   `relay: RELAY_HOME cannot be your home folder itself ("~"). Use a folder of its own, such as ~/.relay.`
+- Keep `RELAY_HOME` short. relay's background service listens on `run/relay.sock` inside the relay
+  folder, and a socket path may be at most 103 bytes on macOS and 107 bytes on Linux. With a longer
+  path, relay still works but cannot start the service, and says so on every `relay run` and
+  `relay switch` (see `docs/daemon.md`).
 - relay finds the home folder through the `HOME` variable. It asks the operating system only when
   `HOME` is unset, empty or not an absolute path.
 - When a command runs, relay creates the relay folder with mode 0700 if it is missing. Help,

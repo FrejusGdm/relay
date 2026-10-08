@@ -25,7 +25,7 @@ function example(changes: Partial<CheckpointInput> = {}): CheckpointInput {
     to: { id: "codex:personal", provider: "codex", name: "personal" },
     worker: {
       startedAt: new Date("2026-10-07T14:02:11Z"), endedAt: new Date("2026-10-07T14:19:05Z"), howItEnded: "stopped by relay switch",
-      startCheckpoint: "4be81c0".padEnd(40, "0"), filesChanged: ["src/auth/callback.ts", "src/auth/google.ts"], commits: 1,
+      startCheckpoint: "4be81c0".padEnd(40, "0"), filesChanged: ["src/auth/callback.ts", "src/auth/google.ts"], jobFilesChanged: [], commits: 1,
     },
     worktreeRoot: "/Users/josue/projects/app", branch: "auth", base: "86300b0".padEnd(40, "1"),
     checkpoint: { number: 7, commit: "912ec1f".padEnd(40, "2") },

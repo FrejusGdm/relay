@@ -21,7 +21,7 @@ import { expandPath } from "../../core/paths";
 import { printable, quote } from "../../core/quote";
 import { now } from "../../platform/clock";
 import { policyOf } from "../../policies/load";
-import { CommandError } from "../errors";
+import { CommandError, needsAnswer } from "../errors";
 import { ExitCode } from "../exit-codes";
 import { install as installHooks } from "./hooks";
 import { termLines } from "./policy";
@@ -108,9 +108,7 @@ function lines(ctx: CommandContext, text: string[]): void {
 
 async function confirm(ctx: CommandContext, question: string): Promise<void> {
   if (ctx.values.yes === true) return;
-  if (!ctx.io.stdinIsTTY) {
-    throw new CommandError(ExitCode.NeedsPerson, ["relay needs your answer. Run again in a terminal, or add --yes."]);
-  }
+  if (!ctx.io.stdinIsTTY) throw needsAnswer(question);
   ctx.io.out(`${question} [y/N] `);
   const answer = (await ctx.io.readLine())?.trim().toLowerCase();
   if (answer !== "y" && answer !== "yes") throw new CommandError(ExitCode.NeedsPerson, ["Nothing changed."]);
@@ -153,9 +151,8 @@ async function add(ctx: CommandContext, args: string[]): Promise<number> {
   if (!detection.installed) {
     throw new CommandError(ExitCode.ProviderMissing, [`${adapter.displayName} is not installed. Install it, then run relay account add again.`]);
   }
-  if (ctx.values.yes !== true && !ctx.io.stdinIsTTY) {
-    throw new CommandError(ExitCode.NeedsPerson, ["relay needs your answer. Run again in a terminal, or add --yes."]);
-  }
+  // Refused before the policy notes are printed, so a script sees only the refusal.
+  if (ctx.values.yes !== true && !ctx.io.stdinIsTTY) throw needsAnswer(`Add ${id}?`);
 
   const policy = policyOf(provider);
   lines(ctx, [`${policy.displayName} policy notes, checked ${policy.checkedOn}:`, policy.summary, ...termLines(policy), ""]);

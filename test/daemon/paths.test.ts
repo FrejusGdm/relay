@@ -110,7 +110,7 @@ describe("checkSocketPathLength", () => {
     const long = pathOf(max + 1);
     expect(Buffer.byteLength(long)).toBe(max + 1);
     expect(refusal(() => checkSocketPathLength(long, platform))).toBe(
-      `relay cannot start: the socket path ${long} is too long. Set RELAY_HOME to a shorter path.`,
+      `relay cannot start: the socket path ${long} is too long (at most ${max} bytes on ${platform === "linux" ? "Linux" : "macOS"}). Set RELAY_HOME to a shorter path.`,
     );
   });
 

@@ -47,6 +47,13 @@ export async function changedPaths(repo: Repository, from: string, to: string): 
   return output.split("\0").filter((path) => path !== "");
 }
 
+// The job files under .relay/ that differ between two commits, such as .relay/task.md when an agent
+// edited it.
+export async function changedJobFiles(repo: Repository, from: string, to: string): Promise<string[]> {
+  const output = await read(repo, ["diff", "--name-only", "-z", "--no-renames", from, to, "--", ".relay"], "the changed job files");
+  return output.split("\0").filter((path) => path !== "");
+}
+
 // git diff --stat from the job's base to the work checkpoint, at most 60 lines.
 export async function diffStat(repo: Repository, base: string | null, work: string): Promise<string[]> {
   const output = await read(repo, ["diff", "--stat", "--no-renames", await baseTree(repo, base), work, ...WITHOUT_JOB_FILES], "the diff");
