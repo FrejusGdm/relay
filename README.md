@@ -38,6 +38,23 @@ and decisions.
 [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the open decisions, and
 [DESIGN.md](DESIGN.md) for the design direction.
 
+## Install
+
+relay is free and open source. These commands download the latest release from GitHub and
+need no GitHub account. On macOS (Apple silicon):
+
+```sh
+mkdir -p "$HOME/.local/bin"
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64
+chmod +x "$HOME/.local/bin/relay"
+"$HOME/.local/bin/relay" --version
+```
+
+On Linux (x64), use `relay-linux-x64` in place of `relay-darwin-arm64`. To run `relay` by
+name, add `~/.local/bin` to your PATH, for example with `export PATH="$HOME/.local/bin:$PATH"`
+in `~/.zshrc` on macOS or `~/.bashrc` on Linux.
+
 ## Repository layout
 
 | Path | What it is |

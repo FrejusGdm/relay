@@ -39,12 +39,12 @@ The home page SHALL have a pricing section (`id="pricing"`) that says the core i
 - **THEN** every form has `method="dialog"`
 
 ### Requirement: Links lead somewhere
-Every link on the website SHALL lead to a part of the page or a page that exists. The only link targets SHALL be `#top`, `#how`, `#pricing`, `/` and `https://www.apache.org/licenses/LICENSE-2.0`. The website SHALL NOT link to the private GitHub repository.
+Every link on the website SHALL lead to a part of the page or a page that exists. The only link targets SHALL be `#top`, `#how`, `#pricing`, `/`, `https://www.apache.org/licenses/LICENSE-2.0` and, since Josué made relay open source on 2026-10-08, the public repository `https://github.com/FrejusGdm/relay`.
 
 #### Scenario: Link check
 - **WHEN** every `href` of an `<a>` element in `index.html` and `404.html` is listed
 - **THEN** each one is in the allowed list
-- **AND** none contains `github.com`
+- **AND** the only one that contains `github.com` is `https://github.com/FrejusGdm/relay`
 
 ### Requirement: Theme button with light by default
 Josué asked on 2026-10-08 for one small icon button in place of the Light, Dark and System switch. The navigation SHALL have one theme button that shows a moon icon on the light page and a sun icon on the dark page, with the label `Switch to dark theme` or `Switch to light theme`, a visible focus outline and a size of 32 to 36 pixels. There SHALL be two themes: the light tokens of `DESIGN.md` with the olive accent, which is the default, and the dark tokens with the olive dark accent. `site/public/theme.js`, loaded in `<head>` before the stylesheet, SHALL apply the saved theme before the first paint and SHALL remember the choice in `localStorage` under the key `relay-theme`. When the browser blocks storage, the button SHALL still work for the open page.

@@ -9,11 +9,8 @@ const workflow = join(root, ".github", "workflows", "release.yml");
 const cliBlock = (asset: string) =>
   [
     'mkdir -p "$HOME/.local/bin"',
-    "gh release download \\",
-    "  --repo FrejusGdm/relay \\",
-    `  --pattern ${asset} \\`,
-    '  --output "$HOME/.local/bin/relay" \\',
-    "  --clobber",
+    'curl -fsSL -o "$HOME/.local/bin/relay" \\',
+    `  https://github.com/FrejusGdm/relay/releases/latest/download/${asset}`,
     'chmod +x "$HOME/.local/bin/relay"',
     '"$HOME/.local/bin/relay" --version',
   ].join("\n");
@@ -34,8 +31,11 @@ describe.each(Object.keys(blocks))("#%s", (id) => {
     expect(preText(await index(), id)).toBe(blocks[id]!);
   });
 
-  test("has no line longer than 42 characters", async () => {
-    for (const line of (preText(await index(), id) ?? "").split("\n")) expect(line.length).toBeLessThanOrEqual(42);
+  test("has no line longer than 42 characters except the download address", async () => {
+    for (const line of (preText(await index(), id) ?? "").split("\n")) {
+      if (line.startsWith("  https://github.com/FrejusGdm/relay/releases/latest/download/")) continue;
+      expect(line.length).toBeLessThanOrEqual(42);
+    }
   });
 });
 
@@ -47,11 +47,12 @@ test("every install button opens the one panel", async () => {
   for (const target of targets) expect(target).toBe("install");
 });
 
-test("says the repository is private and how to check gh", async () => {
+test("says relay is open source and needs no GitHub account or gh", async () => {
   const html = await index();
-  expect(html).toContain("private");
-  expect(html).toContain("gh auth status");
-  expect(html).not.toMatch(/spctl|xattr/);
+  expect(html).toContain(
+    '<p>relay is free and <a href="https://github.com/FrejusGdm/relay">open source</a>. These commands download the latest release from GitHub.</p>',
+  );
+  expect(html).not.toMatch(/gh auth|gh release|private|--pattern|spctl|xattr/);
 });
 
 test("the Mac app block has no command and says the app is not released yet", async () => {
