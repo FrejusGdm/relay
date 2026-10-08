@@ -14,13 +14,13 @@ const missingRelayHome = () => join(makeRelayHome(), "missing");
 describe("Commands that are not built yet", () => {
   // Every command except the quiet ones (hook and statusline) reports broken settings; relay init,
   // relay checkpoint, relay checkpoints, relay rollback, relay accept-git-changes, relay daemon,
-  // relay doctor, relay status, relay account, relay providers, relay policy and relay hooks are
-  // built.
+  // relay doctor, relay status, relay run, relay account, relay providers, relay policy and relay
+  // hooks are built.
   const readSettings = COMMANDS.filter((def) => !def.quiet);
   const unbuilt = readSettings.filter((def) => !def.built);
 
-  test("there are two of them", () => {
-    expect(unbuilt).toHaveLength(2);
+  test("there is one of them", () => {
+    expect(unbuilt).toHaveLength(1);
   });
 
   test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(
@@ -93,7 +93,7 @@ describe("Help, version and usage errors touch nothing", () => {
     const relayHome = makeRelayHome(BROKEN, 0o666);
     const result = await runRelayInProcess(["run", "--help"], { relayHome });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("  relay run [<provider[:account]>]\n");
+    expect(result.stdout).toContain("  relay run [<provider[:account]>] [--headless]");
     expect(result.stderr).toBe("");
   });
 

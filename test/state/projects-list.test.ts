@@ -3,7 +3,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { appendFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { projectsListPath, readProjects, registerProject } from "../../src/state/projects-list";
-import { relay, setUpJob } from "../helpers/job";
+import { FAKE_SCANNER, relay, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, tempRelayHome } from "../helpers/relay-home";
 
 afterAll(removeTempRelayHomes);
@@ -30,7 +30,7 @@ test("a relative root or one with a newline is never written", () => {
 });
 
 test("a command that resolves a job lists its project once", async () => {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   try {
     rmSync(projectsListPath(scratch.relayHome));
     expect((await relay(scratch, ["checkpoints"], { quiet: true })).code).toBe(0);

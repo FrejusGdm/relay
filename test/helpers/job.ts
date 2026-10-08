@@ -8,15 +8,20 @@ import { runRelayInProcess, type RelayResult } from "./cli";
 import { captureState, type RepoState } from "./invariants";
 import { makeScratchRepo, type ScratchRepo } from "./scratch-repo";
 
+// The environment that makes relay use the fake gitleaks (test/helpers/fake-gitleaks.ts) instead of
+// the real one. The real gitleaks takes about a second to start, so tests whose subject is not the
+// secret scan set up their jobs with it.
+export const FAKE_SCANNER = { RELAY_GITLEAKS: join(import.meta.dir, "fake-gitleaks.ts") };
+
 // A scratch repository with a job whose baseline is saved. `limitMb` writes the size limit to
-// config.toml first.
-export async function setUpJob(kind: "full" | "empty" = "full", limitMb?: number): Promise<ScratchRepo> {
+// config.toml first; `env` is added to relay init's environment, for example FAKE_SCANNER.
+export async function setUpJob(kind: "full" | "empty" = "full", limitMb?: number, env: Record<string, string> = {}): Promise<ScratchRepo> {
   const scratch = makeScratchRepo(kind);
   if (limitMb !== undefined) {
     mkdirSync(scratch.relayHome, { mode: 0o700 });
     writeFileSync(join(scratch.relayHome, "config.toml"), `[checkpoint]\nmax_file_size_mb = ${limitMb}\n`, { mode: 0o600 });
   }
-  expect((await relay(scratch, ["init"], { quiet: true })).code).toBe(0);
+  expect((await relay(scratch, ["init"], { quiet: true, env })).code).toBe(0);
   return scratch;
 }
 
@@ -25,12 +30,13 @@ export async function setUpJob(kind: "full" | "empty" = "full", limitMb?: number
 export async function relay(
   scratch: ScratchRepo,
   args: string[],
-  options: { cwd?: string; terminal?: { answer: string | null; beforeAnswer?: () => void }; quiet?: boolean } = {},
+  options: { cwd?: string; terminal?: { answer: string | null; beforeAnswer?: () => void }; quiet?: boolean; env?: Record<string, string> } = {},
 ): Promise<RelayResult> {
   const result = await runRelayInProcess(args, {
     cwd: options.cwd ?? scratch.repo,
     relayHome: scratch.relayHome,
     terminal: options.terminal,
+    env: options.env,
   });
   if (process.env.RELAY_DOC_SAMPLES === "1" && options.quiet !== true) {
     const shown = args.map((arg) => (/[\s"]/.test(arg) ? JSON.stringify(arg) : arg));

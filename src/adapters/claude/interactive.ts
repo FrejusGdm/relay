@@ -8,7 +8,7 @@ import { now } from "../../platform/clock";
 import { startInteractive } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, sessionIdForCommand, settlesWithin, textForAgent, unsupportedOperation } from "../worker";
+import { EventQueue, recordedArgs, recordWorkerReading, sessionIdForCommand, StopLimit, textForAgent, unsupportedOperation } from "../worker";
 import { claudeHookEvents } from "./hooks";
 
 // After "--", Claude Code reads no more options, but its argument parser still runs a subcommand
@@ -55,23 +55,29 @@ export async function startClaudeInteractive(
     return status;
   });
   let stopping: Promise<StopResult> | undefined;
+  let limit: StopLimit | undefined;
   const stop = async ({ timeoutMs = 30_000 }: { timeoutMs?: number } = {}): Promise<StopResult> => {
     if (!child.running()) {
       const status = await wait;
       return { how: "already_exited", exitCode: status.code, signal: status.signal, turnEnded: false };
     }
-    if (stopping !== undefined) return stopping;
+    if (stopping !== undefined) {
+      limit?.shorten(timeoutMs);
+      return stopping;
+    }
+    const stopLimit = new StopLimit(timeoutMs, () => child.signal("SIGKILL"));
+    limit = stopLimit;
     stopping = (async (): Promise<StopResult> => {
       child.signal("SIGTERM");
-      const finished = await settlesWithin(wait, timeoutMs);
-      const killed = !finished && child.signal("SIGKILL");
       const status = await wait;
-      return { how: killed ? "killed" : "terminated", exitCode: status.code, signal: status.signal, turnEnded: false };
+      stopLimit.clear();
+      return { how: stopLimit.killed ? "killed" : "terminated", exitCode: status.code, signal: status.signal, turnEnded: false };
     })();
     return stopping;
   };
   return {
     workerId: request.workerId, transport: "claude-interactive", pid: child.pid, presetSessionId: sessionId,
+    argv: recordedArgs(args, { [args.indexOf("--append-system-prompt") + 1]: "<instructions>", ...(prompt === undefined ? {} : { [args.length - 1]: "<prompt>" }) }),
     events: () => queue.events(),
     async send() { throw unsupportedOperation("Claude Code", "claude-interactive", "receive a message while it runs"); },
     async interrupt() { child.signal("SIGINT"); },

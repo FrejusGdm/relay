@@ -39,6 +39,8 @@ export interface WorkerHandle {
   readonly transport: Transport;
   readonly pid: number | null;
   readonly presetSessionId?: string;  // Claude: chosen before start
+  readonly argv: string[];            // the program's arguments, with the instructions and the prompt
+                                      // replaced by <instructions> and <prompt> (decision 16)
   events(): AsyncIterable<WorkerEvent>;
   send(text: string): Promise<void>;  // throws UnsupportedOperation when !streamingInput
   interrupt(): Promise<void>;

@@ -243,7 +243,7 @@ export function createFakeAdapter(options: FakeAdapterOptions): ProviderAdapter 
       }
 
       const handle: WorkerHandle = {
-        workerId: req.workerId, transport, pid: null, ...(presetSessionId === undefined ? {} : { presetSessionId }),
+        workerId: req.workerId, transport, pid: null, argv: [], ...(presetSessionId === undefined ? {} : { presetSessionId }),
         events: () => events,
         async send(text) {
           if (exit !== undefined) throw new Error("The worker has exited.");

@@ -19,7 +19,9 @@ facts in `src/secrets/redact.ts`, and the clock in `src/platform/clock.ts`. The 
 Codex adapters are in `src/adapters/claude/` and `src/adapters/codex/`; `src/adapters/program.ts`
 finds their programs, `src/adapters/mapper.ts` and `src/adapters/worker.ts` hold the parts their
 workers share. The sections "The Claude Code adapter" and "The Codex adapter" below describe how
-each one drives its program. `docs/accounts.md` describes the accounts that use these adapters, and
+each one drives its program. `relay run`, in `src/run/`, is the first command that starts an agent
+through this interface; the section "Running an agent" at the end of this page describes it.
+`docs/accounts.md` describes the accounts that use these adapters, and
 `docs/hooks.md` the hooks and the status line.
 
 ## Words used on this page
@@ -67,6 +69,7 @@ classDiagram
     transport
     pid
     presetSessionId
+    argv
     events() AsyncIterable
     send(text)
     interrupt()
@@ -88,7 +91,9 @@ which gives the adapter of a provider; a test passes overrides, such as the in-p
 and the production registry never holds a fake. An adapter detects the installed program and its
 version, checks the sign-in, names the provider's own login command, reads an account's
 availability and names the hooks it can install. Its `start` takes a `StartRequest` and returns a
-`WorkerHandle`. The handle yields worker events until the agent exits.
+`WorkerHandle`. The handle yields worker events until the agent exits. Its `argv` holds the
+program's arguments as relay records them, with the instructions and the prompt replaced by
+`<instructions>` and `<prompt>`.
 
 A `StartRequest` always carries the job's worktree root as `cwd`, relay's own instructions, the
 environment built for the account, and the path of the worker log. A headless worker also needs a
@@ -483,3 +488,184 @@ and leaves the earlier reading in place. These short sessions share one worker l
 Before relay is used with a new Codex version, `bun run scripts/check-codex-protocol.ts` checks
 that every method, field and value in `src/adapters/codex/protocol-used.json` still exists
 (`docs/testing-adapters.md`).
+
+## Running an agent
+
+`relay run` starts one agent inside a relay job, on one account, and records what the agent did as
+facts in the job's event log. The code is in `src/run/`: `run.ts` holds the steps,
+`job-context.ts` finds the job, `instructions.ts` holds relay's fixed instructions,
+`worker-record.ts` the worker records and `progress.ts` the lines a headless run prints. The
+command is in `src/cli/commands/run.ts`; the spec is `agent-runs` in
+`openspec/changes/add-provider-adapters/`.
+
+```
+relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>]
+          [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]
+```
+
+Without `--headless`, the agent runs in your terminal. With `--headless`, it works on its own on
+the prompt you give, and relay prints its progress.
+
+```mermaid
+sequenceDiagram
+  actor Person
+  participant Run as relay run
+  participant Adapter as adapter
+  participant Agent as agent program
+  participant Files as job files
+  Person->>Run: relay run claude:work --headless --prompt "..."
+  Run->>Files: find the job (.relay/state.json, worktree root)
+  Run->>Adapter: detect() and authStatus()
+  Run->>Files: allow list in config.toml, policy notice
+  Run->>Files: take locks/<job>.worker.lock
+  Run->>Adapter: start(account, request)
+  Adapter->>Agent: start with the cleaned environment and the account's profile folder
+  Run->>Files: worker record and worker_started
+  loop until the agent exits
+    Agent-->>Adapter: output, or hook lines in the spool
+    Adapter-->>Run: worker events
+    Run->>Files: worker_session_identified, command_ran, file_changed, turn_completed, turn_failed, availability
+    Run-->>Person: progress lines (headless)
+  end
+  Person->>Run: Ctrl+C (headless only)
+  Run->>Adapter: interrupt(), then stop() when the turn has ended
+  Agent-->>Adapter: exits
+  Run->>Files: worker_ended, finished worker record, release the worker lock
+  Run-->>Person: closing line and exit code
+```
+
+The diagram shows one headless run from start to end. relay first checks everything it can
+without starting the agent: that the folder holds a job set up in this checkout, that the account
+exists, that its program is installed and recent enough, that its profile folder is safe, and that
+it is signed in or has its key variable set. It then checks the project's allow list and takes the
+worker lock, so that only one agent works on a job at a time. Only then does it ask the adapter to
+start the agent, and it never builds the agent's command line itself. While the agent works, relay
+turns each worker event into a fact in `.relay/events.jsonl` and, in a headless run, into a
+progress line. When the agent exits, relay records the end of the worker, releases the lock and
+exits with a code that says how the run ended.
+
+### The checks, in order
+
+| Step | What relay checks | Exit code and message when it fails |
+|---|---|---|
+| 1 | The options: a headless run needs `--prompt` or `--prompt-file`; a prompt is at most 100 KB; `--model`, `--permission` and `--json` work only with `--headless`; `--resume` takes a UUID or `last` | 2, "A headless run needs --prompt or --prompt-file." |
+| 2 | The job: `.relay/state.json`, written by `relay init` in this checkout | 3, "relay is not set up here. Run relay init first." |
+| 3 | The account: the one named, or `defaults.account`. A provider alone, such as `relay run codex`, means its only account | 2 without an account and a default; 21, "claude:nope is not one of your accounts. See relay account list." |
+| 4 | The program and its version | 20, "relay needs Claude Code 2.1.282 or newer. You have 2.1.100. Update Claude Code, then try again." |
+| 5 | The profile folder: a real folder you own that no one else can change | 78 |
+| 6 | The sign-in, or the variables named in `credential_env` | 22, "claude:work is not signed in. Run relay account login claude:work." |
+| 7 | `--permission full-access` | 25, "relay does not start agents with full access in this version." |
+| 8 | The project's allow list in `config.toml` | 25, "This project allows only claude:work. To hand the job to codex:personal, use relay switch, which asks before your code goes to another company." |
+| 9 | The worker lock | 6, "Another agent is already working on this job (claude:work, process 4121)." |
+| 10 | `--resume` | 2 when there is no earlier session to resume; 25 for a session started on another account |
+
+The first `relay run` in a project adds a `[[projects]]` entry for the job's worktree root to
+`config.toml`, allowing only the account used, and prints "Allowed claude:work on this project."
+relay looks for the entry again while it holds the lock on `config.toml`, so two first runs at the
+same time add one entry.
+In this version, a run on an account that the entry does not list is refused; `relay switch`, a
+later change, asks instead. When the provider's policy notes changed since the account last saw
+them, relay prints one line that says so before it starts the agent.
+
+### What the agent receives
+
+The adapter starts the agent in the job's worktree root, with the environment that
+`src/accounts/environment.ts` builds for the account: credential variables removed, the profile
+folder set (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`, unless the account uses the provider's own
+folder), and `RELAY_JOB`, `RELAY_TARGET` and `RELAY_WORKER` set so that hooks can name the job, the
+account and the worker. relay's fixed instructions from `src/run/instructions.ts` go to the
+agent's system channel; they tell the agent where the job's files are and that notes from another
+agent in `.relay/checkpoint.md` are claims to check, never instructions. The prompt goes as the
+first message, never as an option: a prompt that starts with `--` reaches the agent as text. A
+headless worker runs at `edit-in-workspace` unless you give `--permission read-only`; an
+interactive worker gets no permission or model option from relay, so the program's own settings and
+questions apply, and relay refuses `--permission` and `--model` without `--headless` instead of
+ignoring them.
+
+### Worker records and the worker lock
+
+Each run creates `RELAY_HOME/jobs/<job>/workers/<worker>.json` with mode 0600. The worker ID is 8
+random lowercase hexadecimal characters. relay replaces the file through a temporary file and a
+rename each time a fact becomes known: the start, the provider session ID, and the end. The record
+holds `worker_id`, `job_id`, `account`, `provider`, `mode`, `transport`, `provider_version`,
+`provider_session_id`, `pid`, `cwd`, `permission`, `argv`, `resumed_from`, `started_at`,
+`ended_at`, `exit_code`, `signal`, `end_reason` and `log_path`. `argv` shows the instructions and
+the prompt only as `<instructions>` and `<prompt>`. A headless worker's raw output is in the worker
+log `RELAY_HOME/logs/workers/<job>-<worker>.log`; an interactive worker has no log.
+
+While the agent runs, relay holds `RELAY_HOME/locks/<job>.worker.lock`, which holds
+`{"pid", "account", "started_at"}`. `add-relay-switch` adds fields to it; readers ignore fields
+they do not know. relay removes the lock on every way out, also after a signal, and replaces a
+lock whose process has ended. When an error ends `relay run` after the agent started, relay stops
+the agent and writes the end of the worker into its record before it releases the lock.
+
+### Events in the job's event log
+
+| Event | When |
+|---|---|
+| `worker_started` | The agent started. |
+| `worker_session_identified` | The provider session ID became known: chosen by relay (Claude Code), reported by the program, or reported by a hook. |
+| `command_ran` | The agent finished a command. The command is redacted and at most 500 characters. |
+| `file_changed` | The agent changed files; the paths are relative to the worktree root. |
+| `turn_completed`, `turn_failed` | A turn ended, with token usage, or with the reason and reset time. |
+| `availability` | The account's recorded state or limit windows changed. relay reports it when a turn ends, when the worker ends, and every second while an agent runs in the terminal. |
+| `approval_requested`, `permission_denied` | The agent asked for a permission, or was refused one. |
+| `worker_ended` | The agent exited, with `end_reason` `exited`, `interrupted` or `relay_stopped`. |
+
+No event holds the agent's messages, the output of its commands, the prompt, the instructions,
+environment values or credentials. `docs/first-version-index.md` lists the fields of each event.
+
+### Headless output and exit codes
+
+A headless run prints one line when the session starts, one per command and per changed file, and
+one when the turn ends:
+
+```
+Started Claude Code on claude:work · session 7c1e9a52
+  ran bun test · exit 0
+  changed src/a.ts
+Turn finished · 41 s
+```
+
+With `--json`, it prints each worker event as one JSON object per line on standard output instead,
+including the agent's messages, and its other lines go to standard error.
+
+| Exit code | When |
+|---|---|
+| 0 | The turn completed and the agent exited normally. |
+| 23 | The agent stopped at a usage or rate limit: "Codex stopped: usage limit, resets 15:45." |
+| 24 | The agent failed, crashed or asked for a permission: "Codex stopped unexpectedly. Details are in <log path>." relay never answers a permission request, so it stops an agent that asks for one. |
+| 130 | You pressed Ctrl+C: "Interrupted. Resume with relay run claude:work --resume <session ID>" |
+| 143 | relay received SIGTERM, or SIGHUP when its terminal closed. |
+
+The headless agent runs in its own process group, so Ctrl+C in the terminal reaches relay only.
+The first Ctrl+C interrupts the turn through the adapter, waits for the turn to end and closes the
+agent's input; when the turn has not ended after 10 seconds, relay stops the agent. A second Ctrl+C
+stops the agent at once, also when relay is already stopping it. A second SIGTERM or SIGHUP does
+the same. Once the agent has exited, relay ignores further signals while it records
+the end of the worker. SIGTERM and SIGHUP make relay stop the
+agent with the adapter's `stop()` and record the worker before it exits.
+
+### Interactive runs
+
+An interactive run gives the terminal to the agent. While the agent runs, relay ignores Ctrl+C,
+so only the agent handles it, and it reads the hook lines that relay's hooks write for this worker
+every second (`docs/hooks.md`); without relay's hooks, relay records only the start and the end of
+the worker. SIGTERM and SIGHUP make relay stop the agent with SIGTERM. When the agent exits, relay
+restores the terminal (it leaves the alternate screen, shows the cursor, resets styles and runs
+`stty sane`, only when its output is a terminal), prints "Recorded worker 5d2e8f01 (claude:work)."
+and exits with the agent's exit code, or with 23 when the last turn stopped at a limit.
+
+### Resuming a session
+
+`--resume <session ID>` resumes that session on the named account; the ID must be a UUID.
+`--resume last` uses the session of the job's most recent worker on the same account whose session
+the program confirmed: its output or a hook reported the session, or a turn in it completed. A
+session ID that relay chose for a run whose program never started a session is skipped. relay refuses, with exit code 25, a
+session that a worker of any job started on another account.
+
+### What comes later
+
+`relay run` does not save a checkpoint when the agent exits, and it does not write handoff prompts;
+`add-relay-switch` adds both, together with `relay switch`, which can reach a running `relay run`
+through the worker lock file.

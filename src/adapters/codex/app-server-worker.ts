@@ -8,7 +8,7 @@ import { startHeadless } from "../process";
 import type { HeadlessProcess } from "../process";
 import { findProgram } from "../program";
 import type { StartRequest, StopResult, WorkerEvent, WorkerHandle } from "../types";
-import { EventQueue, recordWorkerReading, settlesWithin, textForAgent } from "../worker";
+import { EventQueue, recordWorkerReading, settlesWithin, StopLimit, textForAgent } from "../worker";
 import { createAppServerMapper } from "./app-server";
 import { startExecWorker } from "./exec";
 import { APPROVAL_METHODS } from "./protocol";
@@ -40,6 +40,7 @@ export async function startAppServerWorker(
   let closeAfterTurn = false;
   let readingLimits: Promise<void> | undefined;
   let stopping: Promise<StopResult> | undefined;
+  let limit: StopLimit | undefined;
   let reportExit = false;
   let exitReported = false;
   const turnWaiters = new Set<() => void>();
@@ -193,25 +194,27 @@ export async function startAppServerWorker(
       const status = await wait;
       return { how: "already_exited", exitCode: status.code, signal: status.signal, turnEnded };
     }
-    if (stopping !== undefined) return stopping;
+    if (stopping !== undefined) {
+      limit?.shorten(timeoutMs);
+      return stopping;
+    }
+    const stopLimit = new StopLimit(timeoutMs, () => agent.signal("SIGKILL"));
+    limit = stopLimit;
     stopping = (async (): Promise<StopResult> => {
-      const deadline = performance.now() + Math.max(0, timeoutMs);
-      let killed = false;
-      const timer = setTimeout(() => { killed = agent.signal("SIGKILL") || killed; }, Math.max(0, timeoutMs));
       let done: (() => void) | undefined;
       try {
         if (turnId !== undefined) {
           const ended = new Promise<void>((resolve) => { done = resolve; turnWaiters.add(resolve); });
           void interrupt().catch(() => {});
-          await settlesWithin(Promise.race([ended, wait]), Math.min(delays.interruptMs ?? 10_000, Math.max(0, deadline - performance.now())));
+          await settlesWithin(Promise.race([ended, wait]), Math.min(delays.interruptMs ?? 10_000, stopLimit.remaining()));
         }
-        if (readingLimits !== undefined) await settlesWithin(readingLimits, Math.max(0, deadline - performance.now()));
+        if (readingLimits !== undefined) await settlesWithin(readingLimits, stopLimit.remaining());
         endInput();
-        if (!(await settlesWithin(wait, Math.max(0, deadline - performance.now())))) killed = agent.signal("SIGKILL") || killed;
+        if (!(await settlesWithin(wait, stopLimit.remaining()))) stopLimit.expire();
         const status = await wait;
-        return { how: killed ? "killed" : "clean", exitCode: status.code, signal: status.signal, turnEnded };
+        return { how: stopLimit.killed ? "killed" : "clean", exitCode: status.code, signal: status.signal, turnEnded };
       } finally {
-        clearTimeout(timer);
+        stopLimit.clear();
         if (done !== undefined) turnWaiters.delete(done);
       }
     })();
@@ -222,7 +225,7 @@ export async function startAppServerWorker(
     const status = await wait;
     if (!exitReported) publish({ kind: "exited", ...status });
   }
-  return { workerId: request.workerId, transport: "codex-app-server", pid: agent.pid,
+  return { workerId: request.workerId, transport: "codex-app-server", pid: agent.pid, argv: ["app-server"],
     events: () => queue.events(), send, interrupt, stop, wait: () => wait,
   };
 }

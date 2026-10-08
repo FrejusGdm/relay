@@ -5,16 +5,17 @@ The source is in `src/cli/`. In this version every command shows its help and ch
 arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
 `relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
-`relay statusline`, which `docs/hooks.md` describes, and `relay daemon` and
-`relay doctor --reindex`, which `docs/daemon.md` describes; the other commands do not yet. The
-change named in the "Built by" column builds each one.
+`relay statusline`, which `docs/hooks.md` describes, `relay daemon` and
+`relay doctor --reindex`, which `docs/daemon.md` describes, and `relay run`, which the section
+"Running an agent" of `docs/adapters.md` describes; the other commands do not yet. The change
+named in the "Built by" column builds each one.
 
 ## Commands
 
 | Command | Usage | Arguments | Built by |
 |---|---|---|---|
 | `init` | `relay init [--title <text>]` | none | `add-checkpoint-engine` |
-| `run` | `relay run [<provider[:account]>]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
+| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
 | `checkpoint` | `relay checkpoint [-m <text>] [--include <path>]... [--json]` | none | `add-checkpoint-engine` |
 | `checkpoints` | `relay checkpoints [--json]` | none | `add-checkpoint-engine` |
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
@@ -67,8 +68,8 @@ creates it if it is missing, checks that it is private, and loads and checks `co
 `docs/config.md` describes these checks with their own diagram. Any problem there prints a
 settings error and exits with code 78. When the settings load, the command's handler runs, which
 in this version is the "not built yet" handler for every command except `hook`, `init`,
-`checkpoint`, `checkpoints`, `rollback`, `accept-git-changes`, `account`, `providers`, `policy`,
-`hooks` and `statusline`. When a handler
+`checkpoint`, `checkpoints`, `rollback`, `accept-git-changes`, `run`, `account`, `providers`,
+`policy`, `hooks` and `statusline`. When a handler
 throws an error that it does not handle, relay prints the error and exits with code 70. Once the
 relay folder has passed its checks, relay records each of these steps in a log file, as the next
 section describes.
@@ -244,9 +245,12 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 10 | `DaemonNotRunning` | The relay daemon is not running or could not start. |
 | 20 | `ProviderMissing` | The provider's program is not installed, or older than the oldest version relay was tested with. |
 | 21 | `NoSuchAccount` | The account is not in `config.toml`. |
-| 22 | `NotSignedIn` | The account is not signed in, or its sign-in did not finish. |
+| 22 | `NotSignedIn` | The account is not signed in, its sign-in did not finish, or its key variable is not set. |
+| 23 | `LimitReached` | The agent stopped at a usage or rate limit. |
+| 24 | `AgentFailed` | The agent failed, crashed or asked for a permission. |
+| 25 | `Refused` | Refused by a relay rule: full access, the project's allow list, or a session started on another account. |
 | 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 23 to 25 by `add-provider-adapters`, 31 and 33 by `add-relay-switch`. The other numbers are free. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 31 and 33 by `add-relay-switch`, 40 to 42 by `add-t3-limit-rules`. The other numbers are free. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |
@@ -255,6 +259,20 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 
 The codes 64 to 78 follow the BSD `sysexits.h` convention, and 130 and 143 follow the shell
 convention of 128 plus the signal number.
+
+### Exit codes of each command
+
+Every command can also exit with 2 for a wrong command line, 70 for a bug in relay, 78 for a
+problem with the relay folder or `config.toml`, and 130 or 143 when a signal stops it. The table
+lists the other codes of the commands that `add-provider-adapters` builds.
+
+| Command | Exit codes |
+|---|---|
+| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access, the allow list or a session of another account; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code |
+| `relay account` | 0 done; 1 the account table could not be found to remove; 6 another command is changing `config.toml`; 7 an answer is needed; 20 the program is missing; 21 no such account; 22 the sign-in did not finish; 78 an unsafe profile folder |
+| `relay hooks` | 0 done; 1 a settings file could not be changed, or relay runs from source without `RELAY_BIN`; 7 an answer is needed; 21 no such account; 78 an unsafe profile folder |
+| `relay policy show` | 0 done; 2 a provider relay has no adapter for |
+| `relay providers` | 0 done |
 
 ## How to add a command
 
