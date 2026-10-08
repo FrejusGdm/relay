@@ -46,6 +46,7 @@
 
   /* ===== relay card start =====
      Mounts the handoff card and runs its 7.2-second story (adapted from Codex's card.html).
+     The checkpoint drawing stays in place; data-step colors it for each stage.
      The returned setInView(bool) pauses it off screen. */
   function mountRelayCard(host) {
     host.appendChild(document.getElementById("card-tpl").content.cloneNode(true));
@@ -54,12 +55,12 @@
     var reducedQ = window.matchMedia("(prefers-reduced-motion: reduce)");
     var DURATION = 7200;
     var stages = [
-      { at: 0, line: "<strong>Claude Code is working</strong> · building authentication", claude: "Working", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan", active: "claude" },
-      { at: 1300, line: "<strong>Claude Code is working</strong> · usage running out", claude: "Usage running out", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan", active: "claude" },
-      { at: 2600, line: "<strong>Limit reached</strong> · resets <time>18:00</time>", claude: "Limit reached", codex: "Ready", caption: "<b>Waiting for your manual switch</b>Next worker: Codex", active: "" },
-      { at: 3700, line: "<strong>Saving checkpoint</strong> · keeping the repository &amp; plan", claude: "Limit · resets <time>18:00</time>", codex: "Ready", caption: "<b>Saving the work before switching</b>Checkpoint + plan", active: "" },
-      { at: 4800, line: "<strong>Moving the job to Codex</strong> · manual switch", claude: "Limit · resets <time>18:00</time>", codex: "Receiving work", caption: '<b>Manual switch · <time>14:19</time></b>Moving checkpoint <span class="mono">912ec1</span> + plan', active: "codex" },
-      { at: 6000, line: "<strong>Moved to Codex</strong> · Claude Code reached its limit", claude: "Limit · resets <time>18:00</time>", codex: "Working", caption: '<b>Handed off manually · <time>14:19</time></b>at checkpoint <span class="mono">912ec1</span>', active: "codex" }
+      { at: 0, line: "<strong>Claude Code is working</strong> · building authentication", claude: "Working", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan" },
+      { at: 1300, line: "<strong>Claude Code is working</strong> · usage running out", claude: "Usage running out", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan" },
+      { at: 2600, line: "<strong>Limit reached</strong> · resets <time>18:00</time>", claude: "Limit reached", codex: "Ready", caption: "<b>Waiting for your manual switch</b>Next worker: Codex" },
+      { at: 3700, line: "<strong>Saving checkpoint</strong> · keeping the repository &amp; plan", claude: "Limit · resets <time>18:00</time>", codex: "Ready", caption: "<b>Saving the work before switching</b>Checkpoint + plan" },
+      { at: 4800, line: "<strong>Moving the job to Codex</strong> · manual switch", claude: "Limit · resets <time>18:00</time>", codex: "Receiving work", caption: '<b>Manual switch · <time>14:19</time></b>Moving checkpoint <span class="mono">912ec1</span> + plan' },
+      { at: 6000, line: "<strong>Moved to Codex</strong> · Claude Code reached its limit", claude: "Limit · resets <time>18:00</time>", codex: "Working", caption: '<b>Handed off manually · <time>14:19</time></b>at checkpoint <span class="mono">912ec1</span>' }
     ];
     var elapsed = 0, lastTime = 0, raf = 0, index = -1, paused = false, inView = false, running = false, animations = [];
     var ease = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -68,31 +69,30 @@
       if (reducedQ.matches) return;
       animations.push(el.animate([{ opacity: 0, transform: "translateY(3px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 220, easing: ease }));
     }
+    function settle(el, duration) {
+      if (reducedQ.matches) return;
+      animations.push(el.animate([{ opacity: 0.6, transform: "translateY(3px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: duration, easing: ease }));
+    }
     function render(i, animate) {
       index = i;
+      root.dataset.step = String(i);
       var s = stages[i];
       $("line").innerHTML = s.line;
       $("claude-state").innerHTML = s.claude;
       $("codex-state").textContent = s.codex;
       $("transfer").innerHTML = s.caption;
-      $("claude").classList.toggle("active", s.active === "claude");
-      $("codex").classList.toggle("active", s.active === "codex");
       $("claude-role").textContent = i < 2 ? "Current worker" : "Previous worker";
       $("codex-role").textContent = i < 4 ? "Next worker" : "Current worker";
       $("claude-state").className = "rc-state " + (i < 2 ? "working" : "warning");
       $("codex-state").className = "rc-state" + (i >= 4 ? " working" : "");
       $("hash").textContent = i < 3 ? "8f4a20" : i === 3 ? "Saving…" : "912ec1";
+      $("drawing-hash").textContent = $("hash").textContent;
       $("saved").innerHTML = i < 3 ? "· previous" : i === 3 ? "" : "· saved <time>14:19</time>";
       $("open-label").textContent = i < 4 ? "Open Claude Code" : "Open Codex";
       if (animate) entrance($("line"));
-      if (i === 1 && animate && !reducedQ.matches) animations.push($("fill").animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 1300, easing: ease, fill: "forwards" }));
-      $("fill").style.transform = i >= 2 ? "scaleX(0)" : (i === 0 ? "scaleX(1)" : $("fill").style.transform);
-      if (i === 4 && animate && !reducedQ.matches) {
-        animations.push($("token").animate([
-          { opacity: 0, transform: "translateY(0)" }, { opacity: 1, transform: "translateY(6px)", offset: 0.15 },
-          { opacity: 1, transform: "translateY(44px)", offset: 0.8 }, { opacity: 0, transform: "translateY(49px)" }
-        ], { duration: 1100, easing: ease }));
-      }
+      // The checkpoint settles when it is saved, and the next worker when the job moves to it.
+      if (animate && i === 3) settle(root.querySelector(".rc-checkpoint"), 250);
+      if (animate && i === 4) settle(root.querySelector(".rc-symbol-to"), 180);
       if (i === 5) $("announce").textContent = "Moved to Codex. Claude Code reached its limit. Checkpoint and plan carried over.";
     }
     function finish() {
@@ -214,10 +214,12 @@
   } else if (!reduce) {
     relayCard.setInView(true); relayCard.play();
   }
-  /* Task graph */
+  /* Task graph: nine tasks and eleven dependencies at fixed positions, joined by rounded
+     connectors between their ports. When it first comes into view it plays its three moments once
+     (17:40 running, 17:52 Claude's tasks paused, 18:00 resumed) and holds the last one.
+     Selecting a task highlights the connectors and tasks around it. */
   var tg = document.getElementById("tg");
   var tgEdges = document.getElementById("tg-edges");
-  var tgDots = document.getElementById("tg-dots");
   var NODES = [
     { id: "plan", t: "Plan the job", p: "claude", dc: 1, dr: 2, mc: 2, mr: 1, s: "Done" },
     { id: "cb", t: "Callback route", p: "claude", dc: 2, dr: 1, mc: 1, mr: 2, s: "Working" },
@@ -231,102 +233,156 @@
   ];
   var EDGES = [["plan", "cb"], ["plan", "tbl"], ["plan", "ui"], ["cb", "tst"], ["cb", "ref"], ["tbl", "ref"], ["ui", "sto"], ["tst", "out"], ["ref", "out"], ["sto", "out"], ["out", "rev"]];
   var PAUSABLE = ["cb", "ref", "out", "rev"];
-  var nodeEl = {};
+  var PROVIDER = { claude: { name: "Claude", logo: "/logos/claude.svg", mark: "brand-mark" }, codex: { name: "Codex", logo: "/logos/openai.svg", mark: "brand-mark brand-mono" } };
+  var nodeEl = {}, taskName = {};
   NODES.forEach(function (n) {
-    var d = document.createElement("div");
+    var d = document.createElement("button");
+    var pv = PROVIDER[n.p];
+    d.type = "button";
     d.className = "tg-node " + n.p;
+    d.dataset.node = n.id;
+    d.setAttribute("aria-pressed", "false");
     d.style.setProperty("--dc", n.dc); d.style.setProperty("--dr", n.dr);
     d.style.setProperty("--mc", n.mc); d.style.setProperty("--mr", n.mr);
     var paus = PAUSABLE.indexOf(n.id) > -1;
-    d.innerHTML = '<div class="nt"></div><div class="nm2"><span class="pv">' + (n.p === "claude" ? "Claude" : "Codex") + '</span><span class="stack sw2"><span class="w"></span>' + (paus ? '<span class="p">Paused</span>' : "") + '</span></div>';
+    d.innerHTML = '<span class="nt"></span><span class="nm2"><span class="pv"><img class="' + pv.mark + '" src="' + pv.logo + '" alt="" width="14" height="14">' + pv.name + '</span><span class="stack sw2"><span class="w"></span>' + (paus ? '<span class="p">Paused</span>' : "") + "</span></span>";
     d.querySelector(".nt").textContent = n.t;
     d.querySelector(".w").textContent = n.s;
+    d.addEventListener("click", function () { selectTask(n.id); });
     tg.appendChild(d);
     nodeEl[n.id] = d;
+    taskName[n.id] = n.t;
   });
-  var provOf = {};
-  NODES.forEach(function (n) { provOf[n.id] = n.p; });
-  var dotList = [];
-  var tgVisible = false, phase = 0, tClock = 0;
+  var phase = 0, selected = "";
 
   function edgePaused(e) { return phase === 1 && (PAUSABLE.indexOf(e[0]) > -1 || PAUSABLE.indexOf(e[1]) > -1); }
 
+  /* A path through the points with each corner rounded to the given radius */
+  function roundedPath(points, radius) {
+    var d = "M" + points[0][0] + " " + points[0][1];
+    for (var i = 1; i < points.length - 1; i++) {
+      var a = points[i - 1], b = points[i], c = points[i + 1];
+      var ab = Math.hypot(b[0] - a[0], b[1] - a[1]), bc = Math.hypot(c[0] - b[0], c[1] - b[1]);
+      if (!ab || !bc) continue;
+      var r = Math.min(radius, ab / 2, bc / 2);
+      d += " L" + (b[0] + (a[0] - b[0]) * r / ab) + " " + (b[1] + (a[1] - b[1]) * r / ab) +
+        " Q" + b[0] + " " + b[1] + " " + (b[0] + (c[0] - b[0]) * r / bc) + " " + (b[1] + (c[1] - b[1]) * r / bc);
+    }
+    var end = points[points.length - 1];
+    return d + " L" + end[0] + " " + end[1];
+  }
+
   function layoutGraph() {
-    var vertical = tg.clientWidth < 700;
+    var vertical = tg.clientWidth < 880;
     tg.classList.toggle("vertical", vertical);
-    var W = tg.clientWidth, H = tg.clientHeight;
-    tgEdges.setAttribute("viewBox", "0 0 " + W + " " + H);
+    tgEdges.setAttribute("viewBox", "0 0 " + tg.clientWidth + " " + tg.clientHeight);
     while (tgEdges.firstChild) tgEdges.removeChild(tgEdges.firstChild);
-    dotList.forEach(function (d) { d.a1.cancel(); d.a2.cancel(); d.wrap.remove(); });
-    dotList = [];
-    EDGES.forEach(function (e, idx) {
-      var a = rel(nodeEl[e[0]], tg), b = rel(nodeEl[e[1]], tg);
-      var x1, y1, x2, y2, pts;
+    EDGES.forEach(function (e) {
+      var a = rel(nodeEl[e[0]], tg), b = rel(nodeEl[e[1]], tg), x1, y1, x2, y2, pts;
       if (!vertical) {
-        x1 = Math.round(a.right); y1 = half(a.top + a.height / 2);
-        x2 = Math.round(b.left); y2 = half(b.top + b.height / 2);
-        var xm = half((x1 + x2) / 2);
-        pts = [[x1, y1], [xm, y1], [xm, y2], [x2, y2]];
+        // From the right-hand port of one task to the left-hand port of the next
+        x1 = a.right; y1 = a.top + a.height / 2; x2 = b.left; y2 = b.top + b.height / 2;
+        var xm = (x1 + x2) / 2;
+        pts = Math.abs(y1 - y2) < 1 ? [[x1, y1], [x2, y2]] : [[x1, y1], [xm, y1], [xm, y2], [x2, y2]];
       } else {
-        x1 = half(a.left + a.width / 2); y1 = Math.round(a.bottom);
-        x2 = half(b.left + b.width / 2); y2 = Math.round(b.top);
-        var ym = half((y1 + y2) / 2);
-        pts = [[x1, y1], [x1, ym], [x2, ym], [x2, y2]];
+        // From the bottom port to the top port
+        x1 = a.left + a.width / 2; y1 = a.bottom; x2 = b.left + b.width / 2; y2 = b.top;
+        var ym = (y1 + y2) / 2;
+        pts = Math.abs(x1 - x2) < 1 ? [[x1, y1], [x2, y2]] : [[x1, y1], [x1, ym], [x2, ym], [x2, y2]];
       }
-      svgEl("path", { d: "M" + pts.map(function (p) { return p[0] + " " + p[1]; }).join(" L"), "shape-rendering": "crispEdges" }, tgEdges);
-      if (reduce) return;
-      var lens = [0], total = 0;
-      for (var i = 1; i < pts.length; i++) { total += Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]); lens.push(total); }
-      var span = 0.72;
-      var frames = pts.map(function (p, i) {
-        return { transform: "translate(" + (p[0] - x1) + "px," + (p[1] - y1) + "px)", offset: total ? (lens[i] / total) * span : 0 };
-      });
-      frames.push({ transform: frames[frames.length - 1].transform, offset: 1 });
-      for (var k = 1; k < frames.length; k++) if (frames[k].offset < frames[k - 1].offset) frames[k].offset = frames[k - 1].offset;
-      var wrap = document.createElement("span");
-      wrap.className = "dw";
-      wrap.style.left = x1 + "px"; wrap.style.top = y1 + "px";
-      var mover = document.createElement("span");
-      mover.style.display = "block";
-      var dot = document.createElement("i");
-      dot.className = "dot " + provOf[e[0]];
-      mover.appendChild(dot); wrap.appendChild(mover); tgDots.appendChild(wrap);
-      var opts = { duration: 2800, iterations: Infinity, delay: (idx % 4) * 450 + Math.floor(idx / 4) * 260, easing: "linear" };
-      var a1 = mover.animate(frames, opts);
-      var a2 = dot.animate([
-        { opacity: 0, offset: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1, offset: span - 0.06 }, { opacity: 0, offset: span }, { opacity: 0, offset: 1 }
-      ], opts);
-      var rec = { e: e, wrap: wrap, a1: a1, a2: a2 };
-      dotList.push(rec);
-      syncDot(rec);
+      svgEl("path", { d: roundedPath(pts, 8), "data-from": e[0], "data-to": e[1] }, tgEdges);
+    });
+    paintEdges();
+  }
+  function paintEdges() {
+    tgEdges.querySelectorAll("path").forEach(function (path) {
+      var e = [path.getAttribute("data-from"), path.getAttribute("data-to")];
+      path.classList.toggle("paused-edge", edgePaused(e));
+      path.classList.toggle("focused-edge", selected !== "" && e.indexOf(selected) > -1);
     });
   }
-  function syncDot(d) {
-    var stop = edgePaused(d.e) || !tgVisible;
-    d.wrap.classList.toggle("off", edgePaused(d.e));
-    if (stop) { d.a1.pause(); d.a2.pause(); } else { d.a1.play(); d.a2.play(); }
+
+  /* Selecting a task (click, Enter or Space) highlights it, its connectors and its neighbours;
+     selecting it again clears the highlight. A screen reader hears the same relationships. */
+  function names(ids) {
+    var list = ids.map(function (id) { return taskName[id]; });
+    return list.length > 1 ? list.slice(0, -1).join(", ") + " and " + list[list.length - 1] : list[0];
   }
+  function selectTask(id) {
+    selected = selected === id ? "" : id;
+    if (selected) tg.setAttribute("data-focus", selected); else tg.removeAttribute("data-focus");
+    var before = [], after = [];
+    EDGES.forEach(function (e) {
+      if (e[1] === selected) before.push(e[0]);
+      if (e[0] === selected) after.push(e[1]);
+    });
+    NODES.forEach(function (n) {
+      nodeEl[n.id].classList.toggle("focused-node", n.id === selected);
+      nodeEl[n.id].classList.toggle("related-node", before.indexOf(n.id) > -1 || after.indexOf(n.id) > -1);
+      nodeEl[n.id].setAttribute("aria-pressed", String(n.id === selected));
+    });
+    paintEdges();
+    document.getElementById("tg-announce").textContent = !selected ? "No task selected." :
+      taskName[selected] + " depends on " + (before.length ? names(before) : "no other task") + ". " +
+      (after.length ? names(after) + (after.length > 1 ? " depend" : " depends") + " on it." : "No task depends on it.");
+  }
+
   function setPhase(p) {
     phase = p;
     document.querySelectorAll("#tg-phase > span, #tg-clock > span").forEach(function (s) { s.style.opacity = Number(s.dataset.ph) === p ? "1" : "0"; });
-    PAUSABLE.forEach(function (id) { nodeEl[id].classList.toggle("is-paused", p === 1); });
-    dotList.forEach(syncDot);
+    NODES.forEach(function (n) {
+      var paused = p === 1 && PAUSABLE.indexOf(n.id) > -1;
+      nodeEl[n.id].classList.toggle("is-paused", paused);
+      nodeEl[n.id].setAttribute("aria-label", n.t + ", " + PROVIDER[n.p].name + ", " + (paused ? "paused" : n.s.toLowerCase()));
+    });
+    paintEdges();
   }
+
+  /* Playback: a quarter-second clock that runs only while the graph is on screen, the page is
+     visible and the visitor has not paused it. */
   var tgFig = document.querySelector(".tg-fig");
+  var tgPause = document.getElementById("tg-pause");
+  var MOMENTS = [0, 7, 11.5]; // seconds at which 17:40, 17:52 and 18:00 begin
+  var tgClock = 0, tgTimer = 0, tgVisible = false, tgPaused = false, tgStarted = false;
+  function setGraphPaused(v) {
+    tgPaused = v;
+    tgPause.textContent = v ? "Resume" : "Pause";
+    tgPause.setAttribute("aria-pressed", String(v));
+  }
+  function stopGraph() {
+    clearInterval(tgTimer); tgTimer = 0;
+    setGraphPaused(false);
+    tgPause.disabled = true;
+  }
+  function tickGraph() {
+    if (!tgVisible || document.hidden || tgPaused) return;
+    tgClock += 0.25;
+    var p = tgClock < MOMENTS[1] ? 0 : (tgClock < MOMENTS[2] ? 1 : 2);
+    if (p !== phase) setPhase(p);
+    if (p === 2) stopGraph();
+  }
+  function playGraph() {
+    stopGraph();
+    tgClock = 0;
+    if (reduce) { setPhase(2); return; }
+    setPhase(0);
+    tgPause.disabled = false;
+    tgTimer = setInterval(tickGraph, 250);
+  }
+  tgPause.addEventListener("click", function () { if (tgTimer) setGraphPaused(!tgPaused); });
+  document.getElementById("tg-replay").addEventListener("click", playGraph);
   if (reduce) {
     document.getElementById("tg-caption").textContent = "Illustrated. The first release switches one job at a time. Motion is reduced, so the graph is still.";
+    playGraph();
   } else {
+    setPhase(0);
+    tgPause.disabled = true;
+    var startGraph = function () { if (!tgStarted) { tgStarted = true; playGraph(); } };
     if ("IntersectionObserver" in window) {
       new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) { tgVisible = e.isIntersecting; dotList.forEach(syncDot); });
+        entries.forEach(function (e) { tgVisible = e.isIntersecting; if (tgVisible) startGraph(); });
       }, { threshold: 0.15 }).observe(tgFig);
-    } else { tgVisible = true; }
-    setInterval(function () {
-      if (!tgVisible || document.hidden) return;
-      tClock = (tClock + 0.25) % 15;
-      var p = tClock < 7 ? 0 : (tClock < 11.5 ? 1 : 2);
-      if (p !== phase) setPhase(p);
-    }, 250);
+    } else { tgVisible = true; startGraph(); }
   }
 
   layoutPanel(); layoutGraph();

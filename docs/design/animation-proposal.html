@@ -1,0 +1,1625 @@
+<!doctype html>
+<!-- Graphics-only review prototype. Original landing-page text and typography retained. -->
+<html lang="en" data-graphics="simple">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>relay: never run out of limits again</title>
+<meta name="description" content="When one coding agent hits its limit, relay moves the work to another you already pay for, with the same code, plan and decisions.">
+<link rel="icon" href="../../site/public/favicon.svg" type="image/svg+xml">
+<script>
+/* Applies the visitor's theme before the page is drawn, and runs the theme button in the navigation.
+   Loaded in <head> without defer, so data-theme is set on <html> before the first paint.
+   There are two themes, light and dark. The choice is kept in localStorage under "relay-theme";
+   without it the page is light. The button's icons are swapped by styles.css from data-theme. */
+(function () {
+  "use strict";
+  var KEY = "relay-theme";
+  var root = document.documentElement;
+
+  function savedTheme() {
+    try {
+      var value = localStorage.getItem(KEY);
+      if (value === "dark") return "dark";
+    } catch (e) {}
+    return "light";
+  }
+
+  function apply(theme) {
+    root.setAttribute("data-theme", theme);
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.setAttribute("content", theme);
+    var button = document.getElementById("theme-toggle");
+    if (button) {
+      var label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
+    }
+  }
+
+  var theme = "light";
+  apply(theme);
+
+  document.addEventListener("DOMContentLoaded", function () {
+    apply(theme);
+    var button = document.getElementById("theme-toggle");
+    if (!button) return;
+    button.addEventListener("click", function () {
+      theme = theme === "dark" ? "light" : "dark";
+      try {
+        /* Review-only: no saved theme changes. */
+      } catch (e) {}
+      apply(theme);
+    });
+  });
+})();
+
+</script>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700,900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style id="original-page-styles">
+/* Fonts, self-hosted from site/public/fonts (downloaded by site/scripts/fetch-fonts.sh).
+   Satoshi: Indian Type Foundry, ITF Free Font License, from Fontshare. Never commit it.
+   Public Sans 2.001 (USWDS) and IBM Plex Mono 2.5.0 (IBM): SIL Open Font License 1.1,
+   https://openfontlicense.org */
+
+/* Tokens. Light by default; dark when theme.js sets data-theme="dark" on <html>. The accent is olive. */
+:root {
+  --bg: #F4F2EC;
+  --surface: #FBFAF7;
+  --raised: #FFFFFF;
+  --rule: #D8D5CC;
+  --muted: #6E6B63;
+  --text: #141413;
+  --accent: #52613A;
+  --on-accent: #FBFAF7;
+  --warning: #855313;
+  --error: #B3261E;
+  --success: #426044;
+  --focus: #52613A;
+  --control: color-mix(in srgb, var(--muted) 45%, var(--rule));
+  --shadow: 0 14px 32px -20px rgba(20, 20, 19, 0.30), 0 1px 2px rgba(20, 20, 19, 0.06);
+  --band: color-mix(in srgb, var(--text) 3.5%, var(--bg));
+  --tint: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  --map: color-mix(in srgb, var(--text) 11%, transparent);
+  --map-strong: color-mix(in srgb, var(--text) 22%, transparent);
+  --map-text: color-mix(in srgb, var(--text) 34%, transparent);
+  --map-fill: var(--bg);
+
+  --font-display: "Satoshi", system-ui, sans-serif;
+  --display-weight: 500;
+  --display-track: -0.035em;
+  --display-scale: 0.86;
+  --font-text: "Public Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-press: 100ms;
+  --t-text: 120ms;
+  --t-expand: 180ms;
+  --t-story: 8s;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0D0D0C;
+  --surface: #161614;
+  --raised: #1E1E1B;
+  --rule: #2B2A27;
+  --muted: #8A877F;
+  --text: #EDEBE4;
+  --accent: #BDCDA0;
+  --on-accent: #0D0D0C;
+  --warning: #E2BD7C;
+  --error: #E0574F;
+  --success: #AFC79E;
+  --focus: #BDCDA0;
+  --shadow: 0 14px 32px -18px rgba(0, 0, 0, 0.75), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --band: color-mix(in srgb, var(--text) 3%, var(--bg));
+  --map: color-mix(in srgb, var(--text) 12%, transparent);
+  --map-strong: color-mix(in srgb, var(--text) 22%, transparent);
+  --map-text: color-mix(in srgb, var(--text) 32%, transparent);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-text);
+  font-size: 16px;
+  line-height: 1.55;
+  font-feature-settings: "tnum" 1;
+}
+.wrap { max-width: 1248px; margin: 0 auto; padding: 0 24px; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted); }
+.display {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-track);
+  line-height: 1.02;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.spacer { flex: 1; }
+.warn { color: var(--warning); }
+.fail { color: var(--error); }
+.ok { color: var(--success); }
+.stack { display: grid; }
+.stack > * { grid-area: 1 / 1; }
+.sprite { position: absolute; width: 0; height: 0; }
+.is-off { opacity: 0; }
+
+/* Logo placeholder */
+.glyph { width: 16px; height: 12px; display: inline-block; flex: none; }
+.wordmark { display: inline-flex; align-items: center; gap: 8px; font: 600 18px var(--font-text); letter-spacing: -0.01em; text-decoration: none; color: var(--text); }
+
+/* Buttons and links */
+.btn {
+  font: 500 15px var(--font-text); border-radius: 8px; padding: 12px 18px;
+  border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  text-decoration: none; transition: transform var(--t-press) var(--ease);
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-secondary { background: transparent; color: var(--text); border-color: var(--control); }
+.btn-sm { font-size: 13px; padding: 7px 12px; border-radius: 6px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.nav-link, .text-link, .foot-link { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.text-link { color: var(--text); text-decoration: underline; text-decoration-color: var(--control); text-underline-offset: 4px; font-weight: 500; }
+.text-link:hover { text-decoration-color: currentColor; }
+
+/* Sections */
+section { padding: 128px 0; border-top: 1px solid var(--rule); }
+.sec-head { max-width: 680px; margin-bottom: 56px; }
+.sec-head h2 { font-size: calc(clamp(32px, 3.6vw, 48px) * var(--display-scale) / 0.86); margin: 0; }
+.sec-head p { margin: 16px 0 0; color: var(--muted); font-size: 18px; line-height: 1.55; }
+.caption { font-size: 13px; color: var(--muted); margin: 12px 0 0; line-height: 1.5; }
+@media (max-width: 1100px) { section { padding: 112px 0; } }
+@media (max-width: 860px) { section { padding: 96px 0; } .sec-head { margin-bottom: 40px; } }
+
+/* Landing navigation */
+.site-nav { display: flex; align-items: center; gap: 28px; height: 72px; position: relative; z-index: 2; }
+.site-nav .links { display: flex; gap: 24px; font-size: 15px; }
+.site-nav .links a, .site-nav .links .nav-link { color: var(--muted); text-decoration: none; }
+.site-nav .links a:hover, .site-nav .links .nav-link:hover { color: var(--text); }
+@media (max-width: 640px) { .site-nav { gap: 12px; } .site-nav .links { display: none; } }
+
+/* Theme switch: one icon button. The moon shows on the light page, the sun on the dark page. */
+.theme-toggle { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.theme-toggle:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.theme-toggle svg { width: 18px; height: 18px; display: block; }
+.theme-toggle .icon-sun, :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+
+/* Hero */
+.hero { padding: 64px 0 128px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) 374px; gap: 72px; align-items: center; }
+.hero h1 { font-size: calc(clamp(40px, 6vw, 86px) * var(--display-scale)); margin: 0 0 28px; text-wrap: balance; }
+.hero .lede { font-size: 20px; line-height: 1.5; max-width: 540px; color: var(--muted); margin: 0 0 36px; text-wrap: pretty; }
+.ctas { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.hero-demo { width: 374px; max-width: 100%; margin: 0; }
+@media (max-width: 1100px) { .hero-grid { gap: 48px; } }
+@media (max-width: 860px) {
+  .hero { padding: 40px 0 96px; }
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 64px; }
+  .hero h1 { font-size: calc(clamp(38px, 10.4vw, 72px) * var(--display-scale)); }
+  .hero .lede { font-size: 18px; }
+}
+
+.map { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.map svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.trk-line { stroke: var(--map); stroke-width: 1; fill: none; }
+.trk-node { fill: var(--map-fill); stroke: var(--map-strong); stroke-width: 1; }
+
+/* ===== relay card start =====
+   The handoff card, adapted from Codex's redesign (codex-card/card.html) to this page's tokens.
+   Everything is scoped under .rc. The card exposes two anchors for the track map:
+   data-lane="0" (the previous worker) and data-lane="2" (the next worker).
+   Swap this block, the template and mountRelayCard() together. */
+.rc { --rc-soft: color-mix(in srgb, var(--accent) 11%, var(--surface)); width: 374px; max-width: 100%; font: 400 14px/1.5 var(--font-text); }
+.rc button { font: inherit; cursor: pointer; transition: transform 160ms var(--ease); }
+.rc button:active:not(:disabled) { transform: translateY(1px); }
+.rc button:disabled { cursor: default; opacity: 0.45; }
+.rc svg { display: block; flex: none; }
+.rc time, .rc .mono { font-family: var(--font-mono); font-size: 0.94em; }
+.rc-card { position: relative; border: 1px solid var(--rule); background: var(--surface); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+.rc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.rc-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.rc-pin { display: flex; gap: 5px; align-items: center; background: none; border: 0; color: var(--muted); font-size: 12px; padding: 4px; }
+.rc-pin[aria-pressed="true"] { color: var(--accent); }
+.rc-title { margin: 0; font: 700 23px/1.2 var(--font-display); letter-spacing: -0.028em; font-synthesis: none; }
+.rc-repo { margin: 7px 0 0; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.rc-line { border-top: 1px solid var(--rule); margin-top: 21px; padding-top: 17px; min-height: 80px; }
+.rc-line-text { margin: 0; font-size: 13px; line-height: 1.6; font-weight: 500; }
+.rc-line-text strong { color: var(--accent); font-weight: 600; }
+.rc-worker { position: relative; border: 1px solid var(--rule); border-radius: 9px; padding: 12px 13px; min-height: 78px; background: var(--surface); transition: background-color 180ms var(--ease), border-color 180ms var(--ease); }
+.rc-worker.active { border-color: var(--accent); background: var(--rc-soft); }
+.rc-worker-top, .rc-worker-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rc-worker-name { font-size: 14px; font-weight: 600; }
+.rc-role { font-size: 11px; color: var(--muted); }
+.rc-worker-bottom { margin-top: 7px; font-size: 11px; color: var(--muted); }
+.rc-state { color: var(--text); font-weight: 500; }
+.rc-state.warning { color: var(--warning); }
+.rc-state.working { color: var(--accent); }
+.rc-capacity { height: 3px; margin-top: 9px; background: var(--rule); overflow: hidden; border-radius: 3px; }
+.rc-capacity-fill { height: 100%; background: var(--accent); transform-origin: left; }
+.rc-conn { position: relative; height: 83px; display: flex; align-items: center; gap: 12px; padding-left: 20px; }
+.rc-arrow { height: 65px; width: 14px; color: var(--accent); }
+.rc-transfer { margin: 0; line-height: 1.55; font-size: 11px; color: var(--muted); }
+.rc-transfer b { display: block; color: var(--text); font-weight: 500; font-size: 12px; }
+.rc-token { position: absolute; left: 19px; top: 12px; width: 16px; height: 18px; border: 1px solid var(--accent); background: var(--surface); color: var(--accent); border-radius: 3px; opacity: 0; display: grid; place-items: center; font-size: 10px; }
+.rc-facts { display: grid; grid-template-columns: 85px 1fr; gap: 8px 9px; margin: 21px 0 0; padding: 17px 0 0; border-top: 1px solid var(--rule); font-size: 12px; }
+.rc-facts dt { color: var(--muted); }
+.rc-facts dd { margin: 0; }
+.rc-error { color: var(--error); }
+.rc-success { color: var(--success); }
+.rc-actions { margin-top: 22px; }
+.rc-primary { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 11px 15px; width: 100%; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.rc-secondary { display: flex; justify-content: space-between; margin-top: 12px; gap: 10px; }
+.rc-text-btn { color: var(--muted); background: none; border: 0; padding: 4px 0; font-size: 12px; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; }
+.rc-text-btn:hover { color: var(--text); }
+.rc-playback { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; gap: 10px; }
+.rc-note { font-size: 12px; color: var(--muted); }
+.rc-controls { display: flex; gap: 6px; }
+.rc-control { background: transparent; border: 1px solid var(--control); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text); }
+.rc dialog { width: 350px; max-width: calc(100% - 32px); border: 1px solid var(--rule); border-radius: 12px; padding: 24px; background: var(--surface); color: var(--text); }
+.rc dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
+.rc dialog h2 { margin: 0 0 13px; font: 600 18px var(--font-text); }
+.rc dialog p { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.rc dialog .rc-control { margin-top: 12px; }
+/* The menu-bar view of the same card */
+.rc-tiny { position: relative; display: block; width: 280px; background: var(--surface); border: 1px solid var(--rule); border-radius: 11px; padding: 16px; box-shadow: var(--shadow); font: 400 14px/1.5 var(--font-text); }
+.rc-tiny::before { content: ""; position: absolute; right: 42px; top: -6px; width: 10px; height: 10px; transform: rotate(45deg); background: var(--surface); border-left: 1px solid var(--rule); border-top: 1px solid var(--rule); }
+.rc-tiny-job { display: block; font-weight: 600; font-size: 13px; }
+.rc-tiny-repo { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.rc-tiny-story { font-size: 10.5px; white-space: nowrap; color: var(--accent); margin-top: 13px; display: flex; align-items: center; gap: 5px; }
+.rc-tiny-story svg { width: 11px; height: 11px; }
+.rc-tiny-action { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--rule); padding-top: 11px; margin-top: 13px; }
+.rc-tiny-action span { font-size: 10px; color: var(--muted); }
+.rc-tiny-action b { color: var(--accent); font-size: 11px; font-weight: 600; }
+@media (max-width: 360px) { .rc-card { padding: 18px; } .rc-title { font-size: 21px; } .rc-playback { flex-wrap: wrap; } }
+/* ===== relay card end ===== */
+
+/* Provider row */
+.providers { border-top: 1px solid var(--rule); padding: 28px 0; }
+.providers .wrap { display: flex; align-items: center; gap: 16px 32px; flex-wrap: wrap; }
+.providers p { margin: 0; font-size: 15px; color: var(--muted); }
+.ptiles { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; align-items: center; }
+.pt { font: 500 13px var(--font-mono); padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); white-space: nowrap; }
+.pt.planned { color: var(--muted); background: transparent; border-style: dashed; border-color: var(--control); font-weight: 400; }
+.pt-note { font: 400 13px var(--font-mono); color: var(--muted); padding-left: 4px; }
+
+/* Switching by hand, against relay */
+.cost-fig { margin: 0; }
+.cost { --m: 6px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.cost-col { padding: 32px 36px 30px; min-width: 0; display: flex; flex-direction: column; }
+.cost-col + .cost-col { border-left: 1px solid var(--rule); }
+.cost-col h3 { margin: 0 0 26px; font: 600 17px var(--font-text); letter-spacing: -0.005em; }
+.tl { list-style: none; margin: 0; padding: 0; flex: 1; }
+.ev { position: relative; display: grid; grid-template-columns: 50px 9px minmax(0, 1fr); column-gap: 16px; min-height: max(26px, calc(var(--d) * var(--m))); font-size: 15px; line-height: 1.5; }
+.ev time { font: 13px/1.75 var(--font-mono); color: var(--muted); }
+.ev[data-min="0"] { --d: 0; }
+.ev[data-min="3"] { --d: 3; }
+.ev[data-min="4"] { --d: 4; }
+.ev[data-min="12"] { --d: 12; }
+.ev[data-min="13"] { --d: 13; }
+.ev[data-min="14"] { --d: 14; }
+.ev[data-min="40.2"] { --d: 40.2; }
+.ev .tx { padding-bottom: 6px; }
+.ev .rl { position: relative; }
+.ev .rl::before { content: ""; position: absolute; left: 1px; top: 8px; width: 7px; height: 7px; border: 1px solid var(--control); background: var(--surface); z-index: 1; }
+.ev .rl::after { content: ""; position: absolute; left: 4px; top: 15px; bottom: -8px; width: 0; border-left: 1px solid var(--control); }
+.ev .rl.idle::after { border-left-style: dotted; border-left-color: var(--muted); }
+.ev .rl.redo::after { border-left-style: dashed; border-left-color: var(--warning); }
+.ev .rl.limit::before { border-color: var(--warning); }
+.ev .rl.olive::before { border-color: var(--accent); }
+.ev .rl.olive::after { left: 3.5px; border-left: 2px solid var(--accent); }
+.ev .rl.end::after { display: none; }
+.ev .rl.baton::before { left: -10px; top: 10px; width: 29px; height: 3px; border: 0; background: var(--accent); }
+.ev .warn-word { color: var(--warning); }
+.ev .olive-word { color: var(--accent); font-weight: 600; }
+.ev .gap-note { display: block; font: 12px var(--font-mono); color: var(--muted); margin-top: 2px; }
+.cost-total { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--rule); display: flex; align-items: baseline; gap: 10px; }
+.cost-total b { font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(44px * var(--display-scale) / 0.86); line-height: 1; }
+.cost-total.lost b { color: var(--text); }
+.cost-total.kept b { color: var(--accent); }
+.cost-total span { color: var(--muted); font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(44px * var(--display-scale) / 0.86); line-height: 1; }
+@media (max-width: 860px) {
+  .cost { grid-template-columns: minmax(0, 1fr); }
+  .cost-col { padding: 26px 20px 24px; }
+  .cost-col + .cost-col { border-left: 0; border-top: 1px solid var(--rule); }
+}
+@media (max-width: 700px) { .cost { --m: 5px; } }
+
+/* Bento band, with angled edges */
+.band {
+  background: var(--band); border-top: 0;
+  clip-path: polygon(0 48px, 48px 0, calc(100% - 48px) 0, 100% 48px, 100% calc(100% - 48px), calc(100% - 48px) 100%, 48px 100%, 0 calc(100% - 48px));
+}
+.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+.cell { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.cell.w4 { grid-column: span 4; }
+.cell.w3 { grid-column: span 3; }
+.cell.w2 { grid-column: span 2; }
+.cell.w6 { grid-column: span 6; }
+.stage { position: relative; height: 270px; overflow: hidden; border-bottom: 1px solid var(--rule); background: var(--bg); padding: 24px; }
+.cell-text { padding: 18px 22px 22px; }
+.cell-text h3 { margin: 0; font: 600 16px var(--font-text); letter-spacing: -0.005em; }
+.cell-text p { margin: 4px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+@media (max-width: 1024px) {
+  .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cell.w4, .cell.w6 { grid-column: span 2; }
+  .cell.w3, .cell.w2 { grid-column: span 1; }
+  .cell.tree-cell { grid-column: span 2; }
+}
+@media (max-width: 700px) {
+  .bento { grid-template-columns: minmax(0, 1fr); }
+  .cell.w4, .cell.w6, .cell.w3, .cell.w2, .cell.tree-cell { grid-column: auto; }
+  .stage { padding: 18px; }
+  .band { clip-path: polygon(0 24px, 24px 0, calc(100% - 24px) 0, 100% 24px, 100% calc(100% - 24px), calc(100% - 24px) 100%, 24px 100%, 0 calc(100% - 24px)); }
+}
+
+/* Vignette: menu bar */
+.st-menubar { padding: 0; }
+.mbar {
+  position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; height: 30px; padding: 0 14px;
+  background: var(--raised); border-bottom: 1px solid var(--rule); font-size: 13px; white-space: nowrap;
+}
+.mbar .app { font-weight: 600; }
+.mb-extra { position: relative; display: inline-flex; }
+.mb-glyph { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 22px; border-radius: 5px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.mb-drop { position: absolute; right: -32px; top: 36px; white-space: normal; }
+.ghost-win { position: absolute; left: 24px; top: 58px; width: 340px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.ghost-win .gw-bar { height: 24px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 5px; padding: 0 9px; }
+.ghost-win .gw-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--rule); display: block; }
+.ghost-win pre { margin: 0; padding: 10px 12px 14px; font: 11.5px/1.7 var(--font-mono); color: var(--muted); }
+@media (max-width: 640px) { .mbar .opt { display: none; } .ghost-win { display: none; } }
+
+/* Vignette: notification */
+.st-notify { display: flex; justify-content: flex-end; align-items: flex-start; }
+.notif {
+  width: 100%; max-width: 340px; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px;
+  background: var(--raised); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--shadow); padding: 13px 14px; font-size: 13px; line-height: 1.4;
+}
+.app-tile { width: 36px; height: 36px; border-radius: 9px; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; }
+.app-tile .glyph { width: 18px; height: 14px; }
+.notif .n1 { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.notif .n1 b { color: var(--text); font-weight: 600; }
+.notif .n2 { font-weight: 600; margin-top: 2px; }
+.notif .n3 { color: var(--muted); margin-top: 1px; }
+.notif .n3 .mono { color: var(--text); font-size: 12px; }
+.notif-older {
+  position: absolute; left: 24px; right: 24px; bottom: 24px; border-top: 1px solid var(--rule); padding-top: 14px;
+  display: grid; gap: 8px; font-size: 12.5px; color: var(--muted);
+}
+.notif-older div { display: flex; justify-content: space-between; gap: 10px; }
+.notif-older .mono { font-size: 12px; }
+
+/* Vignette: checkpoint diff */
+.st-diff { display: flex; flex-direction: column; align-items: center; }
+.diff { width: 100%; max-width: 460px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); font-size: 12.5px; }
+.diff-head { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--rule); color: var(--muted); }
+.diff ul { list-style: none; margin: 0; padding: 4px 0; }
+.diff li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; font-family: var(--font-mono); font-size: 12px; }
+.diff li .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.diff li .p em { font-style: normal; color: var(--muted); }
+.diff .n { white-space: nowrap; }
+.add { color: var(--success); }
+.del { color: var(--error); }
+.connect { position: relative; width: 1px; height: 34px; background: var(--control); }
+.connect::before, .connect::after { content: ""; position: absolute; left: -3px; width: 7px; height: 7px; border: 1px solid var(--control); background: var(--bg); }
+.connect::before { top: -4px; }
+.connect::after { bottom: -4px; border-color: var(--accent); }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--raised); border: 1px solid var(--rule); box-shadow: var(--shadow); font-size: 13px; font-weight: 500; white-space: nowrap; margin-top: 4px; }
+.pill .chk { width: 14px; height: 14px; color: var(--accent); }
+
+/* Vignette: file tree */
+.st-tree { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 18px; padding-right: 0; }
+.ftree { margin: 0; font: 12.5px/1.95 var(--font-mono); color: var(--muted); white-space: pre; }
+.ftree b { color: var(--text); font-weight: 500; }
+.ftree .on { display: inline-block; color: var(--text); font-weight: 600; background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 3px; padding: 0 4px; margin-left: -4px; }
+.doc { background: var(--raised); border: 1px solid var(--rule); border-right: 0; border-radius: 10px 0 0 10px; box-shadow: var(--shadow); overflow: hidden; }
+.doc-head { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--rule); font: 12px var(--font-mono); color: var(--muted); }
+.doc pre { margin: 0; padding: 12px 14px; font: 12px/1.75 var(--font-mono); white-space: pre-wrap; }
+.doc .h { font-weight: 600; }
+.doc .c { color: var(--muted); }
+@media (max-width: 520px) {
+  .st-tree { grid-template-columns: 1fr; height: auto; }
+  .ftree { display: none; }
+  .doc { border-right: 1px solid var(--rule); border-radius: 10px; }
+}
+
+/* Vignette: lineage */
+.st-lineage { height: 250px; padding: 28px 32px; }
+.lin { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 20px; }
+.lin-names { position: relative; font-size: 13px; color: var(--muted); }
+.lin-names span { position: absolute; left: 0; white-space: nowrap; }
+.lin-plot { position: relative; height: 170px; }
+.lin-plot i { position: absolute; display: block; }
+.lin-plot .rail { left: 0; right: 0; height: 1px; background: var(--rule); }
+.lin-plot .lseg { height: 2px; background: var(--accent); }
+.lin-plot .vstep { width: 2px; background: var(--accent); }
+.lin-plot .node { width: 9px; height: 9px; margin: -4px 0 0 -4px; border: 1px solid var(--accent); background: var(--bg); }
+.lin-plot .who, .lin-plot .hash, .lin-plot .time { position: absolute; white-space: nowrap; font: 12px var(--font-mono); color: var(--muted); }
+.lin-plot .who { color: var(--text); }
+.lin-plot .hash { color: var(--accent); }
+.now-tag { position: absolute; right: 0; top: 4px; transform: translateY(-100%); display: inline-flex; gap: 6px; align-items: center; padding: 4px 9px; border: 1px solid var(--rule); border-radius: 6px; background: var(--raised); box-shadow: var(--shadow); font-size: 12px; white-space: nowrap; }
+/* Positions of the lineage illustration */
+.st-lineage .name-claude { top: 43px; }
+.st-lineage .name-codex { top: 113px; }
+.st-lineage .rail-claude { top: 52px; }
+.st-lineage .rail-codex { top: 122px; }
+.st-lineage .seg-first { top: 51px; left: 0; width: 27.4%; }
+.st-lineage .step-down { top: 52px; height: 71px; left: 27.4%; }
+.st-lineage .seg-codex { top: 121px; left: 27.4%; width: 39%; }
+.st-lineage .step-up { top: 52px; height: 71px; left: 66.4%; }
+.st-lineage .seg-last { top: 51px; left: 66.4%; width: 33.6%; }
+.st-lineage .node-start { top: 52px; left: 0; }
+.st-lineage .node-down { top: 52px; left: 27.4%; }
+.st-lineage .node-up { top: 122px; left: 66.4%; }
+.st-lineage .who-claude { top: 24px; left: 0; }
+.st-lineage .who-codex { top: 94px; left: calc(27.4% + 12px); }
+.st-lineage .who-startup { top: 24px; left: calc(66.4% + 12px); }
+.st-lineage .hash-down { top: 60px; left: calc(27.4% + 10px); }
+.st-lineage .hash-up { top: 130px; left: calc(66.4% + 10px); }
+.st-lineage .time-start { top: 148px; left: 0; }
+.st-lineage .time-down { top: 148px; left: 27.4%; transform: translateX(-50%); }
+.st-lineage .time-up { top: 148px; left: 66.4%; transform: translateX(-50%); }
+.st-lineage .time-now { top: 148px; right: 0; }
+.st-lineage .now-tag { top: 46px; }
+@media (max-width: 700px) {
+  .st-lineage { padding: 24px 16px; }
+  .lin { grid-template-columns: 1fr; gap: 0; }
+  .lin-names { display: none; }
+  .lin-plot .who.hide-sm { display: none; }
+}
+
+/* Task graph */
+.tg-fig { margin: 0; }
+.tg-status { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 18px; border: 1px solid var(--rule); border-bottom: 0; border-radius: 12px 12px 0 0; background: var(--surface); font-size: 14px; min-height: 48px; }
+.tg-status .stack > span { transition: opacity var(--t-expand) var(--ease); }
+.tg-status .clock { flex: none; font: 500 13px var(--font-mono); color: var(--muted); }
+.tg-stage { border: 1px solid var(--rule); border-radius: 0 0 12px 12px; padding: 44px 36px; background: var(--bg); }
+.tg { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 48px; row-gap: 18px; align-items: center; }
+.tg.vertical { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 44px; }
+.tg-edges { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
+.tg-edges path { fill: none; stroke: var(--control); stroke-width: 1; }
+.tg-dots { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.dw { position: absolute; left: 0; top: 0; transition: opacity var(--t-expand) var(--ease); }
+.dw.off { opacity: 0; }
+.dot { display: block; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; opacity: 0; }
+.dot.claude { background: var(--accent); }
+.dot.codex { border: 1.5px solid var(--text); border-radius: 50%; background: var(--bg); }
+.tg-node { position: relative; z-index: 1; grid-column: var(--dc); grid-row: var(--dr); background: var(--raised); border: 1px solid var(--rule); border-radius: 9px; padding: 10px 12px 9px; font-size: 13.5px; line-height: 1.3; min-width: 0; }
+.tg.vertical .tg-node { grid-column: var(--mc); grid-row: var(--mr); padding: 8px 9px; font-size: 12.5px; }
+.tg.vertical .tg-node .nm2 { flex-wrap: wrap; gap: 2px 6px; }
+.tg.vertical .tg-node .sw2 > span { text-align: left; }
+.tg-node::after { content: ""; position: absolute; inset: -5px; border: 1px dashed var(--warning); border-radius: 12px; opacity: 0; transition: opacity var(--t-expand) var(--ease); }
+.tg-node.is-paused::after { opacity: 1; }
+.tg-node .nt { font-weight: 600; transition: opacity var(--t-expand) var(--ease); }
+.tg-node.is-paused .nt { opacity: 0.55; }
+.tg-node .nm2 { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 6px; font: 11.5px var(--font-mono); color: var(--muted); }
+.tg-node .pv { display: inline-flex; align-items: center; gap: 6px; }
+.tg-node .pv::before { content: ""; width: 7px; height: 7px; flex: none; }
+.tg-node.claude .pv::before { background: var(--accent); }
+.tg-node.codex .pv::before { border: 1.5px solid var(--text); border-radius: 50%; width: 7px; height: 7px; box-sizing: border-box; }
+.tg-node .sw2 > span { transition: opacity var(--t-expand) var(--ease); text-align: right; }
+.tg-node .sw2 .p { opacity: 0; color: var(--warning); }
+.tg-node.is-paused .sw2 .p { opacity: 1; }
+.tg-node.is-paused .sw2 .w { opacity: 0; }
+.tg-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 16px; font-size: 13px; color: var(--muted); }
+.tg-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.lg-sq { width: 7px; height: 7px; background: var(--accent); }
+.lg-ci { width: 8px; height: 8px; border: 1.5px solid var(--text); border-radius: 50%; }
+.lg-da { width: 18px; height: 10px; border: 1px dashed var(--warning); border-radius: 3px; }
+@media (max-width: 760px) { .tg-stage { padding: 28px 14px; } .tg-status { padding: 10px 14px; font-size: 13px; } }
+
+/* Pricing */
+.price { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.price-col { padding: 32px 36px 30px; min-width: 0; }
+.price-col + .price-col { border-left: 1px solid var(--rule); }
+.price-col h3 { margin: 0; font: 600 17px var(--font-text); letter-spacing: -0.005em; }
+.price-col p { margin: 12px 0 0; color: var(--muted); max-width: 44ch; }
+.price-col .price-big { margin: 20px 0 0; color: var(--text); font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(44px * var(--display-scale) / 0.86); line-height: 1; }
+@media (max-width: 700px) {
+  .price { grid-template-columns: minmax(0, 1fr); }
+  .price-col { padding: 26px 20px 24px; }
+  .price-col + .price-col { border-left: 0; border-top: 1px solid var(--rule); }
+}
+
+/* Closing panel */
+.closing { padding: 120px 0; }
+.panel {
+  position: relative; overflow: hidden; background: var(--tint); padding: 120px 64px;
+  --map-fill: var(--tint);
+  --map: color-mix(in srgb, var(--accent) 22%, transparent);
+  --map-strong: color-mix(in srgb, var(--accent) 34%, transparent);
+  --map-text: color-mix(in srgb, var(--accent) 48%, transparent);
+  clip-path: polygon(32px 0, calc(100% - 32px) 0, 100% 32px, 100% calc(100% - 32px), calc(100% - 32px) 100%, 32px 100%, 0 calc(100% - 32px), 0 32px);
+}
+.panel .map svg { overflow: hidden; }
+.panel-in { position: relative; z-index: 1; }
+.panel h2 { font-size: calc(clamp(38px, 5.2vw, 76px) * var(--display-scale)); margin: 0 0 40px; max-width: 15ch; text-wrap: balance; }
+@media (max-width: 700px) { .panel { padding: 72px 24px; } .closing { padding: 96px 0; } .closing .map { display: none; } }
+
+/* Footer */
+.site-footer { border-top: 1px solid var(--rule); padding: 64px 0 32px; font-size: 14px; }
+.foot-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 32px; }
+.foot-brand p { color: var(--muted); max-width: 320px; margin: 14px 0 0; }
+.site-footer h3 { font: 600 13px var(--font-text); margin: 4px 0 12px; }
+.site-footer nav a, .site-footer nav .foot-link { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; text-align: left; }
+.site-footer nav a:hover, .site-footer nav .foot-link:hover { color: var(--text); }
+.foot-base { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
+@media (max-width: 760px) { .foot-grid { grid-template-columns: 1fr; } }
+
+/* Install panel */
+.install { margin: auto; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 32px; border: 1px solid var(--rule); border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
+.install::backdrop { background: rgba(20, 20, 19, 0.32); }
+.install-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.install-head h2 { margin: 0; font: 600 20px var(--font-text); }
+.install p { margin: 12px 0 0; color: var(--muted); font-size: 15px; }
+.install p a { color: var(--text); text-underline-offset: 3px; }
+.install-block { margin-top: 28px; }
+.install-block-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.install-block-head h3 { margin: 0; font: 600 15px var(--font-text); }
+.install-cmd { margin: 10px 0 0; padding: 14px 16px; font: 13px/1.6 var(--font-mono); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; white-space: pre-wrap; word-break: break-all; overflow-x: auto; }
+/* The 80-character download address fits the 760px panel. On a narrower screen it wraps between any two characters
+   instead of scrolling sideways, so it continues on the same line as its indent; copying keeps the original lines. */
+.install-note { font-size: 14px; }
+.nowrap { white-space: nowrap; }
+@media (max-width: 480px) {
+  .install { width: 100vw; max-width: 100vw; max-height: 100dvh; border-radius: 0; border-left: 0; border-right: 0; padding: 20px 16px; }
+  .install-cmd { padding: 12px; font-size: 12px; }
+  .install .btn-sm { min-height: 36px; }
+}
+
+/* Not-found page */
+main.wrap { padding-top: 128px; padding-bottom: 128px; }
+main.wrap h1 { font-size: calc(clamp(32px, 3.6vw, 48px) * var(--display-scale) / 0.86); margin: 0 0 16px; }
+main.wrap p { margin: 0; color: var(--muted); font-size: 18px; }
+
+@media (max-width: 640px) { .wrap { padding: 0 16px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; }
+}
+
+</style>
+
+<style id="graphics-only-overrides">
+
+/* Proposed diagrams only. The original page typography and section layout stay intact. */
+:root[data-graphics="simple"] .rc-card { box-shadow: none; }
+:root[data-graphics="simple"] .rc-capacity { display: none; }
+:root[data-graphics="simple"] .rc-flow { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr); column-gap: 0; padding-top: 106px; }
+.handoff-drawing { display: none; }
+:root[data-graphics="simple"] .handoff-drawing { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 104px; overflow: visible; }
+.handoff-drawing .route { fill: none; stroke: var(--rule); stroke-width: 1.5; }
+.handoff-drawing .symbol { fill: var(--raised); stroke: var(--rule); stroke-width: 1; }
+.handoff-drawing .symbol-ink { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.brand-mark { display:none; }
+:root[data-graphics="simple"] .brand-mark { display:inline-block; width:14px; height:14px; object-fit:contain; flex:none; vertical-align:middle; }
+:root[data-graphics="simple"] .pt { display:inline-flex; align-items:center; gap:8px; }
+:root[data-graphics="simple"] .pt .brand-mark { width:16px; height:16px; }
+:root[data-graphics="simple"] .lineage-event .provider { display:flex; align-items:center; gap:6px; }
+:root[data-graphics="simple"] .tg-node .pv::before { display:none; }
+:root[data-graphics="simple"] .lg-sq, :root[data-graphics="simple"] .lg-ci { display:none; }
+:root[data-theme="dark"] .brand-mark.codex, :root[data-theme="dark"] .brand-mark.openai, :root[data-theme="dark"] .brand-mark.cursor, :root[data-theme="dark"] .hero-logo.codex { filter:invert(1); }
+.handoff-drawing .paper { fill: var(--raised); stroke: var(--control); stroke-width: 1; }
+.handoff-drawing .paper-fold { fill: none; stroke: var(--control); stroke-width: 1; }
+.handoff-drawing .paper-lines { fill: none; stroke: var(--rule); stroke-width: 1; }
+.handoff-drawing .checkpoint-hash { font: 12px var(--font-mono); text-anchor: middle; fill: var(--muted); }
+.handoff-drawing .check { opacity: 0; stroke: var(--accent); fill: none; stroke-width: 1.5; }
+.rc[data-step="0"] .source-symbol, .rc[data-step="1"] .source-symbol { stroke: var(--accent); }
+.rc[data-step="2"] .source-symbol, .rc[data-step="3"] .source-symbol, .rc[data-step="4"] .source-symbol, .rc[data-step="5"] .source-symbol { stroke: var(--warning); }
+.rc[data-step="3"] .paper, .rc[data-step="4"] .paper, .rc[data-step="5"] .paper { stroke: var(--accent); }
+.rc[data-step="4"] .check, .rc[data-step="5"] .check { opacity: 1; }
+.rc[data-step="4"] .route-out, .rc[data-step="5"] .route-out { stroke: var(--accent); }
+.rc[data-step="4"] .target-symbol, .rc[data-step="5"] .target-symbol { stroke: var(--accent); }
+.rc[data-step="3"] .checkpoint-symbol { animation: checkpoint-settle 250ms var(--ease) both; }
+.rc[data-step="4"] .worker-symbol-right { animation: checkpoint-settle 180ms var(--ease) both; }
+@keyframes checkpoint-settle { from { opacity:.6; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+:root[data-graphics="simple"] .rc-worker { border: 0; border-radius: 0; padding: 0; background: transparent; min-height: 102px; }
+:root[data-graphics="simple"] .rc-worker.active { background: transparent; }
+:root[data-graphics="simple"] [data-rc="claude"] { grid-column:1; grid-row:1; }
+:root[data-graphics="simple"] [data-rc="codex"] { grid-column:3; grid-row:1; }
+:root[data-graphics="simple"] .rc-worker-top, :root[data-graphics="simple"] .rc-worker-bottom { flex-direction:column; text-align:center; align-items:center; gap:6px; }
+:root[data-graphics="simple"] .rc-worker-bottom { margin-top:13px; }
+:root[data-graphics="simple"] .rc-worker .rc-role { order:2; }
+:root[data-graphics="simple"] .rc-conn { grid-column:1 / -1; grid-row:2; height:auto; min-height:49px; margin-top:19px; padding:14px 0 0; border-top:1px solid var(--rule); justify-content:center; text-align:center; }
+:root[data-graphics="simple"] .rc-arrow, :root[data-graphics="simple"] .rc-token { display:none; }
+.execution-trace { display:none; }
+:root[data-graphics="simple"] .execution-trace { display:block; width:100%; height:74px; overflow:visible; margin-bottom:25px; }
+.execution-trace path, .execution-trace line { fill:none; stroke:var(--rule); stroke-width:2; }
+.execution-trace circle { fill:var(--surface); stroke:var(--control); stroke-width:1.5; }
+.execution-trace .limit { stroke:var(--warning); }
+.execution-trace .continuing { stroke:var(--accent); stroke-width:3; }
+.execution-trace .end { fill:var(--accent); stroke:var(--accent); }
+.execution-trace text { font:13px var(--font-mono); fill:var(--muted); }
+:root[data-graphics="simple"] .cost-col h3 { margin-bottom:18px; }
+:root[data-graphics="simple"] .tl { display:flex; flex-direction:column; gap:12px; }
+:root[data-graphics="simple"] .ev { min-height:0; grid-template-columns:50px 9px minmax(0,1fr); }
+:root[data-graphics="simple"] .ev .rl::before { width:5px; height:5px; border-radius:50%; top:9px; left:2px; }
+:root[data-graphics="simple"] .ev .rl::after { display:none; }
+:root[data-graphics="simple"] .ev .rl.baton::before { width:5px; height:5px; left:2px; top:9px; }
+:root[data-graphics="simple"] .cost-col:nth-child(2) .ev:last-child { margin-top:auto; }
+.lineage-proposed { display:none; }
+:root[data-graphics="simple"] .st-lineage .lin { display:none; }
+:root[data-graphics="simple"] .lineage-proposed { position:relative; display:block; height:194px; }
+.lineage-proposed .trace-drawing { position:absolute; top:0; left:0; height:140px; width:100%; overflow:visible; }
+.trace-drawing .guide { fill:none; stroke:var(--rule); stroke-width:1; }
+.trace-drawing .job-path { fill:none; stroke:var(--accent); stroke-width:2; }
+.trace-drawing .junction { fill:var(--surface); stroke:var(--accent); stroke-width:1.5; }
+.lineage-event { position:absolute; top:0; width:27%; font:12px var(--font-mono); }
+.lineage-event:nth-of-type(1) { left:0; }
+.lineage-event:nth-of-type(2) { left:35%; }
+.lineage-event:nth-of-type(3) { left:70%; width:30%; }
+.lineage-event .provider { display:block; color:var(--muted); font:13px var(--font-text); }
+.lineage-event .account { display:block; margin-top:8px; }
+.lineage-event .hash { display:block; position:absolute; top:108px; color:var(--accent); }
+.lineage-event time { display:block; position:absolute; top:144px; color:var(--muted); }
+.trace-now { position:absolute; right:0; bottom:0; display:flex; gap:13px; align-items:center; font:12px var(--font-mono); color:var(--muted); }
+.trace-now .working { color:var(--accent); }
+:root[data-graphics="simple"] .tg-stage { padding:46px 28px; background:var(--bg); }
+:root[data-graphics="simple"] .tg { column-gap:40px; row-gap:32px; align-items:center; }
+:root[data-graphics="simple"] .tg-node { border-radius:8px; padding:15px 13px; min-height:75px; background:var(--surface); }
+:root[data-graphics="simple"] .tg-node::before, :root[data-graphics="simple"] .tg-node::after { content:""; position:absolute; top:50%; width:6px; height:6px; margin-top:-3px; border:1px solid var(--control); background:var(--bg); border-radius:50%; opacity:1; inset:auto; }
+:root[data-graphics="simple"] .tg-node::before { left:-4px; top:50%; }
+:root[data-graphics="simple"] .tg-node::after { right:-4px; top:50%; }
+:root[data-graphics="simple"] .tg-node[data-node="plan"]::before, :root[data-graphics="simple"] .tg-node[data-node="rev"]::after { display:none; }
+:root[data-graphics="simple"] .tg-node .nm2 { margin-top:10px; }
+:root[data-graphics="simple"] .tg-node .pv::before { width:5px; height:5px; }
+:root[data-graphics="simple"] .tg-node.codex .pv::before { width:6px; height:6px; }
+:root[data-graphics="simple"] .tg-node .w { color:var(--accent); }
+:root[data-graphics="simple"] .tg-node[data-node="rev"] .w { color:var(--muted); }
+:root[data-graphics="simple"] .tg-node.is-paused { border-color:var(--warning); }
+:root[data-graphics="simple"] .tg-node.is-paused .nt { opacity:1; }
+:root[data-graphics="simple"] .tg-node.is-paused .p::before { content:""; display:inline-block; width:5px; height:7px; border-left:1px solid currentColor; border-right:1px solid currentColor; margin-right:5px; }
+:root[data-graphics="simple"] .tg-edges path { stroke:var(--control); stroke-width:1.2; stroke-linejoin:round; }
+:root[data-graphics="simple"] .tg-edges .paused-edge { stroke:var(--rule); }
+:root[data-graphics="simple"] .tg-edges .focused-edge { stroke:var(--accent); stroke-width:1.6; }
+:root[data-graphics="simple"] .tg[data-focus] .tg-edges path:not(.focused-edge) { opacity:.25; }
+:root[data-graphics="simple"] .tg-node { cursor:pointer; }
+:root[data-graphics="simple"] .tg-node.related-node { border-color:var(--accent); }
+:root[data-graphics="simple"] .tg-node.focused-node { outline:1px solid var(--accent); outline-offset:3px; }
+:root[data-graphics="simple"] .tg-node:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+:root[data-graphics="simple"] .tg-dots { display:none; }
+:root[data-graphics="simple"] .tg.vertical { grid-template-columns:repeat(3,minmax(0,1fr)); column-gap:12px; row-gap:32px; }
+:root[data-graphics="simple"] .tg.vertical .tg-node { min-height:74px; padding:12px 9px; }
+:root[data-graphics="simple"] .tg.vertical .tg-node[data-node="plan"], :root[data-graphics="simple"] .tg.vertical .tg-node[data-node="out"], :root[data-graphics="simple"] .tg.vertical .tg-node[data-node="rev"] { grid-column:1 / -1; justify-self:center; width:50%; }
+:root[data-graphics="simple"] .tg.vertical .tg-node::before { left:50%; top:-4px; margin-top:0; margin-left:-3px; }
+:root[data-graphics="simple"] .tg.vertical .tg-node::after { left:50%; right:auto; top:auto; bottom:-4px; margin-top:0; margin-left:-3px; }
+.graphics-review { position:fixed; z-index:20; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:5px; padding:6px; border:1px solid var(--control); border-radius:9px; background:var(--surface); max-width:calc(100% - 24px); }
+.graphics-review button { border:0; border-radius:5px; padding:9px 13px; background:transparent; color:var(--muted); font:500 12px var(--font-text); cursor:pointer; white-space:nowrap; }
+.graphics-review button[aria-pressed="true"] { background:var(--text); color:var(--surface); }
+.graph-playback { display:flex; justify-content:flex-end; gap:6px; margin-top:15px; }
+.graph-scenarios { margin-right:auto; display:flex; gap:6px; }
+.graph-scenarios button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+@media(max-width:700px) {
+  :root[data-graphics="simple"] .tg-stage { padding:30px 14px; }
+  :root[data-graphics="simple"] .st-lineage { height:270px; }
+  :root[data-graphics="simple"] .lineage-proposed { height:218px; }
+  .lineage-proposed .trace-drawing { display:none; }
+  .lineage-proposed::before { content:""; position:absolute; left:4px; top:3px; bottom:43px; width:1px; background:var(--rule); }
+  .lineage-event { position:relative; top:auto; width:100%!important; left:0!important; padding-left:24px; margin-bottom:16px; display:grid; grid-template-columns:1fr 54px; }
+  .lineage-event::before { content:""; position:absolute; left:1px; top:4px; width:7px; height:7px; border-radius:50%; border:1px solid var(--accent); background:var(--surface); }
+  .lineage-event .provider { display:none; }
+  .lineage-event .account { margin:0; }
+  .lineage-event .hash { position:static; margin-top:4px; grid-column:1; }
+  .lineage-event time { position:static; grid-column:2; grid-row:1; text-align:right; }
+  .trace-now { left:24px; right:auto; bottom:5px; }
+  .graph-playback { flex-wrap:wrap; }
+}
+
+</style>
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true">
+  <defs>
+    <symbol id="rc-right" viewBox="0 0 20 20"><path d="M3 10h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g" viewBox="0 0 16 12"><path d="M0 3.2 H8.2 V8.8 H16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="miter"/></symbol>
+  </defs>
+</svg>
+
+<!-- ===== relay card start ===== -->
+<template id="card-tpl">
+<div class="rc">
+  <article class="rc-card" aria-label="Illustrated coding job handoff">
+    <div class="rc-head">
+      <div class="rc-brand"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</div>
+      <button type="button" class="rc-pin" data-rc="pin" aria-pressed="false"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 5 0-1 4 3 3H4l3-3-1-4ZM8 9v5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg><span>Pin</span></button>
+    </div>
+    <p class="rc-title">Build authentication</p>
+    <p class="rc-repo"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h5l2 2h5v8H2Z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>relay / auth</p>
+    <div class="rc-line"><p class="rc-line-text" data-rc="line"><strong>Claude Code is working</strong> · building authentication</p></div>
+    <div class="rc-flow" aria-label="Claude Code hands the job to Codex">
+      <svg class="handoff-drawing" viewBox="0 0 328 104" role="img" aria-label="Claude Code hands a saved checkpoint to Codex">
+        <path class="route route-in" d="M93.5 45H144"/><path class="route route-out" d="M184 45H234.5"/>
+        <path class="route route-out" d="m227.5 41 7 4-7 4"/>
+        <g class="worker-symbol-left"><rect class="symbol source-symbol" x="43.5" y="20" width="50" height="50" rx="13"/><image class="hero-logo claude" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTQiIGhlaWdodD0iOTQiIHZpZXdCb3g9IjAgMCA5NCA5NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4Ljc2NTcgNjIuNDQzN0wzNy4xODIyIDUyLjExNjdMMzcuNDg1NyA1MS4yMTIyTDM3LjE4MjIgNTAuNzA4NUgzNi4yNzE1TDMzLjE4NTIgNTAuNTIwOEwyMi42NjE1IDUwLjIzOTFMMTMuNTU0NSA0OS44NjM2TDQuNzAwNDQgNDkuMzk0MkwyLjQ3NDI4IDQ4LjkyNDhMMC4zOTk5MDIgNDYuMTU1M0wwLjYwMjI4MSA0NC43OTRMMi40NzQyOCA0My41MjY2TDUuMTU1NzkgNDMuNzYxM0wxMS4wNzU0IDQ0LjE4MzdMMTkuOTggNDQuNzk0TDI2LjQwNTUgNDUuMTY5NUwzNS45Njc5IDQ2LjE1NTNIMzcuNDg1N0wzNy42ODgxIDQ1LjU0NUwzNy4xODIyIDQ1LjE2OTVMMzYuNzc3NCA0NC43OTRMMjcuNTY5MiAzOC41NTA4TDE3LjYwMjEgMzEuOTc5MUwxMi4zOTA4IDI4LjE3NjlMOS42MDgxMiAyNi4yNTI0TDguMTkxNDcgMjQuNDY4Nkw3LjU4NDMzIDIwLjUyNTZMMTAuMTE0MSAxNy43MDkxTDEzLjU1NDUgMTcuOTQzOEwxNC40MTQ2IDE4LjE3ODVMMTcuOTA1NiAyMC44NTQyTDI1LjM0MyAyNi42Mjc5TDM1LjA1NzIgMzMuNzYyOUwzNi40NzM5IDM0LjkzNjRMMzcuMDQ0MyAzNC41NTE0TDM3LjEzMTYgMzQuMjc5MkwzNi40NzM5IDMzLjE5OTZMMzEuMjEyIDIzLjY3MDZMMjUuNTk2IDEzLjk1MzlMMjMuMDY2MyA5LjkxNjk1TDIyLjQwODYgNy41MjI5NkMyMi4xNTM4IDYuNTE4MzEgMjIuMDAzOCA1LjY4NzE0IDIyLjAwMzggNC42NTk1N0wyNC44ODc3IDAuNzE2NTQ0TDI2LjUwNjcgMC4yMDAxOTVMMzAuNDAyNSAwLjcxNjU0NEwzMi4wMjE1IDIuMTI0NzdMMzQuNDUwMSA3LjY2Mzc5TDM4LjM0NTggMTYuMzQ3OEw0NC40MTcyIDI4LjE3NjlMNDYuMTg4IDMxLjY5NzVMNDcuMTQ5MyAzNC45MzY0TDQ3LjUwMzUgMzUuOTIyMkg0OC4xMTA2VjM1LjM1ODlMNDguNjE2NiAyOC42OTMzTDQ5LjUyNzMgMjAuNTI1Nkw1MC40MzggMTAuMDEwOEw1MC43NDE1IDcuMDUzNTZMNTIuMjA4OCAzLjQ4NjA1TDU1LjE0MzMgMS41NjE0OEw1Ny40MiAyLjY0MTEyTDU5LjI5MiA1LjMxNjc0TDU5LjAzOSA3LjA1MzU2TDU3LjkyNiAxNC4yODI0TDU1Ljc1MDQgMjUuNTk1Mkw1NC4zMzM3IDMzLjE5OTZINTUuMTQzM0w1Ni4xMDQ2IDMyLjIxMzhMNTkuOTQ5NyAyNy4xNDQyTDY2LjM3NTIgMTkuMDcwNEw2OS4yMDg1IDE1Ljg3ODRMNzIuNTQ3OCAxMi4zNTc5TDc0LjY3MjggMTAuNjY4SDc4LjcyMDNMODEuNjU0OCAxNS4wODA0TDgwLjMzOTQgMTkuNjMzN0w3Ni4xOTA2IDI0Ljg5MTFMNzIuNzUwMiAyOS4zNTA0TDY3LjgxNzIgMzUuOTU5NUw2NC43NTYyIDQxLjI3MzRMNjUuMDMwNyA0MS43MTE4TDY1Ljc2ODEgNDEuNjQ4OUw3Ni44OTg5IDM5LjI1NUw4Mi45MTk3IDM4LjE3NTNMOTAuMTA0MSAzNi45NTQ5TDkzLjM0MjIgMzguNDU3TDkzLjY5NjMgNDAuMDA2TDkyLjQzMTUgNDMuMTUxTDg0Ljc0MTEgNDUuMDI4N0w3NS43MzUzIDQ2Ljg1OTRMNjIuMzI0NCA1MC4wMTY0TDYyLjE3NTkgNTAuMTM1OEw2Mi4zNTEyIDUwLjM5NThMNjguMzk5IDUwLjk0MzJMNzAuOTc5NCA1MS4wODRINzcuMzAzN0w4OS4wOTIyIDUxLjk3NTlMOTIuMTc4NSA1My45OTQ0TDkzLjk5OTkgNTYuNDgyMkw5My42OTYzIDU4LjQwNjhMODguOTQwNCA2MC44MDA4TDgyLjU2NTUgNTkuMjk4N0w2Ny42NDAxIDU1LjczMTJMNjIuNTMwMSA1NC40NjM4SDYxLjgyMTdWNTQuODg2Mkw2Ni4wNzE3IDU5LjA2NEw3My45MTM5IDY2LjEwNTFMODMuNjc4NiA3NS4yMTE2TDg0LjE4NDUgNzcuNDY0OEw4Mi45MTk3IDc5LjI0ODVMODEuNjA0MiA3OS4wNjA4TDczLjAwMzIgNzIuNTgyOUw2OS42NjM5IDY5LjY3MjZMNjIuMTc1OSA2My4zMzU2SDYxLjY3VjYzLjk5MjhMNjMuMzkwMiA2Ni41Mjc2TDcyLjU0NzggODAuMjgxMkw3My4wMDMyIDg0LjUwNTlMNzIuMzQ1NCA4NS44NjcyTDY5Ljk2NzUgODYuNzEyMUw2Ny4zODcxIDg2LjI0MjdMNjEuOTczNSA3OC42ODUyTDU2LjQ1ODcgNzAuMjM1OUw1Mi4wMDY0IDYyLjYzMTVMNTEuNDY4NyA2Mi45NzFMNDguODE4OSA5MS4yNjU0TDQ3LjYwNDcgOTIuNzIwNkw0NC43NzE0IDkzLjgwMDJMNDIuMzkzNCA5Mi4wMTY0TDQxLjEyODYgODkuMTA2MUw0Mi4zOTM0IDgzLjMzMjRMNDMuOTExMyA3NS44MjE5TDQ1LjEyNTUgNjkuODYwNEw0Ni4yMzg2IDYyLjQ0MzdMNDYuOTE4NCA1OS45NjYxTDQ2Ljg1ODMgNTkuODAwM0w0Ni4zMTUzIDU5Ljg5MTZMNDAuNzIzOCA2Ny41NjAzTDMyLjIyMzkgNzkuMDYwOEwyNS40OTQ4IDg2LjI0MjdMMjMuODc1OCA4Ni44OTk5TDIxLjA5MzEgODUuNDQ0N0wyMS4zNDYxIDgyLjg2M0wyMi45MTQ1IDgwLjU2MjlMMzIuMjIzOSA2OC43MzM4TDM3LjgzOTkgNjEuMzY0MUw0MS40NTk0IDU3LjEzMzdMNDEuNDI0MiA1Ni41MjE4TDQxLjIyNDQgNTYuNTA0OEwxNi40ODkgNzIuNjI5OUwxMi4wODczIDczLjE5MzJMMTAuMTY0NyA3MS40MDk0TDEwLjQxNzYgNjguNDk5MUwxMS4zMjgzIDY3LjU2MDNMMTguNzY1NyA2Mi40NDM3WiIgZmlsbD0iI0Q5Nzc1NyIvPgo8L3N2Zz4K" x="53.5" y="30" width="30" height="30"/></g>
+        <g class="checkpoint-symbol"><path class="paper" d="M145 21h26l12 12v36h-38Z"/><path class="paper-fold" d="M171 21v12h12"/><path class="paper-lines" d="M153 41h20 M153 47h14"/><path class="check" d="m156 57 5 5 11-11"/></g>
+        <g class="worker-symbol-right"><rect class="symbol target-symbol" x="234.5" y="20" width="50" height="50" rx="13"/><image class="hero-logo codex" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIxIiBoZWlnaHQ9IjcyMSIgdmlld0JveD0iMTE4LjU1NyAxMTkuOTU4IDQ4NC4xMzkgNDc5LjgxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzE2MzdfMjkzNCkiPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDFfMTYzN18yOTM0KSI+CjxwYXRoIGQ9Ik0zMDQuMjQ2IDI5NC42MTFWMjQ5LjAyOEMzMDQuMjQ2IDI0NS4xODkgMzA1LjY4NyAyNDIuMzA5IDMwOS4wNDQgMjQwLjM5Mkw0MDAuNjkyIDE4Ny42MTJDNDEzLjE2NyAxODAuNDE1IDQyOC4wNDIgMTc3LjA1OCA0NDMuMzk0IDE3Ny4wNThDNTAwLjk3MSAxNzcuMDU4IDUzNy40NCAyMjEuNjgyIDUzNy40NCAyNjkuMTgyQzUzNy40NCAyNzIuNTQgNTM3LjQ0IDI3Ni4zNzkgNTM2Ljk1OSAyODAuMjE4TDQ0MS45NTQgMjI0LjU1OEM0MzYuMTk3IDIyMS4yMDEgNDMwLjQzNyAyMjEuMjAxIDQyNC42OCAyMjQuNTU4TDMwNC4yNDYgMjk0LjYxMVpNNTE4LjI0NSA0NzIuMTQ1VjM2My4yMjRDNTE4LjI0NSAzNTYuNTA1IDUxNS4zNjQgMzUxLjcwNyA1MDkuNjA4IDM0OC4zNDlMMzg5LjE3NCAyNzguMjk2TDQyOC41MTkgMjU1Ljc0M0M0MzEuODc3IDI1My44MjYgNDM0Ljc1NyAyNTMuODI2IDQzOC4xMTUgMjU1Ljc0M0w1MjkuNzYyIDMwOC41MjNDNTU2LjE1NCAzMjMuODc5IDU3My45MDUgMzU2LjUwNSA1NzMuOTA1IDM4OC4xNzFDNTczLjkwNSA0MjQuNjM2IDU1Mi4zMTUgNDU4LjIyNSA1MTguMjQ1IDQ3Mi4xNDFWNDcyLjE0NVpNMjc1LjkzNyAzNzYuMTgyTDIzNi41OTIgMzUzLjE1MkMyMzMuMjM1IDM1MS4yMzUgMjMxLjc5NCAzNDguMzU0IDIzMS43OTQgMzQ0LjUxNVYyMzguOTU2QzIzMS43OTQgMTg3LjYxNyAyNzEuMTM5IDE0OC43NDkgMzI0LjQgMTQ4Ljc0OUMzNDQuNTU1IDE0OC43NDkgMzYzLjI2NCAxNTUuNDY4IDM3OS4xMDIgMTY3LjQ2M0wyODQuNTc4IDIyMi4xNjRDMjc4LjgyMiAyMjUuNTIxIDI3NS45NDIgMjMwLjMxOSAyNzUuOTQyIDIzNy4wMzlWMzc2LjE4NkwyNzUuOTM3IDM3Ni4xODJaTTM2MC42MjYgNDI1LjEyMkwzMDQuMjQ2IDM5My40NTVWMzI2LjI4M0wzNjAuNjI2IDI5NC42MTZMNDE3LjAwMiAzMjYuMjgzVjM5My40NTVMMzYwLjYyNiA0MjUuMTIyWk0zOTYuODUyIDU3MC45ODlDMzc2LjY5OCA1NzAuOTg5IDM1Ny45ODkgNTY0LjI3IDM0Mi4xNTEgNTUyLjI3Nkw0MzYuNjc0IDQ5Ny41NzRDNDQyLjQzMSA0OTQuMjE3IDQ0NS4zMTEgNDg5LjQxOSA0NDUuMzExIDQ4Mi42OTlWMzQzLjU1Mkw0ODUuMTM4IDM2Ni41ODJDNDg4LjQ5NSAzNjguNDk5IDQ4OS45MzYgMzcxLjM3OSA0ODkuOTM2IDM3NS4yMTlWNDgwLjc3OEM0ODkuOTM2IDUzMi4xMTcgNDUwLjEwOSA1NzAuOTg1IDM5Ni44NTIgNTcwLjk4NVY1NzAuOTg5Wk0yODMuMTM0IDQ2My45OUwxOTEuNDg2IDQxMS4yMTFDMTY1LjA5NCAzOTUuODU0IDE0Ny4zNDMgMzYzLjIyOSAxNDcuMzQzIDMzMS41NjJDMTQ3LjM0MyAyOTQuNjE2IDE2OS40MTUgMjYxLjUwOSAyMDMuNDggMjQ3LjU5M1YzNTYuOTkxQzIwMy40OCAzNjMuNzEgMjA2LjM2MSAzNjguNTA4IDIxMi4xMTcgMzcxLjg2NkwzMzIuMDc0IDQ0MS40MzdMMjkyLjcyOSA0NjMuOTlDMjg5LjM3MiA0NjUuOTA3IDI4Ni40OTEgNDY1LjkwNyAyODMuMTM0IDQ2My45OVpNMjc3Ljg1OSA1NDIuNjhDMjIzLjYzOSA1NDIuNjggMTgzLjgxMyA1MDEuODk1IDE4My44MTMgNDUxLjUxNEMxODMuODEzIDQ0Ny42NzUgMTg0LjI5NCA0NDMuODM2IDE4NC43NzEgNDM5Ljk5N0wyNzkuMjk1IDQ5NC42OThDMjg1LjA1MSA0OTguMDU2IDI5MC44MTIgNDk4LjA1NiAyOTYuNTY4IDQ5NC42OThMNDE3LjAwMiA0MjUuMTI3VjQ3MC43MUM0MTcuMDAyIDQ3NC41NDkgNDE1LjU2MiA0NzcuNDI5IDQxMi4yMDQgNDc5LjM0NkwzMjAuNTU3IDUzMi4xMjZDMzA4LjA4MSA1MzkuMzIzIDI5My4yMDYgNTQyLjY4IDI3Ny44NTQgNTQyLjY4SDI3Ny44NTlaTTM5Ni44NTIgNTk5Ljc3NkM0NTQuOTExIDU5OS43NzYgNTAzLjM3IDU1OC41MTMgNTE0LjQxIDUwMy44MTJDNTY4LjE0OSA0ODkuODk2IDYwMi42OTYgNDM5LjUxNSA2MDIuNjk2IDM4OC4xNzZDNjAyLjY5NiAzNTQuNTg3IDU4OC4zMDMgMzIxLjk2MiA1NjIuMzkyIDI5OC40NUM1NjQuNzkxIDI4OC4zNzMgNTY2LjIzMSAyNzguMjk2IDU2Ni4yMzEgMjY4LjIyNEM1NjYuMjMxIDE5OS42MTEgNTEwLjU3MSAxNDguMjY3IDQ0Ni4yNzQgMTQ4LjI2N0M0MzMuMzIyIDE0OC4yNjcgNDIwLjg0NiAxNTAuMTg0IDQwOC4zNyAxNTQuNTA1QzM4Ni43NzUgMTMzLjM5MiAzNTcuMDI2IDExOS45NTggMzI0LjQgMTE5Ljk1OEMyNjYuMzQyIDExOS45NTggMjE3Ljg4MyAxNjEuMjIgMjA2Ljg0MyAyMTUuOTIxQzE1My4xMDQgMjI5LjgzNyAxMTguNTU3IDI4MC4yMTggMTE4LjU1NyAzMzEuNTU3QzExOC41NTcgMzY1LjE0NiAxMzIuOTUgMzk3Ljc3MSAxNTguODYxIDQyMS4yODNDMTU2LjQ2MiA0MzEuMzYgMTU1LjAyMiA0NDEuNDM3IDE1NS4wMjIgNDUxLjUxQzE1NS4wMjIgNTIwLjEyMyAyMTAuNjgyIDU3MS40NjYgMjc0Ljk3OCA1NzEuNDY2QzI4Ny45MzEgNTcxLjQ2NiAzMDAuNDA3IDU2OS41NDkgMzEyLjg4MyA1NjUuMjI4QzMzNC40NzMgNTg2LjM0MSAzNjQuMjIyIDU5OS43NzYgMzk2Ljg1MiA1OTkuNzc2WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI3MjAiIGhlaWdodD0iNzIwIiBmaWxsPSJ3aGl0ZSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC42MDY5MzQgMC4wOTk5NzU2KSIvPgo8L2NsaXBQYXRoPgo8Y2xpcFBhdGggaWQ9ImNsaXAxXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI0ODQuMTM5IiBoZWlnaHQ9IjQ3OS44MTgiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMTguNTU3IDExOS45NTgpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg==" x="244.5" y="30" width="30" height="30"/></g>
+        <text class="checkpoint-hash" data-hero-checkpoint x="164" y="92">8f4a20</text>
+      </svg>
+
+      <div class="rc-worker active" data-rc="claude" data-lane="0">
+        <div class="rc-worker-top"><span class="rc-worker-name">Claude Code</span><span class="rc-role" data-rc="claude-role">Current worker</span></div>
+        <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state working" data-rc="claude-state">Working</span></div>
+        <div class="rc-capacity"><div class="rc-capacity-fill" data-rc="fill"></div></div>
+      </div>
+      <div class="rc-conn">
+        <svg class="rc-arrow" viewBox="0 0 14 65" aria-hidden="true"><path d="M7 1v59m-5-5 5 6 5-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="rc-token" data-rc="token" aria-hidden="true">↓</span>
+        <p class="rc-transfer" data-rc="transfer"><b>Next worker: Codex</b>Same repository &amp; plan</p>
+      </div>
+      <div class="rc-worker" data-rc="codex" data-lane="2">
+        <div class="rc-worker-top"><span class="rc-worker-name">Codex</span><span class="rc-role" data-rc="codex-role">Next worker</span></div>
+        <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state" data-rc="codex-state">Ready</span></div>
+      </div>
+    </div>
+    <dl class="rc-facts">
+      <dt>Checkpoint</dt><dd><span class="mono" data-rc="hash">8f4a20</span> <span class="muted" data-rc="saved">· previous</span></dd>
+      <dt>Last tests</dt><dd><span class="rc-success">231 passed</span> · <span class="rc-error">1 failed</span></dd>
+      <dt>Carried over</dt><dd>Repository, checkpoint &amp; plan</dd>
+    </dl>
+    <div class="rc-actions">
+      <button type="button" class="rc-primary" data-rc="open" data-dialog="worker"><span data-rc="open-label">Open Claude Code</span><svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><use href="#rc-right"/></svg></button>
+      <div class="rc-secondary"><button type="button" class="rc-text-btn" data-dialog="checkpoint">View checkpoint</button><button type="button" class="rc-text-btn" data-dialog="switch">Switch worker…</button></div>
+    </div>
+  </article>
+  <div class="rc-playback"><span class="rc-note" data-rc="note">Illustrated manual handoff · 7.2 seconds</span><div class="rc-controls"><button type="button" class="rc-control" data-rc="pause" aria-pressed="false">Pause</button><button type="button" class="rc-control" data-rc="replay">Replay</button></div></div>
+  <dialog data-rc-dialog="worker"><h2 data-rc="worker-title">Codex worker</h2><p data-rc="worker-detail"></p><p>This illustration does not launch a coding agent.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <dialog data-rc-dialog="checkpoint"><h2>Checkpoint <span class="mono">912ec1</span></h2><p>Saved <time>14:19</time> · relay / auth</p><p>Authentication routes and session handling saved. Continue by reproducing the one failing test. Repository state and plan travel with this checkpoint.</p><p>Illustrated test result: <span class="rc-success">231 passed</span> · <span class="rc-error">1 failed</span>.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <dialog data-rc-dialog="switch"><h2>Switch worker manually</h2><p>Codex is the current worker. Claude Code reached its limit and resets at <time>18:00</time>.</p><p>In the first release, you choose the next worker. This illustration shows that choice carrying the saved checkpoint and plan to Codex.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <p class="sr-only" role="status" aria-live="polite" data-rc="announce"></p>
+</div>
+</template>
+<!-- ===== relay card end ===== -->
+
+<main>
+<!-- Hero -->
+<div class="hero-wrap">
+  <div class="wrap">
+    <nav class="site-nav" aria-label="Site">
+      <a class="wordmark" href="#top" id="top"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</a>
+      <div class="links"><a href="#how">How it works</a><a href="#pricing">Pricing</a><button type="button" class="nav-link" popovertarget="install">CLI setup</button></div>
+      <span class="spacer"></span>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark theme" title="Switch to dark theme">
+        <svg class="icon-moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.25 12.4A6.75 6.75 0 0 1 7.6 3.75a6.75 6.75 0 1 0 8.65 8.65Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" viewBox="0 0 20 20" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="3.25"/><path d="M10 2.25v1.5M10 16.25v1.5M2.25 10h1.5M16.25 10h1.5M4.52 4.52l1.06 1.06M14.42 14.42l1.06 1.06M4.52 15.48l1.06-1.06M14.42 5.58l1.06-1.06"/></g></svg>
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" popovertarget="install">Get relay</button>
+    </nav>
+  </div>
+  <div class="hero" id="story">
+    <div class="wrap hero-grid">
+      <div>
+        <h1 class="display" id="hl">Never run out of limits again.</h1>
+        <p class="lede" id="lede">When one coding agent hits its limit, relay moves the work to another you already pay for, with the same code, plan and decisions.</p>
+        <div class="ctas">
+          <button type="button" class="btn btn-primary" popovertarget="install" data-install-focus="install-macos">Get relay</button>
+          <button type="button" class="text-link" popovertarget="install">CLI setup</button>
+        </div>
+      </div>
+      <figure class="hero-demo">
+        <div id="hero-card"></div>
+        <figcaption class="sr-only">An illustrated handoff. Claude Code on the personal account reaches its limit, relay saves checkpoint 912ec1, and the job Build authentication moves to Codex.</figcaption>
+      </figure>
+    </div>
+  </div>
+</div>
+
+<!-- Provider row -->
+<div class="providers">
+  <div class="wrap">
+    <p>Works with the tools you already use</p>
+    <ul class="ptiles">
+      <li class="pt"><img class="brand-mark claude" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTQiIGhlaWdodD0iOTQiIHZpZXdCb3g9IjAgMCA5NCA5NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4Ljc2NTcgNjIuNDQzN0wzNy4xODIyIDUyLjExNjdMMzcuNDg1NyA1MS4yMTIyTDM3LjE4MjIgNTAuNzA4NUgzNi4yNzE1TDMzLjE4NTIgNTAuNTIwOEwyMi42NjE1IDUwLjIzOTFMMTMuNTU0NSA0OS44NjM2TDQuNzAwNDQgNDkuMzk0MkwyLjQ3NDI4IDQ4LjkyNDhMMC4zOTk5MDIgNDYuMTU1M0wwLjYwMjI4MSA0NC43OTRMMi40NzQyOCA0My41MjY2TDUuMTU1NzkgNDMuNzYxM0wxMS4wNzU0IDQ0LjE4MzdMMTkuOTggNDQuNzk0TDI2LjQwNTUgNDUuMTY5NUwzNS45Njc5IDQ2LjE1NTNIMzcuNDg1N0wzNy42ODgxIDQ1LjU0NUwzNy4xODIyIDQ1LjE2OTVMMzYuNzc3NCA0NC43OTRMMjcuNTY5MiAzOC41NTA4TDE3LjYwMjEgMzEuOTc5MUwxMi4zOTA4IDI4LjE3NjlMOS42MDgxMiAyNi4yNTI0TDguMTkxNDcgMjQuNDY4Nkw3LjU4NDMzIDIwLjUyNTZMMTAuMTE0MSAxNy43MDkxTDEzLjU1NDUgMTcuOTQzOEwxNC40MTQ2IDE4LjE3ODVMMTcuOTA1NiAyMC44NTQyTDI1LjM0MyAyNi42Mjc5TDM1LjA1NzIgMzMuNzYyOUwzNi40NzM5IDM0LjkzNjRMMzcuMDQ0MyAzNC41NTE0TDM3LjEzMTYgMzQuMjc5MkwzNi40NzM5IDMzLjE5OTZMMzEuMjEyIDIzLjY3MDZMMjUuNTk2IDEzLjk1MzlMMjMuMDY2MyA5LjkxNjk1TDIyLjQwODYgNy41MjI5NkMyMi4xNTM4IDYuNTE4MzEgMjIuMDAzOCA1LjY4NzE0IDIyLjAwMzggNC42NTk1N0wyNC44ODc3IDAuNzE2NTQ0TDI2LjUwNjcgMC4yMDAxOTVMMzAuNDAyNSAwLjcxNjU0NEwzMi4wMjE1IDIuMTI0NzdMMzQuNDUwMSA3LjY2Mzc5TDM4LjM0NTggMTYuMzQ3OEw0NC40MTcyIDI4LjE3NjlMNDYuMTg4IDMxLjY5NzVMNDcuMTQ5MyAzNC45MzY0TDQ3LjUwMzUgMzUuOTIyMkg0OC4xMTA2VjM1LjM1ODlMNDguNjE2NiAyOC42OTMzTDQ5LjUyNzMgMjAuNTI1Nkw1MC40MzggMTAuMDEwOEw1MC43NDE1IDcuMDUzNTZMNTIuMjA4OCAzLjQ4NjA1TDU1LjE0MzMgMS41NjE0OEw1Ny40MiAyLjY0MTEyTDU5LjI5MiA1LjMxNjc0TDU5LjAzOSA3LjA1MzU2TDU3LjkyNiAxNC4yODI0TDU1Ljc1MDQgMjUuNTk1Mkw1NC4zMzM3IDMzLjE5OTZINTUuMTQzM0w1Ni4xMDQ2IDMyLjIxMzhMNTkuOTQ5NyAyNy4xNDQyTDY2LjM3NTIgMTkuMDcwNEw2OS4yMDg1IDE1Ljg3ODRMNzIuNTQ3OCAxMi4zNTc5TDc0LjY3MjggMTAuNjY4SDc4LjcyMDNMODEuNjU0OCAxNS4wODA0TDgwLjMzOTQgMTkuNjMzN0w3Ni4xOTA2IDI0Ljg5MTFMNzIuNzUwMiAyOS4zNTA0TDY3LjgxNzIgMzUuOTU5NUw2NC43NTYyIDQxLjI3MzRMNjUuMDMwNyA0MS43MTE4TDY1Ljc2ODEgNDEuNjQ4OUw3Ni44OTg5IDM5LjI1NUw4Mi45MTk3IDM4LjE3NTNMOTAuMTA0MSAzNi45NTQ5TDkzLjM0MjIgMzguNDU3TDkzLjY5NjMgNDAuMDA2TDkyLjQzMTUgNDMuMTUxTDg0Ljc0MTEgNDUuMDI4N0w3NS43MzUzIDQ2Ljg1OTRMNjIuMzI0NCA1MC4wMTY0TDYyLjE3NTkgNTAuMTM1OEw2Mi4zNTEyIDUwLjM5NThMNjguMzk5IDUwLjk0MzJMNzAuOTc5NCA1MS4wODRINzcuMzAzN0w4OS4wOTIyIDUxLjk3NTlMOTIuMTc4NSA1My45OTQ0TDkzLjk5OTkgNTYuNDgyMkw5My42OTYzIDU4LjQwNjhMODguOTQwNCA2MC44MDA4TDgyLjU2NTUgNTkuMjk4N0w2Ny42NDAxIDU1LjczMTJMNjIuNTMwMSA1NC40NjM4SDYxLjgyMTdWNTQuODg2Mkw2Ni4wNzE3IDU5LjA2NEw3My45MTM5IDY2LjEwNTFMODMuNjc4NiA3NS4yMTE2TDg0LjE4NDUgNzcuNDY0OEw4Mi45MTk3IDc5LjI0ODVMODEuNjA0MiA3OS4wNjA4TDczLjAwMzIgNzIuNTgyOUw2OS42NjM5IDY5LjY3MjZMNjIuMTc1OSA2My4zMzU2SDYxLjY3VjYzLjk5MjhMNjMuMzkwMiA2Ni41Mjc2TDcyLjU0NzggODAuMjgxMkw3My4wMDMyIDg0LjUwNTlMNzIuMzQ1NCA4NS44NjcyTDY5Ljk2NzUgODYuNzEyMUw2Ny4zODcxIDg2LjI0MjdMNjEuOTczNSA3OC42ODUyTDU2LjQ1ODcgNzAuMjM1OUw1Mi4wMDY0IDYyLjYzMTVMNTEuNDY4NyA2Mi45NzFMNDguODE4OSA5MS4yNjU0TDQ3LjYwNDcgOTIuNzIwNkw0NC43NzE0IDkzLjgwMDJMNDIuMzkzNCA5Mi4wMTY0TDQxLjEyODYgODkuMTA2MUw0Mi4zOTM0IDgzLjMzMjRMNDMuOTExMyA3NS44MjE5TDQ1LjEyNTUgNjkuODYwNEw0Ni4yMzg2IDYyLjQ0MzdMNDYuOTE4NCA1OS45NjYxTDQ2Ljg1ODMgNTkuODAwM0w0Ni4zMTUzIDU5Ljg5MTZMNDAuNzIzOCA2Ny41NjAzTDMyLjIyMzkgNzkuMDYwOEwyNS40OTQ4IDg2LjI0MjdMMjMuODc1OCA4Ni44OTk5TDIxLjA5MzEgODUuNDQ0N0wyMS4zNDYxIDgyLjg2M0wyMi45MTQ1IDgwLjU2MjlMMzIuMjIzOSA2OC43MzM4TDM3LjgzOTkgNjEuMzY0MUw0MS40NTk0IDU3LjEzMzdMNDEuNDI0MiA1Ni41MjE4TDQxLjIyNDQgNTYuNTA0OEwxNi40ODkgNzIuNjI5OUwxMi4wODczIDczLjE5MzJMMTAuMTY0NyA3MS40MDk0TDEwLjQxNzYgNjguNDk5MUwxMS4zMjgzIDY3LjU2MDNMMTguNzY1NyA2Mi40NDM3WiIgZmlsbD0iI0Q5Nzc1NyIvPgo8L3N2Zz4K" alt="" aria-hidden="true" width="16" height="16">Claude Code</li>
+      <li class="pt"><img class="brand-mark codex" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIxIiBoZWlnaHQ9IjcyMSIgdmlld0JveD0iMTE4LjU1NyAxMTkuOTU4IDQ4NC4xMzkgNDc5LjgxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzE2MzdfMjkzNCkiPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDFfMTYzN18yOTM0KSI+CjxwYXRoIGQ9Ik0zMDQuMjQ2IDI5NC42MTFWMjQ5LjAyOEMzMDQuMjQ2IDI0NS4xODkgMzA1LjY4NyAyNDIuMzA5IDMwOS4wNDQgMjQwLjM5Mkw0MDAuNjkyIDE4Ny42MTJDNDEzLjE2NyAxODAuNDE1IDQyOC4wNDIgMTc3LjA1OCA0NDMuMzk0IDE3Ny4wNThDNTAwLjk3MSAxNzcuMDU4IDUzNy40NCAyMjEuNjgyIDUzNy40NCAyNjkuMTgyQzUzNy40NCAyNzIuNTQgNTM3LjQ0IDI3Ni4zNzkgNTM2Ljk1OSAyODAuMjE4TDQ0MS45NTQgMjI0LjU1OEM0MzYuMTk3IDIyMS4yMDEgNDMwLjQzNyAyMjEuMjAxIDQyNC42OCAyMjQuNTU4TDMwNC4yNDYgMjk0LjYxMVpNNTE4LjI0NSA0NzIuMTQ1VjM2My4yMjRDNTE4LjI0NSAzNTYuNTA1IDUxNS4zNjQgMzUxLjcwNyA1MDkuNjA4IDM0OC4zNDlMMzg5LjE3NCAyNzguMjk2TDQyOC41MTkgMjU1Ljc0M0M0MzEuODc3IDI1My44MjYgNDM0Ljc1NyAyNTMuODI2IDQzOC4xMTUgMjU1Ljc0M0w1MjkuNzYyIDMwOC41MjNDNTU2LjE1NCAzMjMuODc5IDU3My45MDUgMzU2LjUwNSA1NzMuOTA1IDM4OC4xNzFDNTczLjkwNSA0MjQuNjM2IDU1Mi4zMTUgNDU4LjIyNSA1MTguMjQ1IDQ3Mi4xNDFWNDcyLjE0NVpNMjc1LjkzNyAzNzYuMTgyTDIzNi41OTIgMzUzLjE1MkMyMzMuMjM1IDM1MS4yMzUgMjMxLjc5NCAzNDguMzU0IDIzMS43OTQgMzQ0LjUxNVYyMzguOTU2QzIzMS43OTQgMTg3LjYxNyAyNzEuMTM5IDE0OC43NDkgMzI0LjQgMTQ4Ljc0OUMzNDQuNTU1IDE0OC43NDkgMzYzLjI2NCAxNTUuNDY4IDM3OS4xMDIgMTY3LjQ2M0wyODQuNTc4IDIyMi4xNjRDMjc4LjgyMiAyMjUuNTIxIDI3NS45NDIgMjMwLjMxOSAyNzUuOTQyIDIzNy4wMzlWMzc2LjE4NkwyNzUuOTM3IDM3Ni4xODJaTTM2MC42MjYgNDI1LjEyMkwzMDQuMjQ2IDM5My40NTVWMzI2LjI4M0wzNjAuNjI2IDI5NC42MTZMNDE3LjAwMiAzMjYuMjgzVjM5My40NTVMMzYwLjYyNiA0MjUuMTIyWk0zOTYuODUyIDU3MC45ODlDMzc2LjY5OCA1NzAuOTg5IDM1Ny45ODkgNTY0LjI3IDM0Mi4xNTEgNTUyLjI3Nkw0MzYuNjc0IDQ5Ny41NzRDNDQyLjQzMSA0OTQuMjE3IDQ0NS4zMTEgNDg5LjQxOSA0NDUuMzExIDQ4Mi42OTlWMzQzLjU1Mkw0ODUuMTM4IDM2Ni41ODJDNDg4LjQ5NSAzNjguNDk5IDQ4OS45MzYgMzcxLjM3OSA0ODkuOTM2IDM3NS4yMTlWNDgwLjc3OEM0ODkuOTM2IDUzMi4xMTcgNDUwLjEwOSA1NzAuOTg1IDM5Ni44NTIgNTcwLjk4NVY1NzAuOTg5Wk0yODMuMTM0IDQ2My45OUwxOTEuNDg2IDQxMS4yMTFDMTY1LjA5NCAzOTUuODU0IDE0Ny4zNDMgMzYzLjIyOSAxNDcuMzQzIDMzMS41NjJDMTQ3LjM0MyAyOTQuNjE2IDE2OS40MTUgMjYxLjUwOSAyMDMuNDggMjQ3LjU5M1YzNTYuOTkxQzIwMy40OCAzNjMuNzEgMjA2LjM2MSAzNjguNTA4IDIxMi4xMTcgMzcxLjg2NkwzMzIuMDc0IDQ0MS40MzdMMjkyLjcyOSA0NjMuOTlDMjg5LjM3MiA0NjUuOTA3IDI4Ni40OTEgNDY1LjkwNyAyODMuMTM0IDQ2My45OVpNMjc3Ljg1OSA1NDIuNjhDMjIzLjYzOSA1NDIuNjggMTgzLjgxMyA1MDEuODk1IDE4My44MTMgNDUxLjUxNEMxODMuODEzIDQ0Ny42NzUgMTg0LjI5NCA0NDMuODM2IDE4NC43NzEgNDM5Ljk5N0wyNzkuMjk1IDQ5NC42OThDMjg1LjA1MSA0OTguMDU2IDI5MC44MTIgNDk4LjA1NiAyOTYuNTY4IDQ5NC42OThMNDE3LjAwMiA0MjUuMTI3VjQ3MC43MUM0MTcuMDAyIDQ3NC41NDkgNDE1LjU2MiA0NzcuNDI5IDQxMi4yMDQgNDc5LjM0NkwzMjAuNTU3IDUzMi4xMjZDMzA4LjA4MSA1MzkuMzIzIDI5My4yMDYgNTQyLjY4IDI3Ny44NTQgNTQyLjY4SDI3Ny44NTlaTTM5Ni44NTIgNTk5Ljc3NkM0NTQuOTExIDU5OS43NzYgNTAzLjM3IDU1OC41MTMgNTE0LjQxIDUwMy44MTJDNTY4LjE0OSA0ODkuODk2IDYwMi42OTYgNDM5LjUxNSA2MDIuNjk2IDM4OC4xNzZDNjAyLjY5NiAzNTQuNTg3IDU4OC4zMDMgMzIxLjk2MiA1NjIuMzkyIDI5OC40NUM1NjQuNzkxIDI4OC4zNzMgNTY2LjIzMSAyNzguMjk2IDU2Ni4yMzEgMjY4LjIyNEM1NjYuMjMxIDE5OS42MTEgNTEwLjU3MSAxNDguMjY3IDQ0Ni4yNzQgMTQ4LjI2N0M0MzMuMzIyIDE0OC4yNjcgNDIwLjg0NiAxNTAuMTg0IDQwOC4zNyAxNTQuNTA1QzM4Ni43NzUgMTMzLjM5MiAzNTcuMDI2IDExOS45NTggMzI0LjQgMTE5Ljk1OEMyNjYuMzQyIDExOS45NTggMjE3Ljg4MyAxNjEuMjIgMjA2Ljg0MyAyMTUuOTIxQzE1My4xMDQgMjI5LjgzNyAxMTguNTU3IDI4MC4yMTggMTE4LjU1NyAzMzEuNTU3QzExOC41NTcgMzY1LjE0NiAxMzIuOTUgMzk3Ljc3MSAxNTguODYxIDQyMS4yODNDMTU2LjQ2MiA0MzEuMzYgMTU1LjAyMiA0NDEuNDM3IDE1NS4wMjIgNDUxLjUxQzE1NS4wMjIgNTIwLjEyMyAyMTAuNjgyIDU3MS40NjYgMjc0Ljk3OCA1NzEuNDY2QzI4Ny45MzEgNTcxLjQ2NiAzMDAuNDA3IDU2OS41NDkgMzEyLjg4MyA1NjUuMjI4QzMzNC40NzMgNTg2LjM0MSAzNjQuMjIyIDU5OS43NzYgMzk2Ljg1MiA1OTkuNzc2WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI3MjAiIGhlaWdodD0iNzIwIiBmaWxsPSJ3aGl0ZSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC42MDY5MzQgMC4wOTk5NzU2KSIvPgo8L2NsaXBQYXRoPgo8Y2xpcFBhdGggaWQ9ImNsaXAxXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI0ODQuMTM5IiBoZWlnaHQ9IjQ3OS44MTgiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMTguNTU3IDExOS45NTgpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg==" alt="" aria-hidden="true" width="16" height="16">Codex</li>
+      <li class="pt planned"><img class="brand-mark cursor" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iRWJlbmVfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiIHZpZXdCb3g9IjAgMCA0NjYuNzMgNTMyLjA5Ij4KICA8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMjkuNi4xLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogMi4xLjEgQnVpbGQgOSkgIC0tPgogIDxkZWZzPgogICAgPHN0eWxlPgogICAgICAuc3QwIHsKICAgICAgICBmaWxsOiAjMjYyNTFlOwogICAgICB9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8cGF0aCBjbGFzcz0ic3QwIiBkPSJNNDU3LjQzLDEyNS45NEwyNDQuNDIsMi45NmMtNi44NC0zLjk1LTE1LjI4LTMuOTUtMjIuMTIsMEw5LjMsMTI1Ljk0Yy01Ljc1LDMuMzItOS4zLDkuNDYtOS4zLDE2LjExdjI0Ny45OWMwLDYuNjUsMy41NSwxMi43OSw5LjMsMTYuMTFsMjEzLjAxLDEyMi45OGM2Ljg0LDMuOTUsMTUuMjgsMy45NSwyMi4xMiwwbDIxMy4wMS0xMjIuOThjNS43NS0zLjMyLDkuMy05LjQ2LDkuMy0xNi4xMXYtMjQ3Ljk5YzAtNi42NS0zLjU1LTEyLjc5LTkuMy0xNi4xMWgtLjAxWk00NDQuMDUsMTUxLjk5bC0yMDUuNjMsMzU2LjE2Yy0xLjM5LDIuNC01LjA2LDEuNDItNS4wNi0xLjM2di0yMzMuMjFjMC00LjY2LTIuNDktOC45Ny02LjUzLTExLjMxTDI0Ljg3LDE0NS42N2MtMi40LTEuMzktMS40Mi01LjA2LDEuMzYtNS4wNmg0MTEuMjZjNS44NCwwLDkuNDksNi4zMyw2LjU3LDExLjM5aC0uMDFaIi8+Cjwvc3ZnPg==" alt="" aria-hidden="true" width="16" height="16">Cursor</li>
+      <li class="pt planned">T3 Code</li>
+      <li class="pt planned">OpenCode</li>
+      <li class="pt-note">· planned</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Switching by hand, against relay -->
+<section id="cost">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Switching agents by hand costs you the afternoon.</h2>
+      <p>The limit arrives at the same minute either way. What changes is the next hour.</p>
+    </div>
+    <figure class="cost-fig">
+      <div class="cost">
+        <div class="cost-col">
+          <h3>Switching by hand</h3><svg class="execution-trace" viewBox="0 0 400 74" role="img" aria-label="Illustrated manual handoff, 14:19 to 15:05"><text x="8" y="15">14:19</text><text x="392" y="15" text-anchor="end">15:05</text><path d="M8 44H392"/><circle class="limit" cx="8" cy="44" r="4"/><circle cx="108" cy="44" r="3"/><circle cx="133" cy="44" r="3"/><circle cx="167" cy="44" r="3"/><circle cx="284" cy="44" r="3"/><circle cx="392" cy="44" r="4"/></svg>
+          <ol class="tl">
+            <li class="ev" data-min="12"><time>14:19</time><i class="rl limit idle" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev" data-min="3"><time>14:31</time><i class="rl" aria-hidden="true"></i><span class="tx">You notice</span></li>
+            <li class="ev" data-min="4"><time>14:34</time><i class="rl" aria-hidden="true"></i><span class="tx">Copy the plan and the notes</span></li>
+            <li class="ev" data-min="14"><time>14:38</time><i class="rl" aria-hidden="true"></i><span class="tx">Open Codex, explain the repository again</span></li>
+            <li class="ev" data-min="13"><time>14:52</time><i class="rl redo" aria-hidden="true"></i><span class="tx">Codex redoes work that was already done</span></li>
+            <li class="ev" data-min="0"><time>15:05</time><i class="rl end" aria-hidden="true"></i><span class="tx">Back up to speed</span></li>
+          </ol>
+          <p class="cost-total lost"><b>46 minutes</b><span>lost</span></p>
+        </div>
+        <div class="cost-col">
+          <h3>With relay</h3><svg class="execution-trace" viewBox="0 0 400 74" role="img" aria-label="Illustrated relay manual switch at 14:20, continuing through 15:05"><text x="8" y="15">14:19</text><text x="392" y="15" text-anchor="end">15:05</text><path d="M8 44H392"/><path class="continuing" d="M16.35 44H392"/><circle class="limit" cx="8" cy="44" r="4"/><circle class="end" cx="392" cy="44" r="4"/></svg>
+          <ol class="tl">
+            <li class="ev" data-min="0"><time>14:19</time><i class="rl limit olive" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev" data-min="0"><time>14:19</time><i class="rl olive" aria-hidden="true"></i><span class="tx">relay saves checkpoint <span class="mono">912ec1</span></span></li>
+            <li class="ev cont" data-min="40.2"><time>14:20</time><i class="rl olive" aria-hidden="true"></i><span class="tx"><span class="olive-word">Codex continues the same plan</span></span></li>
+            <li class="ev" data-min="0"><time>15:05</time><i class="rl baton end" aria-hidden="true"></i><span class="tx"></span></li>
+          </ol>
+          <p class="cost-total kept"><b>1 minute</b></p>
+        </div>
+      </div>
+      <figcaption class="caption">Illustrated. Manual switching comes first in relay.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Bento -->
+<section id="how" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Everything the next agent needs.</h2>
+      <p>relay sits in your menu bar, tells you when an agent stops, and keeps the job in plain files inside your project.</p>
+    </div>
+    <div class="bento">
+      <article class="cell w4">
+        <div class="stage st-menubar" aria-hidden="true">
+          <div class="mbar">
+            <span class="app">Terminal</span><span class="opt">Shell</span><span class="opt">Edit</span><span class="opt">View</span><span class="opt">Window</span><span class="opt">Help</span>
+            <span class="spacer"></span>
+            <span class="mb-extra">
+              <span class="mb-glyph"><svg class="glyph"><use href="#g"/></svg></span>
+              <span class="mb-drop">
+                <span class="rc-tiny">
+                  <span class="rc-tiny-job">Build authentication</span>
+                  <span class="rc-tiny-repo">relay / auth</span>
+                  <span class="rc-tiny-story"><svg viewBox="0 0 20 20"><use href="#rc-right"/></svg>Moved to Codex · Claude limit reached</span>
+                  <span class="rc-tiny-action"><span>Same checkpoint &amp; plan</span><b>Open Codex ↗</b></span>
+                </span>
+              </span>
+            </span>
+            <span class="opt">Tue 7 Oct</span><span>14:36</span>
+          </div>
+          <div class="ghost-win">
+            <div class="gw-bar"><i></i><i></i><i></i></div>
+<pre>$ relay status
+Build authentication · job 184
+codex:personal   running
+claude:personal  limit · 18:00</pre>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Small until you need it</h3>
+          <p>The menu bar view tells the same handoff in one line: the job, where it went, and how to open it.</p>
+        </div>
+      </article>
+
+      <article class="cell w2">
+        <div class="stage st-notify" aria-hidden="true">
+          <div class="notif">
+            <span class="app-tile"><svg class="glyph"><use href="#g"/></svg></span>
+            <div>
+              <div class="n1"><b>relay</b><span>now</span></div>
+              <div class="n2">Claude reached its usage limit.</div>
+              <div class="n3">Auth → Codex. Workspace and decisions saved.</div>
+            </div>
+          </div>
+          <div class="notif-older">
+            <div><span>Checkpoint saved</span><span class="mono">912ec1 · 11:17</span></div>
+            <div><span>Codex started on job 184</span><span class="mono">11:17</span></div>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Told when it happens</h3>
+          <p>A limit is reported the moment relay sees it, together with what was saved.</p>
+        </div>
+      </article>
+
+      <article class="cell w3">
+        <div class="stage st-diff" aria-hidden="true">
+          <div class="diff">
+            <div class="diff-head"><span>3 files changed since <span class="mono">a41f07</span></span><span class="mono"><span class="add">+131</span> <span class="del">−7</span></span></div>
+            <ul>
+              <li><span class="p"><em>src/auth/</em>callback.ts</span><span class="n"><span class="add">+48</span> <span class="del">−3</span></span></li>
+              <li><span class="p"><em>db/migrations/</em>0007_sessions.sql</span><span class="n"><span class="add">+22</span> <span class="del">−0</span></span></li>
+              <li><span class="p"><em>src/auth/</em>session.test.ts</span><span class="n"><span class="add">+61</span> <span class="del">−4</span></span></li>
+            </ul>
+          </div>
+          <div class="connect"></div>
+          <div class="pill"><svg class="chk" viewBox="0 0 14 14"><path d="M2.5 7.5 L5.5 10.2 L11.5 3.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Saved checkpoint <span class="mono">912ec1</span></div>
+        </div>
+        <div class="cell-text">
+          <h3>Every handoff is a checkpoint</h3>
+          <p>relay records the changed files and the commit before the next agent starts.</p>
+        </div>
+      </article>
+
+      <article class="cell w3 tree-cell">
+        <div class="stage st-tree" aria-hidden="true">
+<pre class="ftree">relay-auth/
+├── AGENTS.md
+├── <b>.relay/</b>
+│   ├── task.md
+│   ├── state.json
+│   ├── <span class="on">checkpoint.md</span>
+│   ├── decisions.md
+│   └── events.jsonl
+└── src/</pre>
+          <div class="doc">
+            <div class="doc-head"><span>.relay/checkpoint.md</span><span>912ec1</span></div>
+<pre><span class="h"># Checkpoint 912ec1</span>
+<span class="c">Written by Claude Code · personal
+at 11:17, at its usage limit.</span>
+
+<span class="h">## Next action</span>
+- Move the expiry check above the
+  refresh in src/auth/session.ts.
+
+<span class="h">## Validation</span>
+- 231 passed, 1 failed (11:16).
+- Verify these claims first.</pre>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Plain files in your project</h3>
+          <p>Any agent can read <span class="mono">.relay/</span>. The next agent checks the checkpoint before it continues.</p>
+        </div>
+      </article>
+
+      <article class="cell w6">
+        <div class="stage st-lineage" aria-hidden="true">
+          <div class="lineage-proposed" aria-hidden="true">
+            <svg class="trace-drawing" viewBox="0 0 1000 140" preserveAspectRatio="none">
+              <path class="guide" d="M8 70H992 M8 96H992"/>
+              <path class="job-path" d="M8 70H318 Q338 70 348 82 Q358 96 380 96H668 Q688 96 698 82 Q708 70 730 70H992"/>
+              <circle class="junction" cx="8" cy="70" r="3"/><circle class="junction" cx="348" cy="82" r="3"/><circle class="junction" cx="698" cy="82" r="3"/>
+            </svg>
+            <div class="lineage-event"><span class="provider"><img class="brand-mark claude" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTQiIGhlaWdodD0iOTQiIHZpZXdCb3g9IjAgMCA5NCA5NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4Ljc2NTcgNjIuNDQzN0wzNy4xODIyIDUyLjExNjdMMzcuNDg1NyA1MS4yMTIyTDM3LjE4MjIgNTAuNzA4NUgzNi4yNzE1TDMzLjE4NTIgNTAuNTIwOEwyMi42NjE1IDUwLjIzOTFMMTMuNTU0NSA0OS44NjM2TDQuNzAwNDQgNDkuMzk0MkwyLjQ3NDI4IDQ4LjkyNDhMMC4zOTk5MDIgNDYuMTU1M0wwLjYwMjI4MSA0NC43OTRMMi40NzQyOCA0My41MjY2TDUuMTU1NzkgNDMuNzYxM0wxMS4wNzU0IDQ0LjE4MzdMMTkuOTggNDQuNzk0TDI2LjQwNTUgNDUuMTY5NUwzNS45Njc5IDQ2LjE1NTNIMzcuNDg1N0wzNy42ODgxIDQ1LjU0NUwzNy4xODIyIDQ1LjE2OTVMMzYuNzc3NCA0NC43OTRMMjcuNTY5MiAzOC41NTA4TDE3LjYwMjEgMzEuOTc5MUwxMi4zOTA4IDI4LjE3NjlMOS42MDgxMiAyNi4yNTI0TDguMTkxNDcgMjQuNDY4Nkw3LjU4NDMzIDIwLjUyNTZMMTAuMTE0MSAxNy43MDkxTDEzLjU1NDUgMTcuOTQzOEwxNC40MTQ2IDE4LjE3ODVMMTcuOTA1NiAyMC44NTQyTDI1LjM0MyAyNi42Mjc5TDM1LjA1NzIgMzMuNzYyOUwzNi40NzM5IDM0LjkzNjRMMzcuMDQ0MyAzNC41NTE0TDM3LjEzMTYgMzQuMjc5MkwzNi40NzM5IDMzLjE5OTZMMzEuMjEyIDIzLjY3MDZMMjUuNTk2IDEzLjk1MzlMMjMuMDY2MyA5LjkxNjk1TDIyLjQwODYgNy41MjI5NkMyMi4xNTM4IDYuNTE4MzEgMjIuMDAzOCA1LjY4NzE0IDIyLjAwMzggNC42NTk1N0wyNC44ODc3IDAuNzE2NTQ0TDI2LjUwNjcgMC4yMDAxOTVMMzAuNDAyNSAwLjcxNjU0NEwzMi4wMjE1IDIuMTI0NzdMMzQuNDUwMSA3LjY2Mzc5TDM4LjM0NTggMTYuMzQ3OEw0NC40MTcyIDI4LjE3NjlMNDYuMTg4IDMxLjY5NzVMNDcuMTQ5MyAzNC45MzY0TDQ3LjUwMzUgMzUuOTIyMkg0OC4xMTA2VjM1LjM1ODlMNDguNjE2NiAyOC42OTMzTDQ5LjUyNzMgMjAuNTI1Nkw1MC40MzggMTAuMDEwOEw1MC43NDE1IDcuMDUzNTZMNTIuMjA4OCAzLjQ4NjA1TDU1LjE0MzMgMS41NjE0OEw1Ny40MiAyLjY0MTEyTDU5LjI5MiA1LjMxNjc0TDU5LjAzOSA3LjA1MzU2TDU3LjkyNiAxNC4yODI0TDU1Ljc1MDQgMjUuNTk1Mkw1NC4zMzM3IDMzLjE5OTZINTUuMTQzM0w1Ni4xMDQ2IDMyLjIxMzhMNTkuOTQ5NyAyNy4xNDQyTDY2LjM3NTIgMTkuMDcwNEw2OS4yMDg1IDE1Ljg3ODRMNzIuNTQ3OCAxMi4zNTc5TDc0LjY3MjggMTAuNjY4SDc4LjcyMDNMODEuNjU0OCAxNS4wODA0TDgwLjMzOTQgMTkuNjMzN0w3Ni4xOTA2IDI0Ljg5MTFMNzIuNzUwMiAyOS4zNTA0TDY3LjgxNzIgMzUuOTU5NUw2NC43NTYyIDQxLjI3MzRMNjUuMDMwNyA0MS43MTE4TDY1Ljc2ODEgNDEuNjQ4OUw3Ni44OTg5IDM5LjI1NUw4Mi45MTk3IDM4LjE3NTNMOTAuMTA0MSAzNi45NTQ5TDkzLjM0MjIgMzguNDU3TDkzLjY5NjMgNDAuMDA2TDkyLjQzMTUgNDMuMTUxTDg0Ljc0MTEgNDUuMDI4N0w3NS43MzUzIDQ2Ljg1OTRMNjIuMzI0NCA1MC4wMTY0TDYyLjE3NTkgNTAuMTM1OEw2Mi4zNTEyIDUwLjM5NThMNjguMzk5IDUwLjk0MzJMNzAuOTc5NCA1MS4wODRINzcuMzAzN0w4OS4wOTIyIDUxLjk3NTlMOTIuMTc4NSA1My45OTQ0TDkzLjk5OTkgNTYuNDgyMkw5My42OTYzIDU4LjQwNjhMODguOTQwNCA2MC44MDA4TDgyLjU2NTUgNTkuMjk4N0w2Ny42NDAxIDU1LjczMTJMNjIuNTMwMSA1NC40NjM4SDYxLjgyMTdWNTQuODg2Mkw2Ni4wNzE3IDU5LjA2NEw3My45MTM5IDY2LjEwNTFMODMuNjc4NiA3NS4yMTE2TDg0LjE4NDUgNzcuNDY0OEw4Mi45MTk3IDc5LjI0ODVMODEuNjA0MiA3OS4wNjA4TDczLjAwMzIgNzIuNTgyOUw2OS42NjM5IDY5LjY3MjZMNjIuMTc1OSA2My4zMzU2SDYxLjY3VjYzLjk5MjhMNjMuMzkwMiA2Ni41Mjc2TDcyLjU0NzggODAuMjgxMkw3My4wMDMyIDg0LjUwNTlMNzIuMzQ1NCA4NS44NjcyTDY5Ljk2NzUgODYuNzEyMUw2Ny4zODcxIDg2LjI0MjdMNjEuOTczNSA3OC42ODUyTDU2LjQ1ODcgNzAuMjM1OUw1Mi4wMDY0IDYyLjYzMTVMNTEuNDY4NyA2Mi45NzFMNDguODE4OSA5MS4yNjU0TDQ3LjYwNDcgOTIuNzIwNkw0NC43NzE0IDkzLjgwMDJMNDIuMzkzNCA5Mi4wMTY0TDQxLjEyODYgODkuMTA2MUw0Mi4zOTM0IDgzLjMzMjRMNDMuOTExMyA3NS44MjE5TDQ1LjEyNTUgNjkuODYwNEw0Ni4yMzg2IDYyLjQ0MzdMNDYuOTE4NCA1OS45NjYxTDQ2Ljg1ODMgNTkuODAwM0w0Ni4zMTUzIDU5Ljg5MTZMNDAuNzIzOCA2Ny41NjAzTDMyLjIyMzkgNzkuMDYwOEwyNS40OTQ4IDg2LjI0MjdMMjMuODc1OCA4Ni44OTk5TDIxLjA5MzEgODUuNDQ0N0wyMS4zNDYxIDgyLjg2M0wyMi45MTQ1IDgwLjU2MjlMMzIuMjIzOSA2OC43MzM4TDM3LjgzOTkgNjEuMzY0MUw0MS40NTk0IDU3LjEzMzdMNDEuNDI0MiA1Ni41MjE4TDQxLjIyNDQgNTYuNTA0OEwxNi40ODkgNzIuNjI5OUwxMi4wODczIDczLjE5MzJMMTAuMTY0NyA3MS40MDk0TDEwLjQxNzYgNjguNDk5MUwxMS4zMjgzIDY3LjU2MDNMMTguNzY1NyA2Mi40NDM3WiIgZmlsbD0iI0Q5Nzc1NyIvPgo8L3N2Zz4K" alt="" aria-hidden="true" width="16" height="16">Claude Code</span><span class="account">claude:personal</span><time>10:02</time></div>
+            <div class="lineage-event"><span class="provider"><img class="brand-mark codex" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIxIiBoZWlnaHQ9IjcyMSIgdmlld0JveD0iMTE4LjU1NyAxMTkuOTU4IDQ4NC4xMzkgNDc5LjgxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzE2MzdfMjkzNCkiPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDFfMTYzN18yOTM0KSI+CjxwYXRoIGQ9Ik0zMDQuMjQ2IDI5NC42MTFWMjQ5LjAyOEMzMDQuMjQ2IDI0NS4xODkgMzA1LjY4NyAyNDIuMzA5IDMwOS4wNDQgMjQwLjM5Mkw0MDAuNjkyIDE4Ny42MTJDNDEzLjE2NyAxODAuNDE1IDQyOC4wNDIgMTc3LjA1OCA0NDMuMzk0IDE3Ny4wNThDNTAwLjk3MSAxNzcuMDU4IDUzNy40NCAyMjEuNjgyIDUzNy40NCAyNjkuMTgyQzUzNy40NCAyNzIuNTQgNTM3LjQ0IDI3Ni4zNzkgNTM2Ljk1OSAyODAuMjE4TDQ0MS45NTQgMjI0LjU1OEM0MzYuMTk3IDIyMS4yMDEgNDMwLjQzNyAyMjEuMjAxIDQyNC42OCAyMjQuNTU4TDMwNC4yNDYgMjk0LjYxMVpNNTE4LjI0NSA0NzIuMTQ1VjM2My4yMjRDNTE4LjI0NSAzNTYuNTA1IDUxNS4zNjQgMzUxLjcwNyA1MDkuNjA4IDM0OC4zNDlMMzg5LjE3NCAyNzguMjk2TDQyOC41MTkgMjU1Ljc0M0M0MzEuODc3IDI1My44MjYgNDM0Ljc1NyAyNTMuODI2IDQzOC4xMTUgMjU1Ljc0M0w1MjkuNzYyIDMwOC41MjNDNTU2LjE1NCAzMjMuODc5IDU3My45MDUgMzU2LjUwNSA1NzMuOTA1IDM4OC4xNzFDNTczLjkwNSA0MjQuNjM2IDU1Mi4zMTUgNDU4LjIyNSA1MTguMjQ1IDQ3Mi4xNDFWNDcyLjE0NVpNMjc1LjkzNyAzNzYuMTgyTDIzNi41OTIgMzUzLjE1MkMyMzMuMjM1IDM1MS4yMzUgMjMxLjc5NCAzNDguMzU0IDIzMS43OTQgMzQ0LjUxNVYyMzguOTU2QzIzMS43OTQgMTg3LjYxNyAyNzEuMTM5IDE0OC43NDkgMzI0LjQgMTQ4Ljc0OUMzNDQuNTU1IDE0OC43NDkgMzYzLjI2NCAxNTUuNDY4IDM3OS4xMDIgMTY3LjQ2M0wyODQuNTc4IDIyMi4xNjRDMjc4LjgyMiAyMjUuNTIxIDI3NS45NDIgMjMwLjMxOSAyNzUuOTQyIDIzNy4wMzlWMzc2LjE4NkwyNzUuOTM3IDM3Ni4xODJaTTM2MC42MjYgNDI1LjEyMkwzMDQuMjQ2IDM5My40NTVWMzI2LjI4M0wzNjAuNjI2IDI5NC42MTZMNDE3LjAwMiAzMjYuMjgzVjM5My40NTVMMzYwLjYyNiA0MjUuMTIyWk0zOTYuODUyIDU3MC45ODlDMzc2LjY5OCA1NzAuOTg5IDM1Ny45ODkgNTY0LjI3IDM0Mi4xNTEgNTUyLjI3Nkw0MzYuNjc0IDQ5Ny41NzRDNDQyLjQzMSA0OTQuMjE3IDQ0NS4zMTEgNDg5LjQxOSA0NDUuMzExIDQ4Mi42OTlWMzQzLjU1Mkw0ODUuMTM4IDM2Ni41ODJDNDg4LjQ5NSAzNjguNDk5IDQ4OS45MzYgMzcxLjM3OSA0ODkuOTM2IDM3NS4yMTlWNDgwLjc3OEM0ODkuOTM2IDUzMi4xMTcgNDUwLjEwOSA1NzAuOTg1IDM5Ni44NTIgNTcwLjk4NVY1NzAuOTg5Wk0yODMuMTM0IDQ2My45OUwxOTEuNDg2IDQxMS4yMTFDMTY1LjA5NCAzOTUuODU0IDE0Ny4zNDMgMzYzLjIyOSAxNDcuMzQzIDMzMS41NjJDMTQ3LjM0MyAyOTQuNjE2IDE2OS40MTUgMjYxLjUwOSAyMDMuNDggMjQ3LjU5M1YzNTYuOTkxQzIwMy40OCAzNjMuNzEgMjA2LjM2MSAzNjguNTA4IDIxMi4xMTcgMzcxLjg2NkwzMzIuMDc0IDQ0MS40MzdMMjkyLjcyOSA0NjMuOTlDMjg5LjM3MiA0NjUuOTA3IDI4Ni40OTEgNDY1LjkwNyAyODMuMTM0IDQ2My45OVpNMjc3Ljg1OSA1NDIuNjhDMjIzLjYzOSA1NDIuNjggMTgzLjgxMyA1MDEuODk1IDE4My44MTMgNDUxLjUxNEMxODMuODEzIDQ0Ny42NzUgMTg0LjI5NCA0NDMuODM2IDE4NC43NzEgNDM5Ljk5N0wyNzkuMjk1IDQ5NC42OThDMjg1LjA1MSA0OTguMDU2IDI5MC44MTIgNDk4LjA1NiAyOTYuNTY4IDQ5NC42OThMNDE3LjAwMiA0MjUuMTI3VjQ3MC43MUM0MTcuMDAyIDQ3NC41NDkgNDE1LjU2MiA0NzcuNDI5IDQxMi4yMDQgNDc5LjM0NkwzMjAuNTU3IDUzMi4xMjZDMzA4LjA4MSA1MzkuMzIzIDI5My4yMDYgNTQyLjY4IDI3Ny44NTQgNTQyLjY4SDI3Ny44NTlaTTM5Ni44NTIgNTk5Ljc3NkM0NTQuOTExIDU5OS43NzYgNTAzLjM3IDU1OC41MTMgNTE0LjQxIDUwMy44MTJDNTY4LjE0OSA0ODkuODk2IDYwMi42OTYgNDM5LjUxNSA2MDIuNjk2IDM4OC4xNzZDNjAyLjY5NiAzNTQuNTg3IDU4OC4zMDMgMzIxLjk2MiA1NjIuMzkyIDI5OC40NUM1NjQuNzkxIDI4OC4zNzMgNTY2LjIzMSAyNzguMjk2IDU2Ni4yMzEgMjY4LjIyNEM1NjYuMjMxIDE5OS42MTEgNTEwLjU3MSAxNDguMjY3IDQ0Ni4yNzQgMTQ4LjI2N0M0MzMuMzIyIDE0OC4yNjcgNDIwLjg0NiAxNTAuMTg0IDQwOC4zNyAxNTQuNTA1QzM4Ni43NzUgMTMzLjM5MiAzNTcuMDI2IDExOS45NTggMzI0LjQgMTE5Ljk1OEMyNjYuMzQyIDExOS45NTggMjE3Ljg4MyAxNjEuMjIgMjA2Ljg0MyAyMTUuOTIxQzE1My4xMDQgMjI5LjgzNyAxMTguNTU3IDI4MC4yMTggMTE4LjU1NyAzMzEuNTU3QzExOC41NTcgMzY1LjE0NiAxMzIuOTUgMzk3Ljc3MSAxNTguODYxIDQyMS4yODNDMTU2LjQ2MiA0MzEuMzYgMTU1LjAyMiA0NDEuNDM3IDE1NS4wMjIgNDUxLjUxQzE1NS4wMjIgNTIwLjEyMyAyMTAuNjgyIDU3MS40NjYgMjc0Ljk3OCA1NzEuNDY2QzI4Ny45MzEgNTcxLjQ2NiAzMDAuNDA3IDU2OS41NDkgMzEyLjg4MyA1NjUuMjI4QzMzNC40NzMgNTg2LjM0MSAzNjQuMjIyIDU5OS43NzYgMzk2Ljg1MiA1OTkuNzc2WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI3MjAiIGhlaWdodD0iNzIwIiBmaWxsPSJ3aGl0ZSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC42MDY5MzQgMC4wOTk5NzU2KSIvPgo8L2NsaXBQYXRoPgo8Y2xpcFBhdGggaWQ9ImNsaXAxXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI0ODQuMTM5IiBoZWlnaHQ9IjQ3OS44MTgiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMTguNTU3IDExOS45NTgpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg==" alt="" aria-hidden="true" width="16" height="16">Codex</span><span class="account">codex:personal</span><span class="hash">912ec1</span><time>11:17</time></div>
+            <div class="lineage-event"><span class="provider" aria-hidden="true">&nbsp;</span><span class="account">claude:startup</span><span class="hash">5c3e88</span><time>13:04</time></div>
+            <div class="trace-now"><span>now</span><span class="working">Working · <span class="mono">e07b19</span></span></div>
+          </div>
+
+          <div class="lin">
+            <div class="lin-names"><span class="name-claude">Claude Code</span><span class="name-codex">Codex</span></div>
+            <div class="lin-plot">
+              <i class="rail rail-claude"></i>
+              <i class="rail rail-codex"></i>
+              <i class="lseg seg-first"></i>
+              <i class="vstep step-down"></i>
+              <i class="lseg seg-codex"></i>
+              <i class="vstep step-up"></i>
+              <i class="lseg seg-last"></i>
+              <i class="node node-start"></i>
+              <i class="node node-down"></i>
+              <i class="node node-up"></i>
+              <span class="who who-claude">claude:personal</span>
+              <span class="who who-codex">codex:personal</span>
+              <span class="who hide-sm who-startup">claude:startup</span>
+              <span class="hash hash-down">912ec1</span>
+              <span class="hash hash-up">5c3e88</span>
+              <span class="time time-start">10:02</span>
+              <span class="time time-down">11:17</span>
+              <span class="time time-up">13:04</span>
+              <span class="time time-now">now</span>
+              <span class="now-tag">Working · <span class="mono">e07b19</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Same task, different worker</h3>
+          <p>Every job records which agent worked on it, when it stopped, and the checkpoint where the next one started.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- One agent or a hundred -->
+<section id="graph">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">One agent or a hundred.</h2>
+      <p>Split a job into tasks and each one runs on an account with room left. When an account reaches its limit, its tasks stop at a checkpoint and resume when it resets.</p>
+    </div>
+    <figure class="tg-fig">
+      <div class="tg-status" aria-live="off">
+        <span class="stack" id="tg-phase">
+          <span data-ph="0">8 tasks running on Claude Code and Codex</span>
+          <span data-ph="1" class="is-off"><span class="warn">Claude reached its usage limit.</span> 4 tasks paused at checkpoints.</span>
+          <span data-ph="2" class="is-off">Claude available 18:00. 4 tasks resumed.</span>
+        </span>
+        <span class="clock stack" id="tg-clock"><span data-ph="0">17:40</span><span data-ph="1" class="is-off">17:52</span><span data-ph="2" class="is-off">18:00</span></span>
+      </div>
+      <div class="tg-stage">
+        <div class="tg" id="tg">
+          <svg class="tg-edges" id="tg-edges" aria-hidden="true"></svg>
+          <div class="tg-dots" id="tg-dots" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="tg-legend">
+        <span><i class="lg-sq"></i><img class="brand-mark claude" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTQiIGhlaWdodD0iOTQiIHZpZXdCb3g9IjAgMCA5NCA5NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4Ljc2NTcgNjIuNDQzN0wzNy4xODIyIDUyLjExNjdMMzcuNDg1NyA1MS4yMTIyTDM3LjE4MjIgNTAuNzA4NUgzNi4yNzE1TDMzLjE4NTIgNTAuNTIwOEwyMi42NjE1IDUwLjIzOTFMMTMuNTU0NSA0OS44NjM2TDQuNzAwNDQgNDkuMzk0MkwyLjQ3NDI4IDQ4LjkyNDhMMC4zOTk5MDIgNDYuMTU1M0wwLjYwMjI4MSA0NC43OTRMMi40NzQyOCA0My41MjY2TDUuMTU1NzkgNDMuNzYxM0wxMS4wNzU0IDQ0LjE4MzdMMTkuOTggNDQuNzk0TDI2LjQwNTUgNDUuMTY5NUwzNS45Njc5IDQ2LjE1NTNIMzcuNDg1N0wzNy42ODgxIDQ1LjU0NUwzNy4xODIyIDQ1LjE2OTVMMzYuNzc3NCA0NC43OTRMMjcuNTY5MiAzOC41NTA4TDE3LjYwMjEgMzEuOTc5MUwxMi4zOTA4IDI4LjE3NjlMOS42MDgxMiAyNi4yNTI0TDguMTkxNDcgMjQuNDY4Nkw3LjU4NDMzIDIwLjUyNTZMMTAuMTE0MSAxNy43MDkxTDEzLjU1NDUgMTcuOTQzOEwxNC40MTQ2IDE4LjE3ODVMMTcuOTA1NiAyMC44NTQyTDI1LjM0MyAyNi42Mjc5TDM1LjA1NzIgMzMuNzYyOUwzNi40NzM5IDM0LjkzNjRMMzcuMDQ0MyAzNC41NTE0TDM3LjEzMTYgMzQuMjc5MkwzNi40NzM5IDMzLjE5OTZMMzEuMjEyIDIzLjY3MDZMMjUuNTk2IDEzLjk1MzlMMjMuMDY2MyA5LjkxNjk1TDIyLjQwODYgNy41MjI5NkMyMi4xNTM4IDYuNTE4MzEgMjIuMDAzOCA1LjY4NzE0IDIyLjAwMzggNC42NTk1N0wyNC44ODc3IDAuNzE2NTQ0TDI2LjUwNjcgMC4yMDAxOTVMMzAuNDAyNSAwLjcxNjU0NEwzMi4wMjE1IDIuMTI0NzdMMzQuNDUwMSA3LjY2Mzc5TDM4LjM0NTggMTYuMzQ3OEw0NC40MTcyIDI4LjE3NjlMNDYuMTg4IDMxLjY5NzVMNDcuMTQ5MyAzNC45MzY0TDQ3LjUwMzUgMzUuOTIyMkg0OC4xMTA2VjM1LjM1ODlMNDguNjE2NiAyOC42OTMzTDQ5LjUyNzMgMjAuNTI1Nkw1MC40MzggMTAuMDEwOEw1MC43NDE1IDcuMDUzNTZMNTIuMjA4OCAzLjQ4NjA1TDU1LjE0MzMgMS41NjE0OEw1Ny40MiAyLjY0MTEyTDU5LjI5MiA1LjMxNjc0TDU5LjAzOSA3LjA1MzU2TDU3LjkyNiAxNC4yODI0TDU1Ljc1MDQgMjUuNTk1Mkw1NC4zMzM3IDMzLjE5OTZINTUuMTQzM0w1Ni4xMDQ2IDMyLjIxMzhMNTkuOTQ5NyAyNy4xNDQyTDY2LjM3NTIgMTkuMDcwNEw2OS4yMDg1IDE1Ljg3ODRMNzIuNTQ3OCAxMi4zNTc5TDc0LjY3MjggMTAuNjY4SDc4LjcyMDNMODEuNjU0OCAxNS4wODA0TDgwLjMzOTQgMTkuNjMzN0w3Ni4xOTA2IDI0Ljg5MTFMNzIuNzUwMiAyOS4zNTA0TDY3LjgxNzIgMzUuOTU5NUw2NC43NTYyIDQxLjI3MzRMNjUuMDMwNyA0MS43MTE4TDY1Ljc2ODEgNDEuNjQ4OUw3Ni44OTg5IDM5LjI1NUw4Mi45MTk3IDM4LjE3NTNMOTAuMTA0MSAzNi45NTQ5TDkzLjM0MjIgMzguNDU3TDkzLjY5NjMgNDAuMDA2TDkyLjQzMTUgNDMuMTUxTDg0Ljc0MTEgNDUuMDI4N0w3NS43MzUzIDQ2Ljg1OTRMNjIuMzI0NCA1MC4wMTY0TDYyLjE3NTkgNTAuMTM1OEw2Mi4zNTEyIDUwLjM5NThMNjguMzk5IDUwLjk0MzJMNzAuOTc5NCA1MS4wODRINzcuMzAzN0w4OS4wOTIyIDUxLjk3NTlMOTIuMTc4NSA1My45OTQ0TDkzLjk5OTkgNTYuNDgyMkw5My42OTYzIDU4LjQwNjhMODguOTQwNCA2MC44MDA4TDgyLjU2NTUgNTkuMjk4N0w2Ny42NDAxIDU1LjczMTJMNjIuNTMwMSA1NC40NjM4SDYxLjgyMTdWNTQuODg2Mkw2Ni4wNzE3IDU5LjA2NEw3My45MTM5IDY2LjEwNTFMODMuNjc4NiA3NS4yMTE2TDg0LjE4NDUgNzcuNDY0OEw4Mi45MTk3IDc5LjI0ODVMODEuNjA0MiA3OS4wNjA4TDczLjAwMzIgNzIuNTgyOUw2OS42NjM5IDY5LjY3MjZMNjIuMTc1OSA2My4zMzU2SDYxLjY3VjYzLjk5MjhMNjMuMzkwMiA2Ni41Mjc2TDcyLjU0NzggODAuMjgxMkw3My4wMDMyIDg0LjUwNTlMNzIuMzQ1NCA4NS44NjcyTDY5Ljk2NzUgODYuNzEyMUw2Ny4zODcxIDg2LjI0MjdMNjEuOTczNSA3OC42ODUyTDU2LjQ1ODcgNzAuMjM1OUw1Mi4wMDY0IDYyLjYzMTVMNTEuNDY4NyA2Mi45NzFMNDguODE4OSA5MS4yNjU0TDQ3LjYwNDcgOTIuNzIwNkw0NC43NzE0IDkzLjgwMDJMNDIuMzkzNCA5Mi4wMTY0TDQxLjEyODYgODkuMTA2MUw0Mi4zOTM0IDgzLjMzMjRMNDMuOTExMyA3NS44MjE5TDQ1LjEyNTUgNjkuODYwNEw0Ni4yMzg2IDYyLjQ0MzdMNDYuOTE4NCA1OS45NjYxTDQ2Ljg1ODMgNTkuODAwM0w0Ni4zMTUzIDU5Ljg5MTZMNDAuNzIzOCA2Ny41NjAzTDMyLjIyMzkgNzkuMDYwOEwyNS40OTQ4IDg2LjI0MjdMMjMuODc1OCA4Ni44OTk5TDIxLjA5MzEgODUuNDQ0N0wyMS4zNDYxIDgyLjg2M0wyMi45MTQ1IDgwLjU2MjlMMzIuMjIzOSA2OC43MzM4TDM3LjgzOTkgNjEuMzY0MUw0MS40NTk0IDU3LjEzMzdMNDEuNDI0MiA1Ni41MjE4TDQxLjIyNDQgNTYuNTA0OEwxNi40ODkgNzIuNjI5OUwxMi4wODczIDczLjE5MzJMMTAuMTY0NyA3MS40MDk0TDEwLjQxNzYgNjguNDk5MUwxMS4zMjgzIDY3LjU2MDNMMTguNzY1NyA2Mi40NDM3WiIgZmlsbD0iI0Q5Nzc1NyIvPgo8L3N2Zz4K" alt="" aria-hidden="true" width="16" height="16">Claude Code</span>
+        <span><i class="lg-ci"></i><img class="brand-mark codex" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIxIiBoZWlnaHQ9IjcyMSIgdmlld0JveD0iMTE4LjU1NyAxMTkuOTU4IDQ4NC4xMzkgNDc5LjgxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzE2MzdfMjkzNCkiPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDFfMTYzN18yOTM0KSI+CjxwYXRoIGQ9Ik0zMDQuMjQ2IDI5NC42MTFWMjQ5LjAyOEMzMDQuMjQ2IDI0NS4xODkgMzA1LjY4NyAyNDIuMzA5IDMwOS4wNDQgMjQwLjM5Mkw0MDAuNjkyIDE4Ny42MTJDNDEzLjE2NyAxODAuNDE1IDQyOC4wNDIgMTc3LjA1OCA0NDMuMzk0IDE3Ny4wNThDNTAwLjk3MSAxNzcuMDU4IDUzNy40NCAyMjEuNjgyIDUzNy40NCAyNjkuMTgyQzUzNy40NCAyNzIuNTQgNTM3LjQ0IDI3Ni4zNzkgNTM2Ljk1OSAyODAuMjE4TDQ0MS45NTQgMjI0LjU1OEM0MzYuMTk3IDIyMS4yMDEgNDMwLjQzNyAyMjEuMjAxIDQyNC42OCAyMjQuNTU4TDMwNC4yNDYgMjk0LjYxMVpNNTE4LjI0NSA0NzIuMTQ1VjM2My4yMjRDNTE4LjI0NSAzNTYuNTA1IDUxNS4zNjQgMzUxLjcwNyA1MDkuNjA4IDM0OC4zNDlMMzg5LjE3NCAyNzguMjk2TDQyOC41MTkgMjU1Ljc0M0M0MzEuODc3IDI1My44MjYgNDM0Ljc1NyAyNTMuODI2IDQzOC4xMTUgMjU1Ljc0M0w1MjkuNzYyIDMwOC41MjNDNTU2LjE1NCAzMjMuODc5IDU3My45MDUgMzU2LjUwNSA1NzMuOTA1IDM4OC4xNzFDNTczLjkwNSA0MjQuNjM2IDU1Mi4zMTUgNDU4LjIyNSA1MTguMjQ1IDQ3Mi4xNDFWNDcyLjE0NVpNMjc1LjkzNyAzNzYuMTgyTDIzNi41OTIgMzUzLjE1MkMyMzMuMjM1IDM1MS4yMzUgMjMxLjc5NCAzNDguMzU0IDIzMS43OTQgMzQ0LjUxNVYyMzguOTU2QzIzMS43OTQgMTg3LjYxNyAyNzEuMTM5IDE0OC43NDkgMzI0LjQgMTQ4Ljc0OUMzNDQuNTU1IDE0OC43NDkgMzYzLjI2NCAxNTUuNDY4IDM3OS4xMDIgMTY3LjQ2M0wyODQuNTc4IDIyMi4xNjRDMjc4LjgyMiAyMjUuNTIxIDI3NS45NDIgMjMwLjMxOSAyNzUuOTQyIDIzNy4wMzlWMzc2LjE4NkwyNzUuOTM3IDM3Ni4xODJaTTM2MC42MjYgNDI1LjEyMkwzMDQuMjQ2IDM5My40NTVWMzI2LjI4M0wzNjAuNjI2IDI5NC42MTZMNDE3LjAwMiAzMjYuMjgzVjM5My40NTVMMzYwLjYyNiA0MjUuMTIyWk0zOTYuODUyIDU3MC45ODlDMzc2LjY5OCA1NzAuOTg5IDM1Ny45ODkgNTY0LjI3IDM0Mi4xNTEgNTUyLjI3Nkw0MzYuNjc0IDQ5Ny41NzRDNDQyLjQzMSA0OTQuMjE3IDQ0NS4zMTEgNDg5LjQxOSA0NDUuMzExIDQ4Mi42OTlWMzQzLjU1Mkw0ODUuMTM4IDM2Ni41ODJDNDg4LjQ5NSAzNjguNDk5IDQ4OS45MzYgMzcxLjM3OSA0ODkuOTM2IDM3NS4yMTlWNDgwLjc3OEM0ODkuOTM2IDUzMi4xMTcgNDUwLjEwOSA1NzAuOTg1IDM5Ni44NTIgNTcwLjk4NVY1NzAuOTg5Wk0yODMuMTM0IDQ2My45OUwxOTEuNDg2IDQxMS4yMTFDMTY1LjA5NCAzOTUuODU0IDE0Ny4zNDMgMzYzLjIyOSAxNDcuMzQzIDMzMS41NjJDMTQ3LjM0MyAyOTQuNjE2IDE2OS40MTUgMjYxLjUwOSAyMDMuNDggMjQ3LjU5M1YzNTYuOTkxQzIwMy40OCAzNjMuNzEgMjA2LjM2MSAzNjguNTA4IDIxMi4xMTcgMzcxLjg2NkwzMzIuMDc0IDQ0MS40MzdMMjkyLjcyOSA0NjMuOTlDMjg5LjM3MiA0NjUuOTA3IDI4Ni40OTEgNDY1LjkwNyAyODMuMTM0IDQ2My45OVpNMjc3Ljg1OSA1NDIuNjhDMjIzLjYzOSA1NDIuNjggMTgzLjgxMyA1MDEuODk1IDE4My44MTMgNDUxLjUxNEMxODMuODEzIDQ0Ny42NzUgMTg0LjI5NCA0NDMuODM2IDE4NC43NzEgNDM5Ljk5N0wyNzkuMjk1IDQ5NC42OThDMjg1LjA1MSA0OTguMDU2IDI5MC44MTIgNDk4LjA1NiAyOTYuNTY4IDQ5NC42OThMNDE3LjAwMiA0MjUuMTI3VjQ3MC43MUM0MTcuMDAyIDQ3NC41NDkgNDE1LjU2MiA0NzcuNDI5IDQxMi4yMDQgNDc5LjM0NkwzMjAuNTU3IDUzMi4xMjZDMzA4LjA4MSA1MzkuMzIzIDI5My4yMDYgNTQyLjY4IDI3Ny44NTQgNTQyLjY4SDI3Ny44NTlaTTM5Ni44NTIgNTk5Ljc3NkM0NTQuOTExIDU5OS43NzYgNTAzLjM3IDU1OC41MTMgNTE0LjQxIDUwMy44MTJDNTY4LjE0OSA0ODkuODk2IDYwMi42OTYgNDM5LjUxNSA2MDIuNjk2IDM4OC4xNzZDNjAyLjY5NiAzNTQuNTg3IDU4OC4zMDMgMzIxLjk2MiA1NjIuMzkyIDI5OC40NUM1NjQuNzkxIDI4OC4zNzMgNTY2LjIzMSAyNzguMjk2IDU2Ni4yMzEgMjY4LjIyNEM1NjYuMjMxIDE5OS42MTEgNTEwLjU3MSAxNDguMjY3IDQ0Ni4yNzQgMTQ4LjI2N0M0MzMuMzIyIDE0OC4yNjcgNDIwLjg0NiAxNTAuMTg0IDQwOC4zNyAxNTQuNTA1QzM4Ni43NzUgMTMzLjM5MiAzNTcuMDI2IDExOS45NTggMzI0LjQgMTE5Ljk1OEMyNjYuMzQyIDExOS45NTggMjE3Ljg4MyAxNjEuMjIgMjA2Ljg0MyAyMTUuOTIxQzE1My4xMDQgMjI5LjgzNyAxMTguNTU3IDI4MC4yMTggMTE4LjU1NyAzMzEuNTU3QzExOC41NTcgMzY1LjE0NiAxMzIuOTUgMzk3Ljc3MSAxNTguODYxIDQyMS4yODNDMTU2LjQ2MiA0MzEuMzYgMTU1LjAyMiA0NDEuNDM3IDE1NS4wMjIgNDUxLjUxQzE1NS4wMjIgNTIwLjEyMyAyMTAuNjgyIDU3MS40NjYgMjc0Ljk3OCA1NzEuNDY2QzI4Ny45MzEgNTcxLjQ2NiAzMDAuNDA3IDU2OS41NDkgMzEyLjg4MyA1NjUuMjI4QzMzNC40NzMgNTg2LjM0MSAzNjQuMjIyIDU5OS43NzYgMzk2Ljg1MiA1OTkuNzc2WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI3MjAiIGhlaWdodD0iNzIwIiBmaWxsPSJ3aGl0ZSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC42MDY5MzQgMC4wOTk5NzU2KSIvPgo8L2NsaXBQYXRoPgo8Y2xpcFBhdGggaWQ9ImNsaXAxXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI0ODQuMTM5IiBoZWlnaHQ9IjQ3OS44MTgiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMTguNTU3IDExOS45NTgpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg==" alt="" aria-hidden="true" width="16" height="16">Codex</span>
+        <span><i class="lg-da"></i>Paused at its limit</span>
+      </div>
+      <div class="graph-playback"><div class="graph-scenarios" role="group" aria-label="Illustrated graph moments"><button class="rc-control" data-graph-phase="0" type="button" aria-pressed="true">17:40</button><button class="rc-control" data-graph-phase="1" type="button" aria-pressed="false">17:52</button><button class="rc-control" data-graph-phase="2" type="button" aria-pressed="false">18:00</button></div><button class="rc-control" id="graph-pause" type="button" aria-pressed="false">Pause</button><button class="rc-control" id="graph-replay" type="button">Replay</button></div>
+      <figcaption class="caption" id="tg-caption">Illustrated. The first release switches one job at a time.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">relay is free. You already paid for the agents.</h2>
+      <p>Paid features will come later, as a one-time payment for a lifetime license: no subscription, and no share of what you spend on agents.</p>
+    </div>
+    <div class="price">
+      <div class="price-col">
+        <h3>The core</h3>
+        <p class="price-big">Free</p>
+        <p>The relay command line tool: checkpoints, handoffs between agents and accounts, and rollback.</p>
+      </div>
+      <div class="price-col">
+        <h3>Paid features</h3>
+        <p class="price-big">One payment</p>
+        <p>A lifetime license, paid once. Not on sale yet. This page will say what it includes and what it costs before it goes on sale.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Closing -->
+<section id="closing" class="closing">
+  <div class="wrap">
+    <div class="panel" id="panel">
+      <div class="map" aria-hidden="true"><svg id="panel-svg" shape-rendering="crispEdges"><g id="panel-static"></g></svg></div>
+      <div class="panel-in">
+        <h2 class="display">Your agents should be disposable. Your work shouldn’t be.</h2>
+        <div class="ctas">
+          <button type="button" class="btn btn-primary" popovertarget="install" data-install-focus="install-macos">Get relay</button>
+          <button type="button" class="btn btn-secondary" popovertarget="install">CLI setup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="install" class="install" popover role="dialog" aria-labelledby="install-title">
+  <div class="install-head">
+    <h2 id="install-title">Install relay</h2>
+    <button type="button" class="btn btn-secondary btn-sm" popovertarget="install" popovertargetaction="hide" autofocus>Close</button>
+  </div>
+  <p>relay is free and <a href="https://github.com/FrejusGdm/relay">open source</a>. These commands download the latest release from GitHub.</p>
+
+  <div class="install-block">
+    <div class="install-block-head">
+      <h3 id="install-macos" tabindex="-1">Command line on macOS <span class="nowrap">(Apple silicon)</span></h3>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy="install-macos-cmd" aria-label="Copy the macOS commands">Copy</button>
+    </div>
+    <pre id="install-macos-cmd" class="install-cmd" tabindex="0">mkdir -p "$HOME/.local/bin"
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-darwin-arm64
+chmod +x "$HOME/.local/bin/relay"
+"$HOME/.local/bin/relay" --version</pre>
+  </div>
+
+  <div class="install-block">
+    <div class="install-block-head">
+      <h3 id="install-linux">Command line on Linux (x64)</h3>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy="install-linux-cmd" aria-label="Copy the Linux commands">Copy</button>
+    </div>
+    <pre id="install-linux-cmd" class="install-cmd" tabindex="0">mkdir -p "$HOME/.local/bin"
+curl -fsSL -o "$HOME/.local/bin/relay" \
+  https://github.com/FrejusGdm/relay/releases/latest/download/relay-linux-x64
+chmod +x "$HOME/.local/bin/relay"
+"$HOME/.local/bin/relay" --version</pre>
+  </div>
+
+  <p class="install-note">To run <span class="mono">relay</span> by name, add <span class="mono">~/.local/bin</span> to your PATH, for example with <span class="mono">export PATH="$HOME/.local/bin:$PATH"</span> in <span class="mono">~/.zshrc</span> on macOS or <span class="mono">~/.bashrc</span> on Linux.</p>
+
+  <div class="install-block">
+    <div class="install-block-head">
+      <h3 id="install-mac" tabindex="-1">Mac app</h3>
+    </div>
+    <p class="install-note">The Mac menu-bar app is not released yet. The command line tool above works on its own.</p>
+  </div>
+
+  <p class="sr-only" role="status" id="copy-status"></p>
+</div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <span class="wordmark"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</span>
+        <p>relay keeps your coding work moving when an agent stops. It saves the task, the decisions and the repository state for the next agent.</p>
+      </div>
+      <nav aria-label="Product"><h3>Product</h3><a href="#how">How it works</a><a href="#pricing">Pricing</a><button type="button" class="foot-link" popovertarget="install">CLI setup</button></nav>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 relay</span>
+      <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 license</a>
+      <span>The accounts, times and checkpoints on this page are illustrated.</span>
+    </div>
+  </div>
+</footer>
+<div class="graphics-review" role="group" aria-label="Graphics-only design proposal"><button type="button" data-graphics-choice="original" aria-pressed="false">Original graphics</button><button type="button" data-graphics-choice="simple" aria-pressed="true">Proposed graphics</button></div>
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function svgEl(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function half(v) { return Math.round(v) + 0.5; }
+
+  /* Static track drawing for the closing panel */
+  function drawTrack(g, W, ys, o) {
+    while (g.firstChild) g.removeChild(g.firstChild);
+    function blocked(x, y1, y2) {
+      var boxes = o.boxes || [];
+      for (var j = 0; j < boxes.length; j++) {
+        var b = boxes[j];
+        if (x > b.l - 20 && x < b.r + 20 && Math.max(y1, y2) > b.t - 24 && Math.min(y1, y2) < b.b + 24) return true;
+      }
+      return false;
+    }
+    ys.forEach(function (y) {
+      // A lane that would cross the text starts to the right of it.
+      var x1 = 0;
+      (o.text || []).forEach(function (b) { if (y > b.t - 24 && y < b.b + 24) x1 = Math.max(x1, Math.round(b.r + 20)); });
+      if (x1 < W) svgEl("line", { "class": "trk-line", x1: x1, y1: y, x2: W, y2: y }, g);
+    });
+    (o.switches || []).forEach(function (s) {
+      var x = half(o.x0 + s.f * (W - o.x0));
+      var ya = ys[s.a], yb = ys[s.b];
+      if (x > W - 12 || blocked(x, ya, yb)) return;
+      svgEl("line", { "class": "trk-line", x1: x, y1: ya, x2: x, y2: yb }, g);
+      svgEl("rect", { "class": "trk-node", x: x - 2.5, y: ya - 2.5, width: 5, height: 5 }, g);
+      svgEl("rect", { "class": "trk-node", x: x - 2.5, y: yb - 2.5, width: 5, height: 5 }, g);
+    });
+    ys.forEach(function (y, i) {
+      (o.stations[i] || []).forEach(function (f) {
+        var x = half(o.x0 + f * (W - o.x0));
+        if (x < o.x0 + 24 || x > W - 24 || blocked(x, y, y)) return;
+        svgEl("rect", { "class": "trk-node", x: x - 3.5, y: y - 3.5, width: 7, height: 7 }, g);
+      });
+    });
+  }
+
+  /* ===== relay card start =====
+     Mounts the handoff card and runs its 7.2-second story (adapted from Codex's card.html).
+     The returned setInView(bool) pauses it off screen. */
+  function mountRelayCard(host) {
+    host.appendChild(document.getElementById("card-tpl").content.cloneNode(true));
+    var root = host.querySelector(".rc");
+    var $ = function (n) { return root.querySelector('[data-rc="' + n + '"]'); };
+    var reducedQ = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var DURATION = 7200;
+    var stages = [
+      { at: 0, line: "<strong>Claude Code is working</strong> · building authentication", claude: "Working", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan", active: "claude" },
+      { at: 1300, line: "<strong>Claude Code is working</strong> · usage running out", claude: "Usage running out", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan", active: "claude" },
+      { at: 2600, line: "<strong>Limit reached</strong> · resets <time>18:00</time>", claude: "Limit reached", codex: "Ready", caption: "<b>Waiting for your manual switch</b>Next worker: Codex", active: "" },
+      { at: 3700, line: "<strong>Saving checkpoint</strong> · keeping the repository &amp; plan", claude: "Limit · resets <time>18:00</time>", codex: "Ready", caption: "<b>Saving the work before switching</b>Checkpoint + plan", active: "" },
+      { at: 4800, line: "<strong>Moving the job to Codex</strong> · manual switch", claude: "Limit · resets <time>18:00</time>", codex: "Receiving work", caption: '<b>Manual switch · <time>14:19</time></b>Moving checkpoint <span class="mono">912ec1</span> + plan', active: "codex" },
+      { at: 6000, line: "<strong>Moved to Codex</strong> · Claude Code reached its limit", claude: "Limit · resets <time>18:00</time>", codex: "Working", caption: '<b>Handed off manually · <time>14:19</time></b>at checkpoint <span class="mono">912ec1</span>', active: "codex" }
+    ];
+    var elapsed = 0, lastTime = 0, raf = 0, index = -1, paused = false, inView = false, running = false, animations = [];
+    var ease = "cubic-bezier(0.22, 1, 0.36, 1)";
+    var pauseBtn = $("pause");
+    function entrance(el) {
+      if (reducedQ.matches) return;
+      animations.push(el.animate([{ opacity: 0, transform: "translateY(3px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 220, easing: ease }));
+    }
+    function render(i, animate) {
+      index = i;
+      root.dataset.step = String(i);
+      var s = stages[i];
+      $("line").innerHTML = s.line;
+      $("claude-state").innerHTML = s.claude;
+      $("codex-state").textContent = s.codex;
+      $("transfer").innerHTML = s.caption;
+      $("claude").classList.toggle("active", s.active === "claude");
+      $("codex").classList.toggle("active", s.active === "codex");
+      $("claude-role").textContent = i < 2 ? "Current worker" : "Previous worker";
+      $("codex-role").textContent = i < 4 ? "Next worker" : "Current worker";
+      $("claude-state").className = "rc-state " + (i < 2 ? "working" : "warning");
+      $("codex-state").className = "rc-state" + (i >= 4 ? " working" : "");
+      $("hash").textContent = i < 3 ? "8f4a20" : i === 3 ? "Saving…" : "912ec1";
+      root.querySelector("[data-hero-checkpoint]").textContent = $("hash").textContent;
+      $("saved").innerHTML = i < 3 ? "· previous" : i === 3 ? "" : "· saved <time>14:19</time>";
+      $("open-label").textContent = i < 4 ? "Open Claude Code" : "Open Codex";
+      if (animate) entrance($("line"));
+      if (i === 1 && animate && !reducedQ.matches) animations.push($("fill").animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 1300, easing: ease, fill: "forwards" }));
+      $("fill").style.transform = i >= 2 ? "scaleX(0)" : (i === 0 ? "scaleX(1)" : $("fill").style.transform);
+      if (i === 4 && animate && !reducedQ.matches) {
+        animations.push($("token").animate([
+          { opacity: 0, transform: "translateY(0)" }, { opacity: 1, transform: "translateY(6px)", offset: 0.15 },
+          { opacity: 1, transform: "translateY(44px)", offset: 0.8 }, { opacity: 0, transform: "translateY(49px)" }
+        ], { duration: 1100, easing: ease }));
+      }
+      if (i === 5) $("announce").textContent = "Moved to Codex. Claude Code reached its limit. Checkpoint and plan carried over.";
+    }
+    function finish() {
+      running = false; elapsed = DURATION;
+      pauseBtn.disabled = true; pauseBtn.textContent = "Pause"; pauseBtn.setAttribute("aria-pressed", "false");
+    }
+    function frame(t) {
+      if (paused || !inView || document.hidden) { lastTime = 0; return; }
+      if (lastTime) elapsed += t - lastTime;
+      lastTime = t;
+      var i = stages.length - 1;
+      while (i > 0 && elapsed < stages[i].at) i--;
+      if (i !== index) render(i, true);
+      if (elapsed >= DURATION) { finish(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    function play() {
+      cancelAnimationFrame(raf);
+      animations.forEach(function (a) { a.cancel(); });
+      animations = [];
+      elapsed = 0; lastTime = 0; paused = false;
+      $("announce").textContent = "";
+      pauseBtn.textContent = "Pause"; pauseBtn.setAttribute("aria-pressed", "false");
+      if (reducedQ.matches) { render(5, false); finish(); return; }
+      running = true;
+      pauseBtn.disabled = false;
+      index = -1; render(0, true);
+      raf = requestAnimationFrame(frame);
+    }
+    function resumeClock() {
+      if (paused || !inView || document.hidden) return;
+      animations.forEach(function (a) { if (a.playState === "paused") a.play(); });
+      if (running) { lastTime = 0; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
+    }
+    function suspendClock() {
+      cancelAnimationFrame(raf); lastTime = 0;
+      animations.forEach(function (a) { if (a.playState === "running") a.pause(); });
+    }
+    pauseBtn.addEventListener("click", function () {
+      if (!running) return;
+      paused = !paused;
+      pauseBtn.textContent = paused ? "Resume" : "Pause";
+      pauseBtn.setAttribute("aria-pressed", String(paused));
+      if (paused) suspendClock(); else resumeClock();
+    });
+    $("replay").addEventListener("click", play);
+    $("pin").addEventListener("click", function () {
+      var pinned = $("pin").getAttribute("aria-pressed") !== "true";
+      $("pin").setAttribute("aria-pressed", String(pinned));
+      $("pin").querySelector("span").textContent = pinned ? "Pinned" : "Pin";
+    });
+    root.querySelectorAll("[data-dialog]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (button.dataset.dialog === "worker") {
+          var who = index < 4 ? "Claude Code" : "Codex";
+          $("worker-title").textContent = who + " worker";
+          $("worker-detail").innerHTML = who === "Claude Code"
+            ? "This illustrated worker is building authentication in relay / auth. The next worker will receive the saved checkpoint and plan."
+            : 'This illustrated worker continues “Build authentication” in relay / auth with checkpoint <span class="mono">912ec1</span> and the saved plan.';
+        }
+        var d = root.querySelector('[data-rc-dialog="' + button.dataset.dialog + '"]');
+        if (d && d.showModal) d.showModal();
+      });
+    });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) suspendClock(); else resumeClock(); });
+    if (reducedQ.matches) { $("note").textContent = "Illustrated manual handoff · reduced motion"; render(5, false); pauseBtn.disabled = true; }
+    else render(0, false);
+    return {
+      play: play,
+      setInView: function (v) { inView = v; if (v) resumeClock(); else suspendClock(); }
+    };
+  }
+  /* ===== relay card end ===== */
+
+  /* Hero: the handoff card */
+  var story = document.getElementById("story");
+  var relayCard = mountRelayCard(document.getElementById("hero-card"));
+
+  /* An element's box in the local pixels of a container, safe under CSS zoom */
+  function rel(el, base) {
+    var b = base.getBoundingClientRect(), r = el.getBoundingClientRect(), k = base.offsetWidth / (b.width || 1);
+    return { left: (r.left - b.left) * k, top: (r.top - b.top) * k, right: (r.right - b.left) * k, bottom: (r.bottom - b.top) * k, width: r.width * k, height: r.height * k };
+  }
+
+  function hidden(el) { return getComputedStyle(el).display === "none"; }
+
+  /* Closing panel map */
+  var panel = document.getElementById("panel");
+  function layoutPanel() {
+    if (hidden(panel.querySelector(".map"))) return;
+    var W = panel.clientWidth, H = panel.clientHeight;
+    if (!W || !H) return;
+    var ys = [0, 1, 2, 3].map(function (i) { return half(36 + i * (H - 72) / 3); });
+    document.getElementById("panel-svg").setAttribute("viewBox", "0 0 " + W + " " + H);
+    var ir = rel(panel.querySelector(".panel-in"), panel), ph = rel(panel.querySelector("h2"), panel);
+    var textBox = { l: ir.left, r: Math.max(ph.right, ir.left + 320), t: ir.top, b: ir.bottom };
+    drawTrack(document.getElementById("panel-static"), W, ys, {
+      x0: 0, boxes: [textBox], text: [textBox],
+      stations: [[0.58, 0.8, 0.94], [0.66, 0.88], [0.52, 0.74, 0.9], [0.7, 0.96]],
+      switches: [{ a: 0, b: 1, f: 0.72 }, { a: 1, b: 2, f: 0.84 }, { a: 2, b: 3, f: 0.62 }, { a: 1, b: 2, f: 0.28 }]
+    });
+  }
+
+  var rafId = 0;
+  function relayout() {
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(function () { layoutPanel(); layoutGraph(); });
+  }
+
+  /* Hero story: the card plays when it comes into view and pauses off screen */
+  var started = false;
+  if (!reduce && "IntersectionObserver" in window) {
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        relayCard.setInView(e.isIntersecting);
+        if (e.isIntersecting && !started) { started = true; relayCard.play(); }
+      });
+    }, { threshold: 0.2 }).observe(story);
+  } else if (!reduce) {
+    relayCard.setInView(true); relayCard.play();
+  }
+  /* Task graph */
+  var tg = document.getElementById("tg");
+  var tgEdges = document.getElementById("tg-edges");
+  var tgDots = document.getElementById("tg-dots");
+  var NODES = [
+    { id: "plan", t: "Plan the job", p: "claude", dc: 1, dr: 2, mc: 2, mr: 1, s: "Done" },
+    { id: "cb", t: "Callback route", p: "claude", dc: 2, dr: 1, mc: 1, mr: 2, s: "Working" },
+    { id: "tbl", t: "Sessions table", p: "codex", dc: 2, dr: 2, mc: 2, mr: 2, s: "Working" },
+    { id: "ui", t: "Sign-in page", p: "codex", dc: 2, dr: 3, mc: 3, mr: 2, s: "Working" },
+    { id: "tst", t: "Callback tests", p: "codex", dc: 3, dr: 1, mc: 1, mr: 3, s: "Working" },
+    { id: "ref", t: "Token refresh", p: "claude", dc: 3, dr: 2, mc: 2, mr: 3, s: "Working" },
+    { id: "sto", t: "Session store", p: "codex", dc: 3, dr: 3, mc: 3, mr: 3, s: "Working" },
+    { id: "out", t: "Sign-out everywhere", p: "claude", dc: 4, dr: 2, mc: 2, mr: 4, s: "Working" },
+    { id: "rev", t: "Review", p: "claude", dc: 5, dr: 2, mc: 2, mr: 5, s: "Waiting" }
+  ];
+  var EDGES = [["plan", "cb"], ["plan", "tbl"], ["plan", "ui"], ["cb", "tst"], ["cb", "ref"], ["tbl", "ref"], ["ui", "sto"], ["tst", "out"], ["ref", "out"], ["sto", "out"], ["out", "rev"]];
+  var PAUSABLE = ["cb", "ref", "out", "rev"];
+  var providerLogoURLs = {"claude": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTQiIGhlaWdodD0iOTQiIHZpZXdCb3g9IjAgMCA5NCA5NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE4Ljc2NTcgNjIuNDQzN0wzNy4xODIyIDUyLjExNjdMMzcuNDg1NyA1MS4yMTIyTDM3LjE4MjIgNTAuNzA4NUgzNi4yNzE1TDMzLjE4NTIgNTAuNTIwOEwyMi42NjE1IDUwLjIzOTFMMTMuNTU0NSA0OS44NjM2TDQuNzAwNDQgNDkuMzk0MkwyLjQ3NDI4IDQ4LjkyNDhMMC4zOTk5MDIgNDYuMTU1M0wwLjYwMjI4MSA0NC43OTRMMi40NzQyOCA0My41MjY2TDUuMTU1NzkgNDMuNzYxM0wxMS4wNzU0IDQ0LjE4MzdMMTkuOTggNDQuNzk0TDI2LjQwNTUgNDUuMTY5NUwzNS45Njc5IDQ2LjE1NTNIMzcuNDg1N0wzNy42ODgxIDQ1LjU0NUwzNy4xODIyIDQ1LjE2OTVMMzYuNzc3NCA0NC43OTRMMjcuNTY5MiAzOC41NTA4TDE3LjYwMjEgMzEuOTc5MUwxMi4zOTA4IDI4LjE3NjlMOS42MDgxMiAyNi4yNTI0TDguMTkxNDcgMjQuNDY4Nkw3LjU4NDMzIDIwLjUyNTZMMTAuMTE0MSAxNy43MDkxTDEzLjU1NDUgMTcuOTQzOEwxNC40MTQ2IDE4LjE3ODVMMTcuOTA1NiAyMC44NTQyTDI1LjM0MyAyNi42Mjc5TDM1LjA1NzIgMzMuNzYyOUwzNi40NzM5IDM0LjkzNjRMMzcuMDQ0MyAzNC41NTE0TDM3LjEzMTYgMzQuMjc5MkwzNi40NzM5IDMzLjE5OTZMMzEuMjEyIDIzLjY3MDZMMjUuNTk2IDEzLjk1MzlMMjMuMDY2MyA5LjkxNjk1TDIyLjQwODYgNy41MjI5NkMyMi4xNTM4IDYuNTE4MzEgMjIuMDAzOCA1LjY4NzE0IDIyLjAwMzggNC42NTk1N0wyNC44ODc3IDAuNzE2NTQ0TDI2LjUwNjcgMC4yMDAxOTVMMzAuNDAyNSAwLjcxNjU0NEwzMi4wMjE1IDIuMTI0NzdMMzQuNDUwMSA3LjY2Mzc5TDM4LjM0NTggMTYuMzQ3OEw0NC40MTcyIDI4LjE3NjlMNDYuMTg4IDMxLjY5NzVMNDcuMTQ5MyAzNC45MzY0TDQ3LjUwMzUgMzUuOTIyMkg0OC4xMTA2VjM1LjM1ODlMNDguNjE2NiAyOC42OTMzTDQ5LjUyNzMgMjAuNTI1Nkw1MC40MzggMTAuMDEwOEw1MC43NDE1IDcuMDUzNTZMNTIuMjA4OCAzLjQ4NjA1TDU1LjE0MzMgMS41NjE0OEw1Ny40MiAyLjY0MTEyTDU5LjI5MiA1LjMxNjc0TDU5LjAzOSA3LjA1MzU2TDU3LjkyNiAxNC4yODI0TDU1Ljc1MDQgMjUuNTk1Mkw1NC4zMzM3IDMzLjE5OTZINTUuMTQzM0w1Ni4xMDQ2IDMyLjIxMzhMNTkuOTQ5NyAyNy4xNDQyTDY2LjM3NTIgMTkuMDcwNEw2OS4yMDg1IDE1Ljg3ODRMNzIuNTQ3OCAxMi4zNTc5TDc0LjY3MjggMTAuNjY4SDc4LjcyMDNMODEuNjU0OCAxNS4wODA0TDgwLjMzOTQgMTkuNjMzN0w3Ni4xOTA2IDI0Ljg5MTFMNzIuNzUwMiAyOS4zNTA0TDY3LjgxNzIgMzUuOTU5NUw2NC43NTYyIDQxLjI3MzRMNjUuMDMwNyA0MS43MTE4TDY1Ljc2ODEgNDEuNjQ4OUw3Ni44OTg5IDM5LjI1NUw4Mi45MTk3IDM4LjE3NTNMOTAuMTA0MSAzNi45NTQ5TDkzLjM0MjIgMzguNDU3TDkzLjY5NjMgNDAuMDA2TDkyLjQzMTUgNDMuMTUxTDg0Ljc0MTEgNDUuMDI4N0w3NS43MzUzIDQ2Ljg1OTRMNjIuMzI0NCA1MC4wMTY0TDYyLjE3NTkgNTAuMTM1OEw2Mi4zNTEyIDUwLjM5NThMNjguMzk5IDUwLjk0MzJMNzAuOTc5NCA1MS4wODRINzcuMzAzN0w4OS4wOTIyIDUxLjk3NTlMOTIuMTc4NSA1My45OTQ0TDkzLjk5OTkgNTYuNDgyMkw5My42OTYzIDU4LjQwNjhMODguOTQwNCA2MC44MDA4TDgyLjU2NTUgNTkuMjk4N0w2Ny42NDAxIDU1LjczMTJMNjIuNTMwMSA1NC40NjM4SDYxLjgyMTdWNTQuODg2Mkw2Ni4wNzE3IDU5LjA2NEw3My45MTM5IDY2LjEwNTFMODMuNjc4NiA3NS4yMTE2TDg0LjE4NDUgNzcuNDY0OEw4Mi45MTk3IDc5LjI0ODVMODEuNjA0MiA3OS4wNjA4TDczLjAwMzIgNzIuNTgyOUw2OS42NjM5IDY5LjY3MjZMNjIuMTc1OSA2My4zMzU2SDYxLjY3VjYzLjk5MjhMNjMuMzkwMiA2Ni41Mjc2TDcyLjU0NzggODAuMjgxMkw3My4wMDMyIDg0LjUwNTlMNzIuMzQ1NCA4NS44NjcyTDY5Ljk2NzUgODYuNzEyMUw2Ny4zODcxIDg2LjI0MjdMNjEuOTczNSA3OC42ODUyTDU2LjQ1ODcgNzAuMjM1OUw1Mi4wMDY0IDYyLjYzMTVMNTEuNDY4NyA2Mi45NzFMNDguODE4OSA5MS4yNjU0TDQ3LjYwNDcgOTIuNzIwNkw0NC43NzE0IDkzLjgwMDJMNDIuMzkzNCA5Mi4wMTY0TDQxLjEyODYgODkuMTA2MUw0Mi4zOTM0IDgzLjMzMjRMNDMuOTExMyA3NS44MjE5TDQ1LjEyNTUgNjkuODYwNEw0Ni4yMzg2IDYyLjQ0MzdMNDYuOTE4NCA1OS45NjYxTDQ2Ljg1ODMgNTkuODAwM0w0Ni4zMTUzIDU5Ljg5MTZMNDAuNzIzOCA2Ny41NjAzTDMyLjIyMzkgNzkuMDYwOEwyNS40OTQ4IDg2LjI0MjdMMjMuODc1OCA4Ni44OTk5TDIxLjA5MzEgODUuNDQ0N0wyMS4zNDYxIDgyLjg2M0wyMi45MTQ1IDgwLjU2MjlMMzIuMjIzOSA2OC43MzM4TDM3LjgzOTkgNjEuMzY0MUw0MS40NTk0IDU3LjEzMzdMNDEuNDI0MiA1Ni41MjE4TDQxLjIyNDQgNTYuNTA0OEwxNi40ODkgNzIuNjI5OUwxMi4wODczIDczLjE5MzJMMTAuMTY0NyA3MS40MDk0TDEwLjQxNzYgNjguNDk5MUwxMS4zMjgzIDY3LjU2MDNMMTguNzY1NyA2Mi40NDM3WiIgZmlsbD0iI0Q5Nzc1NyIvPgo8L3N2Zz4K", "openai": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIxIiBoZWlnaHQ9IjcyMSIgdmlld0JveD0iMTE4LjU1NyAxMTkuOTU4IDQ4NC4xMzkgNDc5LjgxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzE2MzdfMjkzNCkiPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDFfMTYzN18yOTM0KSI+CjxwYXRoIGQ9Ik0zMDQuMjQ2IDI5NC42MTFWMjQ5LjAyOEMzMDQuMjQ2IDI0NS4xODkgMzA1LjY4NyAyNDIuMzA5IDMwOS4wNDQgMjQwLjM5Mkw0MDAuNjkyIDE4Ny42MTJDNDEzLjE2NyAxODAuNDE1IDQyOC4wNDIgMTc3LjA1OCA0NDMuMzk0IDE3Ny4wNThDNTAwLjk3MSAxNzcuMDU4IDUzNy40NCAyMjEuNjgyIDUzNy40NCAyNjkuMTgyQzUzNy40NCAyNzIuNTQgNTM3LjQ0IDI3Ni4zNzkgNTM2Ljk1OSAyODAuMjE4TDQ0MS45NTQgMjI0LjU1OEM0MzYuMTk3IDIyMS4yMDEgNDMwLjQzNyAyMjEuMjAxIDQyNC42OCAyMjQuNTU4TDMwNC4yNDYgMjk0LjYxMVpNNTE4LjI0NSA0NzIuMTQ1VjM2My4yMjRDNTE4LjI0NSAzNTYuNTA1IDUxNS4zNjQgMzUxLjcwNyA1MDkuNjA4IDM0OC4zNDlMMzg5LjE3NCAyNzguMjk2TDQyOC41MTkgMjU1Ljc0M0M0MzEuODc3IDI1My44MjYgNDM0Ljc1NyAyNTMuODI2IDQzOC4xMTUgMjU1Ljc0M0w1MjkuNzYyIDMwOC41MjNDNTU2LjE1NCAzMjMuODc5IDU3My45MDUgMzU2LjUwNSA1NzMuOTA1IDM4OC4xNzFDNTczLjkwNSA0MjQuNjM2IDU1Mi4zMTUgNDU4LjIyNSA1MTguMjQ1IDQ3Mi4xNDFWNDcyLjE0NVpNMjc1LjkzNyAzNzYuMTgyTDIzNi41OTIgMzUzLjE1MkMyMzMuMjM1IDM1MS4yMzUgMjMxLjc5NCAzNDguMzU0IDIzMS43OTQgMzQ0LjUxNVYyMzguOTU2QzIzMS43OTQgMTg3LjYxNyAyNzEuMTM5IDE0OC43NDkgMzI0LjQgMTQ4Ljc0OUMzNDQuNTU1IDE0OC43NDkgMzYzLjI2NCAxNTUuNDY4IDM3OS4xMDIgMTY3LjQ2M0wyODQuNTc4IDIyMi4xNjRDMjc4LjgyMiAyMjUuNTIxIDI3NS45NDIgMjMwLjMxOSAyNzUuOTQyIDIzNy4wMzlWMzc2LjE4NkwyNzUuOTM3IDM3Ni4xODJaTTM2MC42MjYgNDI1LjEyMkwzMDQuMjQ2IDM5My40NTVWMzI2LjI4M0wzNjAuNjI2IDI5NC42MTZMNDE3LjAwMiAzMjYuMjgzVjM5My40NTVMMzYwLjYyNiA0MjUuMTIyWk0zOTYuODUyIDU3MC45ODlDMzc2LjY5OCA1NzAuOTg5IDM1Ny45ODkgNTY0LjI3IDM0Mi4xNTEgNTUyLjI3Nkw0MzYuNjc0IDQ5Ny41NzRDNDQyLjQzMSA0OTQuMjE3IDQ0NS4zMTEgNDg5LjQxOSA0NDUuMzExIDQ4Mi42OTlWMzQzLjU1Mkw0ODUuMTM4IDM2Ni41ODJDNDg4LjQ5NSAzNjguNDk5IDQ4OS45MzYgMzcxLjM3OSA0ODkuOTM2IDM3NS4yMTlWNDgwLjc3OEM0ODkuOTM2IDUzMi4xMTcgNDUwLjEwOSA1NzAuOTg1IDM5Ni44NTIgNTcwLjk4NVY1NzAuOTg5Wk0yODMuMTM0IDQ2My45OUwxOTEuNDg2IDQxMS4yMTFDMTY1LjA5NCAzOTUuODU0IDE0Ny4zNDMgMzYzLjIyOSAxNDcuMzQzIDMzMS41NjJDMTQ3LjM0MyAyOTQuNjE2IDE2OS40MTUgMjYxLjUwOSAyMDMuNDggMjQ3LjU5M1YzNTYuOTkxQzIwMy40OCAzNjMuNzEgMjA2LjM2MSAzNjguNTA4IDIxMi4xMTcgMzcxLjg2NkwzMzIuMDc0IDQ0MS40MzdMMjkyLjcyOSA0NjMuOTlDMjg5LjM3MiA0NjUuOTA3IDI4Ni40OTEgNDY1LjkwNyAyODMuMTM0IDQ2My45OVpNMjc3Ljg1OSA1NDIuNjhDMjIzLjYzOSA1NDIuNjggMTgzLjgxMyA1MDEuODk1IDE4My44MTMgNDUxLjUxNEMxODMuODEzIDQ0Ny42NzUgMTg0LjI5NCA0NDMuODM2IDE4NC43NzEgNDM5Ljk5N0wyNzkuMjk1IDQ5NC42OThDMjg1LjA1MSA0OTguMDU2IDI5MC44MTIgNDk4LjA1NiAyOTYuNTY4IDQ5NC42OThMNDE3LjAwMiA0MjUuMTI3VjQ3MC43MUM0MTcuMDAyIDQ3NC41NDkgNDE1LjU2MiA0NzcuNDI5IDQxMi4yMDQgNDc5LjM0NkwzMjAuNTU3IDUzMi4xMjZDMzA4LjA4MSA1MzkuMzIzIDI5My4yMDYgNTQyLjY4IDI3Ny44NTQgNTQyLjY4SDI3Ny44NTlaTTM5Ni44NTIgNTk5Ljc3NkM0NTQuOTExIDU5OS43NzYgNTAzLjM3IDU1OC41MTMgNTE0LjQxIDUwMy44MTJDNTY4LjE0OSA0ODkuODk2IDYwMi42OTYgNDM5LjUxNSA2MDIuNjk2IDM4OC4xNzZDNjAyLjY5NiAzNTQuNTg3IDU4OC4zMDMgMzIxLjk2MiA1NjIuMzkyIDI5OC40NUM1NjQuNzkxIDI4OC4zNzMgNTY2LjIzMSAyNzguMjk2IDU2Ni4yMzEgMjY4LjIyNEM1NjYuMjMxIDE5OS42MTEgNTEwLjU3MSAxNDguMjY3IDQ0Ni4yNzQgMTQ4LjI2N0M0MzMuMzIyIDE0OC4yNjcgNDIwLjg0NiAxNTAuMTg0IDQwOC4zNyAxNTQuNTA1QzM4Ni43NzUgMTMzLjM5MiAzNTcuMDI2IDExOS45NTggMzI0LjQgMTE5Ljk1OEMyNjYuMzQyIDExOS45NTggMjE3Ljg4MyAxNjEuMjIgMjA2Ljg0MyAyMTUuOTIxQzE1My4xMDQgMjI5LjgzNyAxMTguNTU3IDI4MC4yMTggMTE4LjU1NyAzMzEuNTU3QzExOC41NTcgMzY1LjE0NiAxMzIuOTUgMzk3Ljc3MSAxNTguODYxIDQyMS4yODNDMTU2LjQ2MiA0MzEuMzYgMTU1LjAyMiA0NDEuNDM3IDE1NS4wMjIgNDUxLjUxQzE1NS4wMjIgNTIwLjEyMyAyMTAuNjgyIDU3MS40NjYgMjc0Ljk3OCA1NzEuNDY2QzI4Ny45MzEgNTcxLjQ2NiAzMDAuNDA3IDU2OS41NDkgMzEyLjg4MyA1NjUuMjI4QzMzNC40NzMgNTg2LjM0MSAzNjQuMjIyIDU5OS43NzYgMzk2Ljg1MiA1OTkuNzc2WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI3MjAiIGhlaWdodD0iNzIwIiBmaWxsPSJ3aGl0ZSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC42MDY5MzQgMC4wOTk5NzU2KSIvPgo8L2NsaXBQYXRoPgo8Y2xpcFBhdGggaWQ9ImNsaXAxXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI0ODQuMTM5IiBoZWlnaHQ9IjQ3OS44MTgiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMTguNTU3IDExOS45NTgpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg==", "cursor": "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iRWJlbmVfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiIHZpZXdCb3g9IjAgMCA0NjYuNzMgNTMyLjA5Ij4KICA8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMjkuNi4xLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogMi4xLjEgQnVpbGQgOSkgIC0tPgogIDxkZWZzPgogICAgPHN0eWxlPgogICAgICAuc3QwIHsKICAgICAgICBmaWxsOiAjMjYyNTFlOwogICAgICB9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8cGF0aCBjbGFzcz0ic3QwIiBkPSJNNDU3LjQzLDEyNS45NEwyNDQuNDIsMi45NmMtNi44NC0zLjk1LTE1LjI4LTMuOTUtMjIuMTIsMEw5LjMsMTI1Ljk0Yy01Ljc1LDMuMzItOS4zLDkuNDYtOS4zLDE2LjExdjI0Ny45OWMwLDYuNjUsMy41NSwxMi43OSw5LjMsMTYuMTFsMjEzLjAxLDEyMi45OGM2Ljg0LDMuOTUsMTUuMjgsMy45NSwyMi4xMiwwbDIxMy4wMS0xMjIuOThjNS43NS0zLjMyLDkuMy05LjQ2LDkuMy0xNi4xMXYtMjQ3Ljk5YzAtNi42NS0zLjU1LTEyLjc5LTkuMy0xNi4xMWgtLjAxWk00NDQuMDUsMTUxLjk5bC0yMDUuNjMsMzU2LjE2Yy0xLjM5LDIuNC01LjA2LDEuNDItNS4wNi0xLjM2di0yMzMuMjFjMC00LjY2LTIuNDktOC45Ny02LjUzLTExLjMxTDI0Ljg3LDE0NS42N2MtMi40LTEuMzktMS40Mi01LjA2LDEuMzYtNS4wNmg0MTEuMjZjNS44NCwwLDkuNDksNi4zMyw2LjU3LDExLjM5aC0uMDFaIi8+Cjwvc3ZnPg==", "codex": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIxIiBoZWlnaHQ9IjcyMSIgdmlld0JveD0iMTE4LjU1NyAxMTkuOTU4IDQ4NC4xMzkgNDc5LjgxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwXzE2MzdfMjkzNCkiPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDFfMTYzN18yOTM0KSI+CjxwYXRoIGQ9Ik0zMDQuMjQ2IDI5NC42MTFWMjQ5LjAyOEMzMDQuMjQ2IDI0NS4xODkgMzA1LjY4NyAyNDIuMzA5IDMwOS4wNDQgMjQwLjM5Mkw0MDAuNjkyIDE4Ny42MTJDNDEzLjE2NyAxODAuNDE1IDQyOC4wNDIgMTc3LjA1OCA0NDMuMzk0IDE3Ny4wNThDNTAwLjk3MSAxNzcuMDU4IDUzNy40NCAyMjEuNjgyIDUzNy40NCAyNjkuMTgyQzUzNy40NCAyNzIuNTQgNTM3LjQ0IDI3Ni4zNzkgNTM2Ljk1OSAyODAuMjE4TDQ0MS45NTQgMjI0LjU1OEM0MzYuMTk3IDIyMS4yMDEgNDMwLjQzNyAyMjEuMjAxIDQyNC42OCAyMjQuNTU4TDMwNC4yNDYgMjk0LjYxMVpNNTE4LjI0NSA0NzIuMTQ1VjM2My4yMjRDNTE4LjI0NSAzNTYuNTA1IDUxNS4zNjQgMzUxLjcwNyA1MDkuNjA4IDM0OC4zNDlMMzg5LjE3NCAyNzguMjk2TDQyOC41MTkgMjU1Ljc0M0M0MzEuODc3IDI1My44MjYgNDM0Ljc1NyAyNTMuODI2IDQzOC4xMTUgMjU1Ljc0M0w1MjkuNzYyIDMwOC41MjNDNTU2LjE1NCAzMjMuODc5IDU3My45MDUgMzU2LjUwNSA1NzMuOTA1IDM4OC4xNzFDNTczLjkwNSA0MjQuNjM2IDU1Mi4zMTUgNDU4LjIyNSA1MTguMjQ1IDQ3Mi4xNDFWNDcyLjE0NVpNMjc1LjkzNyAzNzYuMTgyTDIzNi41OTIgMzUzLjE1MkMyMzMuMjM1IDM1MS4yMzUgMjMxLjc5NCAzNDguMzU0IDIzMS43OTQgMzQ0LjUxNVYyMzguOTU2QzIzMS43OTQgMTg3LjYxNyAyNzEuMTM5IDE0OC43NDkgMzI0LjQgMTQ4Ljc0OUMzNDQuNTU1IDE0OC43NDkgMzYzLjI2NCAxNTUuNDY4IDM3OS4xMDIgMTY3LjQ2M0wyODQuNTc4IDIyMi4xNjRDMjc4LjgyMiAyMjUuNTIxIDI3NS45NDIgMjMwLjMxOSAyNzUuOTQyIDIzNy4wMzlWMzc2LjE4NkwyNzUuOTM3IDM3Ni4xODJaTTM2MC42MjYgNDI1LjEyMkwzMDQuMjQ2IDM5My40NTVWMzI2LjI4M0wzNjAuNjI2IDI5NC42MTZMNDE3LjAwMiAzMjYuMjgzVjM5My40NTVMMzYwLjYyNiA0MjUuMTIyWk0zOTYuODUyIDU3MC45ODlDMzc2LjY5OCA1NzAuOTg5IDM1Ny45ODkgNTY0LjI3IDM0Mi4xNTEgNTUyLjI3Nkw0MzYuNjc0IDQ5Ny41NzRDNDQyLjQzMSA0OTQuMjE3IDQ0NS4zMTEgNDg5LjQxOSA0NDUuMzExIDQ4Mi42OTlWMzQzLjU1Mkw0ODUuMTM4IDM2Ni41ODJDNDg4LjQ5NSAzNjguNDk5IDQ4OS45MzYgMzcxLjM3OSA0ODkuOTM2IDM3NS4yMTlWNDgwLjc3OEM0ODkuOTM2IDUzMi4xMTcgNDUwLjEwOSA1NzAuOTg1IDM5Ni44NTIgNTcwLjk4NVY1NzAuOTg5Wk0yODMuMTM0IDQ2My45OUwxOTEuNDg2IDQxMS4yMTFDMTY1LjA5NCAzOTUuODU0IDE0Ny4zNDMgMzYzLjIyOSAxNDcuMzQzIDMzMS41NjJDMTQ3LjM0MyAyOTQuNjE2IDE2OS40MTUgMjYxLjUwOSAyMDMuNDggMjQ3LjU5M1YzNTYuOTkxQzIwMy40OCAzNjMuNzEgMjA2LjM2MSAzNjguNTA4IDIxMi4xMTcgMzcxLjg2NkwzMzIuMDc0IDQ0MS40MzdMMjkyLjcyOSA0NjMuOTlDMjg5LjM3MiA0NjUuOTA3IDI4Ni40OTEgNDY1LjkwNyAyODMuMTM0IDQ2My45OVpNMjc3Ljg1OSA1NDIuNjhDMjIzLjYzOSA1NDIuNjggMTgzLjgxMyA1MDEuODk1IDE4My44MTMgNDUxLjUxNEMxODMuODEzIDQ0Ny42NzUgMTg0LjI5NCA0NDMuODM2IDE4NC43NzEgNDM5Ljk5N0wyNzkuMjk1IDQ5NC42OThDMjg1LjA1MSA0OTguMDU2IDI5MC44MTIgNDk4LjA1NiAyOTYuNTY4IDQ5NC42OThMNDE3LjAwMiA0MjUuMTI3VjQ3MC43MUM0MTcuMDAyIDQ3NC41NDkgNDE1LjU2MiA0NzcuNDI5IDQxMi4yMDQgNDc5LjM0NkwzMjAuNTU3IDUzMi4xMjZDMzA4LjA4MSA1MzkuMzIzIDI5My4yMDYgNTQyLjY4IDI3Ny44NTQgNTQyLjY4SDI3Ny44NTlaTTM5Ni44NTIgNTk5Ljc3NkM0NTQuOTExIDU5OS43NzYgNTAzLjM3IDU1OC41MTMgNTE0LjQxIDUwMy44MTJDNTY4LjE0OSA0ODkuODk2IDYwMi42OTYgNDM5LjUxNSA2MDIuNjk2IDM4OC4xNzZDNjAyLjY5NiAzNTQuNTg3IDU4OC4zMDMgMzIxLjk2MiA1NjIuMzkyIDI5OC40NUM1NjQuNzkxIDI4OC4zNzMgNTY2LjIzMSAyNzguMjk2IDU2Ni4yMzEgMjY4LjIyNEM1NjYuMjMxIDE5OS42MTEgNTEwLjU3MSAxNDguMjY3IDQ0Ni4yNzQgMTQ4LjI2N0M0MzMuMzIyIDE0OC4yNjcgNDIwLjg0NiAxNTAuMTg0IDQwOC4zNyAxNTQuNTA1QzM4Ni43NzUgMTMzLjM5MiAzNTcuMDI2IDExOS45NTggMzI0LjQgMTE5Ljk1OEMyNjYuMzQyIDExOS45NTggMjE3Ljg4MyAxNjEuMjIgMjA2Ljg0MyAyMTUuOTIxQzE1My4xMDQgMjI5LjgzNyAxMTguNTU3IDI4MC4yMTggMTE4LjU1NyAzMzEuNTU3QzExOC41NTcgMzY1LjE0NiAxMzIuOTUgMzk3Ljc3MSAxNTguODYxIDQyMS4yODNDMTU2LjQ2MiA0MzEuMzYgMTU1LjAyMiA0NDEuNDM3IDE1NS4wMjIgNDUxLjUxQzE1NS4wMjIgNTIwLjEyMyAyMTAuNjgyIDU3MS40NjYgMjc0Ljk3OCA1NzEuNDY2QzI4Ny45MzEgNTcxLjQ2NiAzMDAuNDA3IDU2OS41NDkgMzEyLjg4MyA1NjUuMjI4QzMzNC40NzMgNTg2LjM0MSAzNjQuMjIyIDU5OS43NzYgMzk2Ljg1MiA1OTkuNzc2WiIgZmlsbD0iYmxhY2siLz4KPC9nPgo8L2c+CjxkZWZzPgo8Y2xpcFBhdGggaWQ9ImNsaXAwXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI3MjAiIGhlaWdodD0iNzIwIiBmaWxsPSJ3aGl0ZSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC42MDY5MzQgMC4wOTk5NzU2KSIvPgo8L2NsaXBQYXRoPgo8Y2xpcFBhdGggaWQ9ImNsaXAxXzE2MzdfMjkzNCI+CjxyZWN0IHdpZHRoPSI0ODQuMTM5IiBoZWlnaHQ9IjQ3OS44MTgiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMTguNTU3IDExOS45NTgpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg=="};
+  var nodeEl = {};
+  NODES.forEach(function (n) {
+    var d = document.createElement("div");
+    d.className = "tg-node " + n.p;
+    d.dataset.node = n.id;
+    d.style.setProperty("--dc", n.dc); d.style.setProperty("--dr", n.dr);
+    d.style.setProperty("--mc", n.mc); d.style.setProperty("--mr", n.mr);
+    var paus = PAUSABLE.indexOf(n.id) > -1;
+    d.innerHTML = '<div class="nt"></div><div class="nm2"><span class="pv"><img class="brand-mark ' + n.p + '" src="' + providerLogoURLs[n.p] + '" alt="" aria-hidden="true" width="14" height="14">' + (n.p === "claude" ? "Claude" : "Codex") + '</span><span class="stack sw2"><span class="w"></span>' + (paus ? '<span class="p">Paused</span>' : "") + '</span></div>';
+    d.querySelector(".nt").textContent = n.t;
+    d.querySelector(".w").textContent = n.s;
+    tg.appendChild(d);
+    nodeEl[n.id] = d;
+  });
+  var provOf = {};
+  NODES.forEach(function (n) { provOf[n.id] = n.p; });
+  var dotList = [];
+  var tgVisible = false, phase = 0, tClock = 0, graphPaused = false;
+
+  function edgePaused(e) { return phase === 1 && (PAUSABLE.indexOf(e[0]) > -1 || PAUSABLE.indexOf(e[1]) > -1); }
+
+
+  function proposedGraph() { return document.documentElement.dataset.graphics === "simple"; }
+  function roundedPath(points, radius) {
+    var out = "M" + points[0][0] + " " + points[0][1];
+    for (var i=1; i<points.length-1; i++) {
+      var a=points[i-1], b=points[i], c=points[i+1];
+      var ab=Math.hypot(b[0]-a[0], b[1]-a[1]), bc=Math.hypot(c[0]-b[0], c[1]-b[1]);
+      if (!ab || !bc) continue;
+      var r=Math.min(radius,ab/2,bc/2);
+      var before=[b[0]+(a[0]-b[0])*r/ab,b[1]+(a[1]-b[1])*r/ab];
+      var after=[b[0]+(c[0]-b[0])*r/bc,b[1]+(c[1]-b[1])*r/bc];
+      out+=" L"+before[0]+" "+before[1]+" Q"+b[0]+" "+b[1]+" "+after[0]+" "+after[1];
+    }
+    var end=points[points.length-1];return out+" L"+end[0]+" "+end[1];
+  }
+  function drawProposedGraph(vertical) {
+    EDGES.forEach(function (edge) {
+      var a=rel(nodeEl[edge[0]],tg),b=rel(nodeEl[edge[1]],tg),points;
+      if(!vertical) {
+        var x1=a.right,y1=a.top+a.height/2,x2=b.left,y2=b.top+b.height/2;
+        var mid=(x1+x2)/2;
+        points=Math.abs(y1-y2)<1 ? [[x1,y1],[x2,y2]] : [[x1,y1],[mid,y1],[mid,y2],[x2,y2]];
+      } else {
+        var x1=a.left+a.width/2,y1=a.bottom,x2=b.left+b.width/2,y2=b.top;
+        var mid=(y1+y2)/2;
+        points=Math.abs(x1-x2)<1 ? [[x1,y1],[x2,y2]] : [[x1,y1],[x1,mid],[x2,mid],[x2,y2]];
+      }
+      svgEl("path", {d:roundedPath(points,8),"data-from":edge[0],"data-to":edge[1],"class":edgePaused(edge)?"paused-edge":""},tgEdges);
+    });
+  }
+
+  function layoutGraph() {
+    var vertical = tg.clientWidth < (proposedGraph() ? 880 : 700);
+    tg.classList.toggle("vertical", vertical);
+    var W = tg.clientWidth, H = tg.clientHeight;
+    tgEdges.setAttribute("viewBox", "0 0 " + W + " " + H);
+    while (tgEdges.firstChild) tgEdges.removeChild(tgEdges.firstChild);
+    dotList.forEach(function (d) { d.a1.cancel(); d.a2.cancel(); d.wrap.remove(); });
+    dotList = [];
+    if(proposedGraph()) { drawProposedGraph(vertical); if(graphFocus){var selected=graphFocus;graphFocus="";focusTask(selected);} return; }
+    EDGES.forEach(function (e, idx) {
+      var a = rel(nodeEl[e[0]], tg), b = rel(nodeEl[e[1]], tg);
+      var x1, y1, x2, y2, pts;
+      if (!vertical) {
+        x1 = Math.round(a.right); y1 = half(a.top + a.height / 2);
+        x2 = Math.round(b.left); y2 = half(b.top + b.height / 2);
+        var xm = half((x1 + x2) / 2);
+        pts = [[x1, y1], [xm, y1], [xm, y2], [x2, y2]];
+      } else {
+        x1 = half(a.left + a.width / 2); y1 = Math.round(a.bottom);
+        x2 = half(b.left + b.width / 2); y2 = Math.round(b.top);
+        var ym = half((y1 + y2) / 2);
+        pts = [[x1, y1], [x1, ym], [x2, ym], [x2, y2]];
+      }
+      svgEl("path", { d: "M" + pts.map(function (p) { return p[0] + " " + p[1]; }).join(" L"), "shape-rendering": "crispEdges" }, tgEdges);
+      if (reduce) return;
+      var lens = [0], total = 0;
+      for (var i = 1; i < pts.length; i++) { total += Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]); lens.push(total); }
+      var span = 0.72;
+      var frames = pts.map(function (p, i) {
+        return { transform: "translate(" + (p[0] - x1) + "px," + (p[1] - y1) + "px)", offset: total ? (lens[i] / total) * span : 0 };
+      });
+      frames.push({ transform: frames[frames.length - 1].transform, offset: 1 });
+      for (var k = 1; k < frames.length; k++) if (frames[k].offset < frames[k - 1].offset) frames[k].offset = frames[k - 1].offset;
+      var wrap = document.createElement("span");
+      wrap.className = "dw";
+      wrap.style.left = x1 + "px"; wrap.style.top = y1 + "px";
+      var mover = document.createElement("span");
+      mover.style.display = "block";
+      var dot = document.createElement("i");
+      dot.className = "dot " + provOf[e[0]];
+      mover.appendChild(dot); wrap.appendChild(mover); tgDots.appendChild(wrap);
+      var opts = { duration: 2800, iterations: Infinity, delay: (idx % 4) * 450 + Math.floor(idx / 4) * 260, easing: "linear" };
+      var a1 = mover.animate(frames, opts);
+      var a2 = dot.animate([
+        { opacity: 0, offset: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1, offset: span - 0.06 }, { opacity: 0, offset: span }, { opacity: 0, offset: 1 }
+      ], opts);
+      var rec = { e: e, wrap: wrap, a1: a1, a2: a2 };
+      dotList.push(rec);
+      syncDot(rec);
+    });
+  }
+  function syncDot(d) {
+    var stop = edgePaused(d.e) || !tgVisible || document.hidden || graphPaused;
+    d.wrap.classList.toggle("off", edgePaused(d.e));
+    if (stop) { d.a1.pause(); d.a2.pause(); } else { d.a1.play(); d.a2.play(); }
+  }
+  function setPhase(p) {
+    phase = p;
+    document.querySelectorAll("#tg-phase > span, #tg-clock > span").forEach(function (s) { s.style.opacity = Number(s.dataset.ph) === p ? "1" : "0"; });
+    PAUSABLE.forEach(function (id) { nodeEl[id].classList.toggle("is-paused", p === 1); });
+    dotList.forEach(syncDot);
+    tgEdges.querySelectorAll("path[data-from]").forEach(function(path){path.classList.toggle("paused-edge",edgePaused([path.dataset.from,path.dataset.to]));});
+    document.querySelectorAll("[data-graph-phase]").forEach(function(button){button.setAttribute("aria-pressed",String(Number(button.dataset.graphPhase)===p));});
+  }
+  var tgFig = document.querySelector(".tg-fig");
+  if (reduce) {
+    document.getElementById("tg-caption").textContent = "Illustrated. The first release switches one job at a time. Motion is reduced, so the graph is still.";
+  } else {
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { tgVisible = e.isIntersecting; dotList.forEach(syncDot); });
+      }, { threshold: 0.15 }).observe(tgFig);
+    } else { tgVisible = true; }
+    setInterval(function () {
+      if (!tgVisible || document.hidden || graphPaused) return;
+      tClock = proposedGraph() ? Math.min(tClock + 0.25, 15) : (tClock + 0.25) % 15;
+      var p = tClock < 7 ? 0 : (tClock < 11.5 ? 1 : 2);
+      if (p !== phase) setPhase(p);
+    }, 250);
+  }
+
+
+  var graphFocus="";
+  function focusTask(id) {
+    graphFocus=graphFocus===id?"":id;
+    if(graphFocus) tg.dataset.focus=graphFocus; else delete tg.dataset.focus;
+    var related={};if(graphFocus)related[graphFocus]=true;
+    EDGES.forEach(function(edge){if(edge.indexOf(graphFocus)>-1){related[edge[0]]=true;related[edge[1]]=true;}});
+    NODES.forEach(function(node){nodeEl[node.id].classList.toggle("focused-node",node.id===graphFocus);nodeEl[node.id].classList.toggle("related-node",Boolean(related[node.id]));nodeEl[node.id].setAttribute("aria-pressed",String(node.id===graphFocus));});
+    tgEdges.querySelectorAll("path[data-from]").forEach(function(path){path.classList.toggle("focused-edge",path.dataset.from===graphFocus||path.dataset.to===graphFocus);});
+  }
+  NODES.forEach(function(node){
+    var el=nodeEl[node.id];el.setAttribute("role","button");el.setAttribute("tabindex","0");el.setAttribute("aria-label",node.t+" dependencies");el.setAttribute("aria-pressed","false");
+    el.addEventListener("click",function(){if(proposedGraph())focusTask(node.id);});
+    el.addEventListener("keydown",function(event){if(proposedGraph()&&(event.key==="Enter"||event.key===" ")){event.preventDefault();focusTask(node.id);}});
+  });
+  var graphicsButtons=document.querySelectorAll("[data-graphics-choice]");
+  function chooseGraphics(value,changeURL) {
+    document.documentElement.dataset.graphics=value;
+    graphicsButtons.forEach(function(button){button.setAttribute("aria-pressed",String(button.dataset.graphicsChoice===value));});
+    if(changeURL){var url=new URL(location.href);url.searchParams.delete("variant");url.searchParams.set("graphics",value);history.replaceState(null,"",url);}
+    tClock=0;graphPaused=false;setPhase(reduce?2:0);
+    graphFocus="";focusTask("");
+    document.getElementById("graph-pause").textContent="Pause";
+    document.getElementById("graph-pause").setAttribute("aria-pressed","false");
+    relayout();
+  }
+  graphicsButtons.forEach(function(button){button.addEventListener("click",function(){chooseGraphics(button.dataset.graphicsChoice,true);});});
+  document.getElementById("graph-pause").addEventListener("click",function(){graphPaused=!graphPaused;this.textContent=graphPaused?"Resume":"Pause";this.setAttribute("aria-pressed",String(graphPaused));dotList.forEach(syncDot);});
+  document.getElementById("graph-replay").addEventListener("click",function(){tClock=0;graphPaused=false;setPhase(reduce?2:0);document.getElementById("graph-pause").textContent="Pause";document.getElementById("graph-pause").setAttribute("aria-pressed","false");});
+  document.querySelectorAll("[data-graph-phase]").forEach(function(button){button.addEventListener("click",function(){graphPaused=true;tClock=[0,7,11.5][Number(this.dataset.graphPhase)];setPhase(Number(this.dataset.graphPhase));document.getElementById("graph-pause").textContent="Resume";document.getElementById("graph-pause").setAttribute("aria-pressed","true");});});
+  if(reduce)document.getElementById("graph-pause").disabled=true;
+  chooseGraphics(new URL(location.href).searchParams.get("graphics")==="original"?"original":"simple",false);
+
+  layoutPanel(); layoutGraph();
+  if ("ResizeObserver" in window) {
+    var ro = new ResizeObserver(relayout);
+    ro.observe(panel); ro.observe(tg);
+  }
+  window.addEventListener("resize", relayout);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+
+  /* Copying: the button's label says whether it worked, for 1.6 seconds. */
+  function copyText(text, button, label, onDone) {
+    if (!label.hasAttribute("data-label")) label.setAttribute("data-label", label.textContent);
+    var done = function (ok) {
+      if (onDone) onDone(ok);
+      label.textContent = ok ? "Copied" : "Copy failed";
+      setTimeout(function () { label.textContent = label.getAttribute("data-label"); }, 1600);
+    };
+    var fallback = function () {
+      var ok = false;
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+        button.parentNode.appendChild(ta); ta.select();
+        ok = document.execCommand("copy");
+        ta.remove();
+      } catch (e) {}
+      button.focus();
+      done(ok);
+    };
+    try {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } catch (e) { fallback(); }
+  }
+
+  /* The install panel: copy buttons, and the part to show for "Get relay". */
+  var install = document.getElementById("install");
+  var copyStatus = document.getElementById("copy-status");
+  install.querySelectorAll("[data-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var pre = document.getElementById(button.getAttribute("data-copy"));
+      copyText(pre.textContent + "\n", button, button, function (ok) {
+        copyStatus.textContent = ok ? "Commands copied." : "Copying failed. Select the commands and copy them by hand.";
+      });
+    });
+  });
+  var focusOnOpen = null;
+  document.querySelectorAll('[popovertarget="install"]').forEach(function (button) {
+    button.addEventListener("click", function () { focusOnOpen = button.getAttribute("data-install-focus"); });
+  });
+  install.addEventListener("toggle", function (event) {
+    if (event.newState !== "open" || !focusOnOpen) return;
+    var target = document.getElementById(focusOnOpen);
+    focusOnOpen = null;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+  });
+})();
+
+</script>
+</body>
+</html>

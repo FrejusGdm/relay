@@ -34,14 +34,19 @@
     <p class="rc-repo"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h5l2 2h5v8H2Z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>relay / auth</p>
     <div class="rc-line"><p class="rc-line-text" data-rc="line"><strong>Claude Code is working</strong> · building authentication</p></div>
     <div class="rc-flow" aria-label="Claude Code hands the job to Codex">
-      <div class="rc-worker active" data-rc="claude" data-lane="0">
+      <svg class="rc-handoff" viewBox="0 0 328 104" aria-hidden="true">
+        <path class="route" d="M93.5 45H144"/>
+        <path class="route route-out" d="M184 45H234.5m-7-4 7 4-7 4"/>
+        <g class="rc-symbol rc-symbol-from"><rect class="symbol" x="43.5" y="20" width="50" height="50" rx="13"/><image class="rc-logo" href="/logos/claude.svg" x="53.5" y="30" width="30" height="30"/></g>
+        <g class="rc-checkpoint"><path class="paper" d="M145 21h26l12 12v36h-38Z"/><path class="paper-fold" d="M171 21v12h12"/><path class="paper-line" d="M153 41h20M153 47h14"/><path class="check" d="m156 57 5 5 11-11"/></g>
+        <g class="rc-symbol rc-symbol-to"><rect class="symbol" x="234.5" y="20" width="50" height="50" rx="13"/><image class="rc-logo for-light" href="/logos/openai.svg" x="244.5" y="30" width="30" height="30"/><image class="rc-logo for-dark" href="/logos/openai-dark.svg" x="244.5" y="30" width="30" height="30"/></g>
+        <text class="rc-handoff-hash" data-rc="drawing-hash" x="164" y="92">8f4a20</text>
+      </svg>
+      <div class="rc-worker" data-rc="claude" data-lane="0">
         <div class="rc-worker-top"><span class="rc-worker-name">Claude Code</span><span class="rc-role" data-rc="claude-role">Current worker</span></div>
         <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state working" data-rc="claude-state">Working</span></div>
-        <div class="rc-capacity"><div class="rc-capacity-fill" data-rc="fill"></div></div>
       </div>
       <div class="rc-conn">
-        <svg class="rc-arrow" viewBox="0 0 14 65" aria-hidden="true"><path d="M7 1v59m-5-5 5 6 5-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="rc-token" data-rc="token" aria-hidden="true">↓</span>
         <p class="rc-transfer" data-rc="transfer"><b>Next worker: Codex</b>Same repository &amp; plan</p>
       </div>
       <div class="rc-worker" data-rc="codex" data-lane="2">
@@ -106,9 +111,9 @@
   <div class="wrap">
     <p>Works with the tools you already use</p>
     <ul class="ptiles">
-      <li class="pt">Claude Code</li>
-      <li class="pt">Codex</li>
-      <li class="pt planned">Cursor</li>
+      <li class="pt"><img class="brand-mark" src="/logos/claude.svg" alt="" width="16" height="16">Claude Code</li>
+      <li class="pt"><img class="brand-mark brand-mono" src="/logos/openai.svg" alt="" width="16" height="16">Codex</li>
+      <li class="pt planned"><img class="brand-mark brand-mono" src="/logos/cursor.svg" alt="" width="16" height="16">Cursor</li>
       <li class="pt planned">T3 Code</li>
       <li class="pt planned">OpenCode</li>
       <li class="pt-note">· planned</li>
@@ -127,23 +132,33 @@
       <div class="cost">
         <div class="cost-col">
           <h3>Switching by hand</h3>
+          <div class="trace" aria-hidden="true">
+            <span class="trace-time">14:19</span><span class="trace-time trace-end">15:05</span>
+            <span class="trace-line"></span>
+            <i class="trace-mark limit"></i><i class="trace-mark at-1431"></i><i class="trace-mark at-1434"></i><i class="trace-mark at-1438"></i><i class="trace-mark at-1452"></i><i class="trace-mark at-1505 end"></i>
+          </div>
           <ol class="tl">
-            <li class="ev" data-min="12"><time>14:19</time><i class="rl limit idle" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
-            <li class="ev" data-min="3"><time>14:31</time><i class="rl" aria-hidden="true"></i><span class="tx">You notice</span></li>
-            <li class="ev" data-min="4"><time>14:34</time><i class="rl" aria-hidden="true"></i><span class="tx">Copy the plan and the notes</span></li>
-            <li class="ev" data-min="14"><time>14:38</time><i class="rl" aria-hidden="true"></i><span class="tx">Open Codex, explain the repository again</span></li>
-            <li class="ev" data-min="13"><time>14:52</time><i class="rl redo" aria-hidden="true"></i><span class="tx">Codex redoes work that was already done</span></li>
-            <li class="ev" data-min="0"><time>15:05</time><i class="rl end" aria-hidden="true"></i><span class="tx">Back up to speed</span></li>
+            <li class="ev"><time>14:19</time><i class="rl limit" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev"><time>14:31</time><i class="rl" aria-hidden="true"></i><span class="tx">You notice</span></li>
+            <li class="ev"><time>14:34</time><i class="rl" aria-hidden="true"></i><span class="tx">Copy the plan and the notes</span></li>
+            <li class="ev"><time>14:38</time><i class="rl" aria-hidden="true"></i><span class="tx">Open Codex, explain the repository again</span></li>
+            <li class="ev"><time>14:52</time><i class="rl" aria-hidden="true"></i><span class="tx">Codex redoes work that was already done</span></li>
+            <li class="ev"><time>15:05</time><i class="rl" aria-hidden="true"></i><span class="tx">Back up to speed</span></li>
           </ol>
           <p class="cost-total lost"><b>46 minutes</b><span>lost</span></p>
         </div>
         <div class="cost-col">
           <h3>With relay</h3>
+          <div class="trace" aria-hidden="true">
+            <span class="trace-time">14:19</span><span class="trace-time trace-end">15:05</span>
+            <span class="trace-line"></span><span class="trace-line trace-run"></span>
+            <i class="trace-mark limit"></i><i class="trace-mark at-1505 end kept"></i>
+          </div>
           <ol class="tl">
-            <li class="ev" data-min="0"><time>14:19</time><i class="rl limit olive" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
-            <li class="ev" data-min="0"><time>14:19</time><i class="rl olive" aria-hidden="true"></i><span class="tx">relay saves checkpoint <span class="mono">912ec1</span></span></li>
-            <li class="ev cont" data-min="40.2"><time>14:20</time><i class="rl olive" aria-hidden="true"></i><span class="tx"><span class="olive-word">Codex continues the same plan</span></span></li>
-            <li class="ev" data-min="0"><time>15:05</time><i class="rl baton end" aria-hidden="true"></i><span class="tx"></span></li>
+            <li class="ev"><time>14:19</time><i class="rl limit olive" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev"><time>14:19</time><i class="rl olive" aria-hidden="true"></i><span class="tx">relay saves checkpoint <span class="mono">912ec1</span></span></li>
+            <li class="ev cont"><time>14:20</time><i class="rl olive" aria-hidden="true"></i><span class="tx"><span class="olive-word">Codex continues the same plan</span></span></li>
+            <li class="ev"><time>15:05</time><i class="rl kept" aria-hidden="true"></i><span class="tx"></span></li>
           </ol>
           <p class="cost-total kept"><b>1 minute</b></p>
         </div>
@@ -267,30 +282,16 @@ at 11:17, at its usage limit.</span>
 
       <article class="cell w6">
         <div class="stage st-lineage" aria-hidden="true">
-          <div class="lin">
-            <div class="lin-names"><span class="name-claude">Claude Code</span><span class="name-codex">Codex</span></div>
-            <div class="lin-plot">
-              <i class="rail rail-claude"></i>
-              <i class="rail rail-codex"></i>
-              <i class="lseg seg-first"></i>
-              <i class="vstep step-down"></i>
-              <i class="lseg seg-codex"></i>
-              <i class="vstep step-up"></i>
-              <i class="lseg seg-last"></i>
-              <i class="node node-start"></i>
-              <i class="node node-down"></i>
-              <i class="node node-up"></i>
-              <span class="who who-claude">claude:personal</span>
-              <span class="who who-codex">codex:personal</span>
-              <span class="who hide-sm who-startup">claude:startup</span>
-              <span class="hash hash-down">912ec1</span>
-              <span class="hash hash-up">5c3e88</span>
-              <span class="time time-start">10:02</span>
-              <span class="time time-down">11:17</span>
-              <span class="time time-up">13:04</span>
-              <span class="time time-now">now</span>
-              <span class="now-tag">Working · <span class="mono">e07b19</span></span>
-            </div>
+          <div class="lineage">
+            <svg class="lineage-path" viewBox="0 0 1000 140" preserveAspectRatio="none">
+              <path class="guide" d="M8 70H992M8 96H992"/>
+              <path class="job-path" d="M8 70H318Q338 70 348 82Q358 96 380 96H668Q688 96 698 82Q708 70 730 70H992"/>
+            </svg>
+            <i class="junction at-start"></i><i class="junction at-down"></i><i class="junction at-up"></i>
+            <div class="lineage-event at-start"><span class="provider"><img class="brand-mark" src="/logos/claude.svg" alt="" width="16" height="16">Claude Code</span><span class="account">claude:personal</span><time>10:02</time></div>
+            <div class="lineage-event at-down"><span class="provider"><img class="brand-mark brand-mono" src="/logos/openai.svg" alt="" width="16" height="16">Codex</span><span class="account">codex:personal</span><span class="hash">912ec1</span><time>11:17</time></div>
+            <div class="lineage-event at-up"><span class="provider">&nbsp;</span><span class="account">claude:startup</span><span class="hash">5c3e88</span><time>13:04</time></div>
+            <div class="lineage-now"><span>now</span><span class="working">Working · <span class="mono">e07b19</span></span></div>
           </div>
         </div>
         <div class="cell-text">
@@ -319,15 +320,19 @@ at 11:17, at its usage limit.</span>
         <span class="clock stack" id="tg-clock"><span data-ph="0">17:40</span><span data-ph="1" class="is-off">17:52</span><span data-ph="2" class="is-off">18:00</span></span>
       </div>
       <div class="tg-stage">
-        <div class="tg" id="tg">
+        <div class="tg" id="tg" role="group" aria-label="Tasks of the job" aria-describedby="tg-hint">
           <svg class="tg-edges" id="tg-edges" aria-hidden="true"></svg>
-          <div class="tg-dots" id="tg-dots" aria-hidden="true"></div>
         </div>
       </div>
-      <div class="tg-legend">
-        <span><i class="lg-sq"></i>Claude Code</span>
-        <span><i class="lg-ci"></i>Codex</span>
-        <span><i class="lg-da"></i>Paused at its limit</span>
+      <p class="sr-only" id="tg-hint">Select a task to highlight the tasks it depends on and the tasks that depend on it.</p>
+      <p class="sr-only" role="status" aria-live="polite" id="tg-announce"></p>
+      <div class="tg-foot">
+        <div class="tg-legend">
+          <span><img class="brand-mark" src="/logos/claude.svg" alt="" width="16" height="16">Claude Code</span>
+          <span><img class="brand-mark brand-mono" src="/logos/openai.svg" alt="" width="16" height="16">Codex</span>
+          <span><i class="lg-paused"></i>Paused at its limit</span>
+        </div>
+        <div class="tg-controls"><button type="button" class="rc-control" id="tg-pause" aria-pressed="false">Pause</button><button type="button" class="rc-control" id="tg-replay">Replay</button></div>
       </div>
       <figcaption class="caption" id="tg-caption">Illustrated. The first release switches one job at a time.</figcaption>
     </figure>

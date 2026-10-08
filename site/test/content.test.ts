@@ -75,10 +75,29 @@ describe("index.html", () => {
     expect(await read("site.js")).not.toMatch(/copy-btn|hero-svg|hero-map|layoutHero/);
   });
 
-  test("shows the tools in the providers row as text, with no logos", async () => {
+  test("names every tool in the providers row, with the real logo beside the ones that have one", async () => {
     const row = (await read("index.html")).match(/<div class="providers">[\s\S]*?<\/ul>/)?.[0] ?? "";
-    expect(row).toContain("Claude Code");
-    expect(row).not.toMatch(/<img|<svg/);
+    for (const name of ["Claude Code", "Codex", "Cursor", "T3 Code", "OpenCode"]) expect(row).toContain(name);
+    expect(row).not.toMatch(/<svg/);
+    const logos = [...row.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+    expect(logos.map((tag) => tag.match(/src="([^"]*)"/)?.[1])).toEqual(["/logos/claude.svg", "/logos/openai.svg", "/logos/cursor.svg"]);
+    for (const tag of logos) expect(tag).toContain('alt=""');
+  });
+
+  test("serves the provider logos as unchanged copies of docs/design/animation-assets", async () => {
+    const assets = join(import.meta.dir, "..", "..", "docs", "design", "animation-assets");
+    for (const name of ["claude.svg", "cursor.svg"]) expect(await read(join("logos", name))).toBe(await Bun.file(join(assets, name)).text());
+    // openai.svg differs only in its viewBox, tightened to the mark so it looks as large as the others.
+    const original = await Bun.file(join(assets, "openai.svg")).text();
+    expect(await read("logos/openai.svg")).toBe(original.replace('viewBox="0 0 721 721"', 'viewBox="118.557 119.958 484.139 479.818"'));
+    // openai-dark.svg is the same mark in white, for the dark theme inside the hero's SVG drawing.
+    expect(await read("logos/openai-dark.svg")).toBe((await read("logos/openai.svg")).replace('fill="black"', 'fill="white"'));
+  });
+
+  test("keeps every event and time of the time comparison", async () => {
+    const cost = (await read("index.html")).match(/<section id="cost">[\s\S]*?<\/section>/)?.[0] ?? "";
+    const times = [...cost.matchAll(/<li class="ev[^"]*"><time>([^<]*)<\/time>/g)].map((m) => m[1]);
+    expect(times).toEqual(["14:19", "14:31", "14:34", "14:38", "14:52", "15:05", "14:19", "14:19", "14:20", "15:05"]);
   });
 
   test("has only forms that close a dialog", async () => {
