@@ -8,6 +8,8 @@ export interface StatusData {
   workers: WorkerView[];      // newest first
   accounts: AccountView[];
   daemon: "running" | "not_running";
+  // Built from the files because the daemon did not answer or has not indexed the project yet.
+  savedState: boolean;
 }
 
 export type Role = "previous" | "current" | "other";
@@ -24,13 +26,15 @@ export interface StatusView {
   rows: StatusRow[];
   closing: string;
   daemon: "running" | "not_running";
+  savedState: boolean;
 }
 
 export function buildView(data: StatusData): StatusView {
   const { job } = data;
   const current = job.current_worker !== null && job.current_worker.state !== "ended" ? job.current_worker : null;
-  const previous =
-    current === null ? null : (data.workers.find((worker) => worker.state === "ended" && worker.target !== current.target) ?? null);
+  // The newest ended worker, when it ran on another account than the current one.
+  const lastEnded = current === null ? undefined : data.workers.find((worker) => worker.state === "ended");
+  const previous = lastEnded === undefined || lastEnded.target === current?.target ? null : lastEnded;
   const byTarget = new Map(data.accounts.map((account) => [account.target, account]));
   const account = (target: string) => byTarget.get(target) ?? unmeasured(target);
 
@@ -42,7 +46,7 @@ export function buildView(data: StatusData): StatusView {
     if (other.configured && !shown.has(other.target)) rows.push({ account: other, role: "other", activity: "idle" });
   }
 
-  return { job, rows, closing: closingSentence(current), daemon: data.daemon };
+  return { job, rows, closing: closingSentence(current), daemon: data.daemon, savedState: data.savedState };
 }
 
 function activityOf(worker: WorkerView): Activity {

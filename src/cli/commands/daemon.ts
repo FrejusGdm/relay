@@ -8,6 +8,7 @@ import { couldNotStartMessage, startDaemon } from "../../client/ensure-daemon";
 import { printable, quote } from "../../core/quote";
 import { runtimeDir, socketPath } from "../../daemon/paths";
 import { daemonLockHolder, pidPath, readPidFile } from "../../daemon/singleton";
+import { processExists } from "../../state/queries";
 import { ExitCode } from "../exit-codes";
 import type { CommandContext } from "./registry";
 
@@ -158,15 +159,6 @@ function notResponding(ctx: CommandContext, runDir: string): number {
       : `relay daemon (pid ${pid}) is not responding. Stop it with: kill ${pid}\n`,
   );
   return ExitCode.Failed;
-}
-
-function processExists(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as { code?: string }).code !== "ESRCH";
-  }
 }
 
 export function couldNotStart(ctx: CommandContext): number {

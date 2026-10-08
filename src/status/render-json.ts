@@ -8,6 +8,7 @@ export function renderJson(view: StatusView, now: Date): string {
   return `${JSON.stringify({
     schema: "relay.status/v1",
     daemon: view.daemon,
+    saved_state: view.savedState,
     generated_at: now.toISOString(),
     job: {
       id: job.id,

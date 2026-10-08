@@ -13,7 +13,10 @@ const TITLE_MAX = 48;
 const BOLD = "\x1b[1m";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
-export const SAVED_STATE_LINE = "Showing saved state. The relay daemon is not running.";
+const SAVED_STATE_LINES = {
+  not_running: "Showing saved state. The relay daemon is not running.",
+  running: "Showing saved state. The relay daemon has not read this project yet.",
+};
 
 const WORDS: Record<string, string> = {
   available: "available",
@@ -44,7 +47,7 @@ export function renderText(view: StatusView, options: { now: Date; style: boolea
   }
 
   lines.push("", view.closing);
-  if (view.daemon === "not_running") lines.push("", SAVED_STATE_LINE);
+  if (view.savedState) lines.push("", SAVED_STATE_LINES[view.daemon]);
   return `${lines.join("\n")}\n`;
 }
 

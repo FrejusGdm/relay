@@ -60,7 +60,7 @@ test("a rate_limit hook spooled while the daemon was down shows as limit reached
   expect(json.accounts[0]).toMatchObject({ target: "claude:work", availability: { status: "rate_limited", source: "hook", reason: "Claude Code reported a rate limit" } });
 }, 30_000);
 
-test("relay status --json is the same with and without the daemon, except daemon and generated_at", async () => {
+test("relay status --json is the same with and without the daemon, except daemon, saved_state and generated_at", async () => {
   const scratch = await project();
   const daemon = spawnDaemon(scratch.relayHome);
   await waitForDaemon(scratch.relayHome);
@@ -68,9 +68,41 @@ test("relay status --json is the same with and without the daemon, except daemon
   expect(await stopDaemon(daemon)).toBe(0);
   const offline = await status(scratch, "--json");
   expect([online.code, offline.code]).toEqual([0, 0]);
-  const { daemon: first, generated_at: _a, ...withDaemon } = JSON.parse(online.stdout);
-  const { daemon: second, generated_at: _b, ...withoutDaemon } = JSON.parse(offline.stdout);
-  expect([first, second]).toEqual(["running", "not_running"]);
+  const { daemon: first, saved_state: savedFirst, generated_at: _a, ...withDaemon } = JSON.parse(online.stdout);
+  const { daemon: second, saved_state: savedSecond, generated_at: _b, ...withoutDaemon } = JSON.parse(offline.stdout);
+  expect([first, second, savedFirst, savedSecond]).toEqual(["running", "not_running", false, true]);
   expect(withoutDaemon).toEqual(withDaemon);
   expect(online.stdout.includes("Showing saved state")).toBe(false);
+}, 30_000);
+
+test("a named pipe in place of the spool does not block relay status", async () => {
+  const scratch = await project();
+  mkdirSync(join(scratch.relayHome, "spool"), { mode: 0o700 });
+  expect(Bun.spawnSync(["mkfifo", join(scratch.relayHome, "spool", "hooks.jsonl")]).exitCode).toBe(0);
+  expect(Bun.spawnSync(["mkfifo", join(scratch.relayHome, "spool", "hooks.123.draining")]).exitCode).toBe(0);
+  const started = Date.now();
+  const result = await status(scratch);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain("claude:work      ────────────────   unknown · not measured\n");
+  expect(Date.now() - started).toBeLessThan(10_000);
+}, 30_000);
+
+test("a daemon that has not indexed the project yet: the view is saved state, said in text and JSON", async () => {
+  const scratch = await project();
+  const runDir = join(scratch.relayHome, "run");
+  mkdirSync(runDir, { mode: 0o700 });
+  // A daemon that answers but knows no job yet.
+  const server = Bun.serve({
+    unix: join(runDir, "relay.sock"),
+    fetch: () => Response.json({ error: { code: "job_not_found", message: "No job." } }, { status: 404 }),
+  });
+  try {
+    const text = await status(scratch);
+    expect(text.code).toBe(0);
+    expect(text.stdout.endsWith("\nShowing saved state. The relay daemon has not read this project yet.\n")).toBe(true);
+    const json = JSON.parse((await status(scratch, "--json")).stdout);
+    expect(json).toMatchObject({ daemon: "running", saved_state: true, job: { id: jobId(scratch) } });
+  } finally {
+    server.stop(true);
+  }
 }, 30_000);

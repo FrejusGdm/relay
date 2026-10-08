@@ -18,7 +18,7 @@ test("every field is present, with null for what relay does not know, and no tot
   const output = renderJson(buildView(SCENARIOS["after-handoff"]!), NOW);
   expect(output.endsWith("}\n")).toBe(true);
   const status = JSON.parse(output);
-  expect(Object.keys(status)).toEqual(["schema", "daemon", "generated_at", "job", "checkpoint", "accounts"]);
+  expect(Object.keys(status)).toEqual(["schema", "daemon", "saved_state", "generated_at", "job", "checkpoint", "accounts"]);
   expect(status).toMatchObject({ schema: "relay.status/v1", daemon: "running", generated_at: "2026-10-07T14:32:00.000Z" });
   expect(status.job).toEqual({
     id: "3f9a2c1d",
@@ -46,7 +46,7 @@ test("every field is present, with null for what relay does not know, and no tot
   expect(output).not.toContain('"total');
 
   const none = JSON.parse(renderJson(buildView(SCENARIOS["no-checkpoint"]!), NOW));
-  expect(none).toMatchObject({ daemon: "not_running", checkpoint: null, job: { current_worker: null } });
+  expect(none).toMatchObject({ daemon: "not_running", saved_state: true, checkpoint: null, job: { current_worker: null } });
 });
 
 test("in a project, standard output is exactly one JSON object and the exit code is 0; --job works from anywhere", async () => {

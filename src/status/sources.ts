@@ -3,7 +3,7 @@
 // this project's files, then adds the newest availability per account from a read-only copy of
 // relay.db and from hook events spooled while the daemon was down. Nothing is written.
 import { Database } from "bun:sqlite";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readdirSync, readSync } from "node:fs";
 import { join } from "node:path";
 import type { Account } from "../core/config/types";
 import { availabilityFromHook } from "../hooks/mapping";
@@ -21,7 +21,7 @@ export async function fromFiles(
   root: string,
   jobId: string,
   accounts: Account[],
-): Promise<Omit<StatusData, "daemon"> | null> {
+): Promise<Omit<StatusData, "daemon" | "savedState"> | null> {
   const db = openMemoryDatabase();
   try {
     syncTargets(db, relayHome, accounts);
@@ -78,13 +78,8 @@ function addSpooledHooks(db: Database, relayHome: string, accounts: Account[]): 
   }
   for (const name of names) {
     const path = join(dir, name);
-    let text: string;
-    try {
-      if (statSync(path).size > SPOOL_MAX_BYTES) continue;
-      text = readFileSync(path, "utf8");
-    } catch {
-      continue;
-    }
+    const text = readSpoolFile(path);
+    if (text === null) continue;
     for (const line of text.split("\n")) {
       const entry = parse(line);
       if (entry === null) continue;
@@ -93,6 +88,33 @@ function addSpooledHooks(db: Database, relayHome: string, accounts: Account[]): 
       if (target === null || change === null) continue;
       applyAvailability(db, target, { ...change, retry_at: null, measured_at: entry.received_at, source: "hook", windows: [] });
     }
+  }
+}
+
+// A spool file's text, or null when it is not a regular file (a named pipe would block the read),
+// is a symbolic link, is larger than 10 MB or cannot be read.
+function readSpoolFile(path: string): string | null {
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch {
+    return null;
+  }
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile() || stats.size > SPOOL_MAX_BYTES) return null;
+    const buffer = Buffer.alloc(stats.size);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync(fd, buffer, length, buffer.length - length, length);
+      if (read === 0) break;
+      length += read;
+    }
+    return buffer.toString("utf8", 0, length);
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
   }
 }
 

@@ -264,7 +264,10 @@ flowchart TD
 The diagram shows where `relay status` gets its data. It never starts the daemon. When the daemon
 answers, the view comes from the API. When it does not, relay reads the same files the daemon
 would, with the same code, so the answer is the same apart from the `daemon` field and the time it
-was made, and the text adds the line `Showing saved state. The relay daemon is not running.`
+was made, and the text adds the line `Showing saved state. The relay daemon is not running.` When
+the daemon answers but has not read a newly set-up project yet (it checks `projects.list` every 2
+seconds), the line is `Showing saved state. The relay daemon has not read this project yet.` In
+JSON, `saved_state` is `true` in both cases.
 Outside a project, without `--job`, the command prints `This folder is not in a relay project. Run
 relay init here, or pass --job <id>.` and exits with code 3.
 

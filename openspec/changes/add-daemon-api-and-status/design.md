@@ -746,7 +746,8 @@ Continuing on Codex.
 ```
 
 - Rows: the previous worker's account (the account of the newest ended worker, if it differs from
-  the current one), then the current worker's account, then every other configured account in
+  the current one; when the newest ended worker ran on the current account, there is no previous
+  row), then the current worker's account, then every other configured account in
   alphabetical order. Without a current worker, all accounts are in alphabetical order with no
   previous row.
 - Lanes are 16 characters: previous `─` x12 + `┐` + 3 spaces; the line after it is `W + 12`
@@ -762,7 +763,8 @@ Continuing on Codex.
   `<provider name> is working on this job.` otherwise; `No agent is working on this job.` without
   a running worker. Provider names: `claude` "Claude Code", `codex` "Codex".
 - Saved state: after the closing sentence, a blank line and `Showing saved state. The relay daemon
-  is not running.`
+  is not running.`, or, when the daemon answered but has not indexed the project yet,
+  `Showing saved state. The relay daemon has not read this project yet.`
 - Styling (`\x1b[1m` bold for the current row, `\x1b[2m` dim for rows whose status is
   `rate_limited`, `quota_exhausted` or `unavailable`, `\x1b[0m` to reset) only when standard output
   is a terminal, `NO_COLOR` is unset and `TERM` is not `dumb`.
@@ -777,6 +779,7 @@ Continuing on Codex.
 {
   "schema": "relay.status/v1",
   "daemon": "running",
+  "saved_state": false,
   "generated_at": "2026-10-07T14:32:00.000Z",
   "job": { "id": "3f9a2c1d", "title": "Build authentication", "state": "running",
            "project_root": "/Users/josue/projects/app",
@@ -791,7 +794,8 @@ Continuing on Codex.
 }
 ```
 
-`role` is `previous`, `current` or `other`; `activity` is `running`, `stopped` or `idle`. Exit
+`saved_state` is `true` when the view was built from the files (the daemon did not answer, or has
+not indexed the project yet). `role` is `previous`, `current` or `other`; `activity` is `running`, `stopped` or `idle`. Exit
 codes: 0 when the status was shown (daemon running or not); 3 outside a project without `--job`, or
 for an unknown `--job` (phase 2's code for "not possible here"); 2 for a usage error (phase 1's
 code for bad arguments).

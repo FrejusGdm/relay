@@ -60,7 +60,9 @@ async function gather(ctx: CommandContext, root: string, jobId: string): Promise
     const answer = await getStatusSources(runtimeDir(ctx.env, ctx.relayHome), jobId, ANSWER_MS);
     if (answer !== null) {
       daemon = "running";
-      if (answer.job !== null) return { job: answer.job, workers: answer.workers, accounts: answer.accounts, daemon };
+      if (answer.job !== null) {
+        return { job: answer.job, workers: answer.workers, accounts: answer.accounts, daemon, savedState: false };
+      }
     }
   } catch (error) {
     if (!(error instanceof UntrustedRuntime)) throw error;
@@ -68,7 +70,7 @@ async function gather(ctx: CommandContext, root: string, jobId: string): Promise
   }
   // The daemon did not answer, or has not indexed this project yet.
   const saved = await fromFiles(ctx.relayHome, root, jobId, ctx.config.accounts);
-  return saved === null ? null : { ...saved, daemon };
+  return saved === null ? null : { ...saved, daemon, savedState: true };
 }
 
 // The job of the relay project that holds the current folder.

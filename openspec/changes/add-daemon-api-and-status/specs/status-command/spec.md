@@ -78,7 +78,7 @@ On a terminal, when `NO_COLOR` is unset and `TERM` is not `dumb`, the current ro
 - **THEN** the output contains no byte `0x1b`
 
 ### Requirement: JSON mode
-`relay status --json` SHALL print one JSON object with `schema` set to `relay.status/v1`, `daemon` (`running` or `not_running`), `job`, `checkpoint`, `accounts` and `generated_at`. Unknown values SHALL be `null`, never omitted, and nothing else SHALL be printed.
+`relay status --json` SHALL print one JSON object with `schema` set to `relay.status/v1`, `daemon` (`running` or `not_running`), `saved_state` (`true` when the view was built from the files), `job`, `checkpoint`, `accounts` and `generated_at`. Unknown values SHALL be `null`, never omitted, and nothing else SHALL be printed.
 
 #### Scenario: JSON for an unmeasured account
 - **WHEN** `codex:personal` was never measured
@@ -93,4 +93,4 @@ On a terminal, when `NO_COLOR` is unset and `TERM` is not `dumb`, the current ro
 
 #### Scenario: Same answer either way
 - **WHEN** `relay status --json` runs once with the daemon and once without, with no changes in between
-- **THEN** the two outputs are equal except for `daemon` and `generated_at`
+- **THEN** the two outputs are equal except for `daemon`, `saved_state` and `generated_at`

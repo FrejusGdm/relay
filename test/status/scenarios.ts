@@ -78,18 +78,21 @@ export const SCENARIOS: Record<string, StatusData> = {
     workers: [running, ended],
     accounts: [measuredHome, limitedWork, account("codex:personal")],
     daemon: "running",
+    savedState: false,
   },
   "known-reset": {
     job: job(),
     workers: [],
     accounts: [account("claude:work", { status: "rate_limited", retry_at: "2026-10-07T18:00:00.000Z", measured_at: "2026-10-07T14:02:11.402Z", source: "hook" })],
     daemon: "running",
+    savedState: false,
   },
   "never-measured": {
     job: job({ current_worker: worker("w3", "claude:work", "running", false, "2026-10-07T14:00:00.000Z") }),
     workers: [],
     accounts: [account("claude:work"), account("claude:home")],
     daemon: "running",
+    savedState: false,
   },
   "stale-reset": {
     job: job(),
@@ -101,18 +104,21 @@ export const SCENARIOS: Record<string, StatusData> = {
       }),
     ],
     daemon: "running",
+    savedState: false,
   },
   "no-worker": {
     job: job(),
     workers: [ended],
     accounts: [measuredHome, limitedWork],
     daemon: "running",
+    savedState: false,
   },
   "no-checkpoint": {
     job: job({ last_checkpoint: null }),
     workers: [],
     accounts: [account("codex:personal")],
     daemon: "not_running",
+    savedState: true,
   },
   "long-title": {
     job: job({ title: "Move the whole authentication flow to the new session store and remove the old one" }),
@@ -122,5 +128,6 @@ export const SCENARIOS: Record<string, StatusData> = {
       { window: "five_hour", window_minutes: 300, used_percent: 40, resets_at: null, measured_at: "2026-10-07T14:00:00.000Z" },
     ])],
     daemon: "running",
+    savedState: false,
   },
 };

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildView } from "../../src/status/model";
 import { renderText } from "../../src/status/render-text";
-import { NOW, SCENARIOS } from "./scenarios";
+import { job, NOW, SCENARIOS, account, worker } from "./scenarios";
 
 const golden = (name: string) => readFileSync(join(import.meta.dir, "golden", `${name}.txt`), "utf8");
 const render = (name: string, style = false) => renderText(buildView(SCENARIOS[name]!), { now: NOW, style });
@@ -51,4 +51,22 @@ test("without styling there is no escape byte; with it, the current row is bold 
   expect(lines.find((line) => line.includes("claude:work"))).toStartWith("\x1b[2m");
   expect(lines.find((line) => line.includes("claude:home"))).not.toContain("\x1b");
   expect(lines.every((line) => !line.includes("\x1b") || line.endsWith("\x1b[0m"))).toBe(true);
+});
+
+test("the previous row is the newest ended worker, and none when it ran on the current account", () => {
+  const claude = worker("w1", "claude:work", "ended", false, "2026-10-07T12:00:00.000Z");
+  const codexBefore = worker("w2", "codex:personal", "ended", true, "2026-10-07T13:00:00.000Z");
+  const codexNow = worker("w3", "codex:personal", "running", false, "2026-10-07T14:00:00.000Z");
+  const view = buildView({
+    job: job({ current_worker: codexNow }),
+    workers: [codexNow, codexBefore, claude],
+    accounts: [account("claude:work"), account("codex:personal")],
+    daemon: "running",
+    savedState: false,
+  });
+  expect(view.rows.map((row) => [row.account.target, row.role])).toEqual([
+    ["codex:personal", "current"],
+    ["claude:work", "other"],
+  ]);
+  expect(renderText(view, { now: NOW, style: false })).not.toContain("┷");
 });
