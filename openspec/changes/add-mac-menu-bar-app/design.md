@@ -384,7 +384,9 @@ therefore stores the cursor together with the daemon instance it came from, the 
 cursor and every object number before it reconnects, and opens the stream without
 `Last-Event-ID`. A restart without a rebuild also drops the cursor; the cost is one full reload,
 which the cycle below does anyway. When phase 5 adds `stream_epoch` (requirement C), the app
-compares that instead, and keeps the cursor across restarts that did not rebuild the table.
+compares that instead, and keeps the cursor across restarts that did not rebuild the table. Phase 5
+sends it now (`docs/api.md`), and the app has compared it since task 2.5 (2026-10-08); with a daemon
+that does not send it, the app still compares `pid` and `started_at`.
 
 A `reset` event also drops the object numbers and the cursor, then reloads.
 

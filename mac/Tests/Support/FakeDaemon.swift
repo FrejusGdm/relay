@@ -41,6 +41,8 @@ public final class FakeDaemon: @unchecked Sendable {
     private var stopped = false
     private var versionPID: Int32 = 4121
     private var versionStartedAt = "2026-10-07T12:02:11.402Z"
+    /// `nil` keeps the fixture's `stream_epoch`; an empty string removes it.
+    private var versionEpoch: String?
     private var versionCapabilities: [String]?
 
     public init() throws {
@@ -78,10 +80,11 @@ public final class FakeDaemon: @unchecked Sendable {
     }
 
     /// Sets what `GET /v1/version` reports.
-    public func setVersion(pid: Int32? = nil, startedAt: String? = nil, capabilities: [String]? = nil) {
+    public func setVersion(pid: Int32? = nil, startedAt: String? = nil, streamEpoch: String? = nil, capabilities: [String]? = nil) {
         lock.withLock {
             if let pid { versionPID = pid }
             if let startedAt { versionStartedAt = startedAt }
+            if let streamEpoch { versionEpoch = streamEpoch }
             if let capabilities { versionCapabilities = capabilities }
         }
     }
@@ -224,12 +227,13 @@ public final class FakeDaemon: @unchecked Sendable {
     }
 
     private func versionBody() -> [UInt8] {
-        let (pid, startedAt, capabilities) = lock.withLock { (versionPID, versionStartedAt, versionCapabilities) }
+        let (pid, startedAt, epoch, capabilities) = lock.withLock { (versionPID, versionStartedAt, versionEpoch, versionCapabilities) }
         guard let data = try? Fixtures.bytes("api/GET_v1_version.json"),
               var object = try? JSONSerialization.jsonObject(with: Data(data)) as? [String: Any]
         else { return [] }
         object["pid"] = pid
         object["started_at"] = startedAt
+        if let epoch { object["stream_epoch"] = epoch.isEmpty ? nil : epoch }
         if let capabilities { object["capabilities"] = capabilities }
         return Array((try? JSONSerialization.data(withJSONObject: object)) ?? Data())
     }

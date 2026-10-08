@@ -14,6 +14,7 @@ struct APITests {
 
         let version = try APIDecoder.decode(VersionInfo.self, from: Fixtures.bytes("api/GET_v1_version.json"))
         #expect(version.api == "v1")
+        #expect(version.streamEpoch == "9c41d0e2a7b35f18")
         #expect(version.capabilities.contains("jobs.switch"))
 
         let accounts = try APIDecoder.decode(Accounts.self, from: Fixtures.bytes("api/GET_v1_accounts.json")).accounts

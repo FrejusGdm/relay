@@ -4,6 +4,7 @@
   "pid": 4121,
   "started_at": "2026-10-07T12:02:11.402Z",
   "schema_version": 1,
+  "stream_epoch": "9c41d0e2a7b35f18",
   "capabilities": ["accounts", "jobs", "events.sse", "jobs.checkpoint", "jobs.switch", "hooks"],
   "agents_running": []
 }

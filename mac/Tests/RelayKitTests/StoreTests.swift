@@ -137,14 +137,17 @@ struct StoreTests {
         #expect(harness.store.jobsByID["3f9a2c1d"]?.currentWorker?.state == .ended)
     }
 
-    @Test func restartedDaemonGetsNoLastEventID() async throws {
+    /// A rebuilt index (a new `stream_epoch`), or a restarted daemon that sends no epoch at all.
+    @Test(arguments: [true, false])
+    func restartedDaemonGetsNoLastEventID(sendsEpoch: Bool) async throws {
         let harness = try StoreHarness()
         defer { harness.finish() }
+        if !sendsEpoch { harness.fake.setVersion(streamEpoch: "") }
         let first = try await harness.connect()
         harness.push(first, id: 4180, "job", Sample.jobJSON())
         try await harness.until { harness.store.cursor == 4180 }
 
-        harness.fake.setVersion(pid: 5120, startedAt: "2026-10-07T15:00:00.000Z")
+        harness.fake.setVersion(pid: 5120, startedAt: "2026-10-07T15:00:00.000Z", streamEpoch: sendsEpoch ? "7d02b6f1c9e4a358" : "")
         first.close()
         while harness.fake.openedFeeds.count < 2 { try await harness.advance(by: 0.5) }
         let second = try await harness.feed(2)
@@ -154,6 +157,18 @@ struct StoreTests {
         harness.push(second, id: 3, "worker", ended)
         try await harness.until { harness.store.cursor == 3 }
         #expect(harness.store.workersByJob["3f9a2c1d"]?.first?.state == .ended)
+    }
+
+    @Test func restartThatKeptTheIndexKeepsTheCursor() async throws {
+        let harness = try StoreHarness()
+        defer { harness.finish() }
+        let first = try await harness.connect()
+        harness.push(first, id: 4180, "job", Sample.jobJSON())
+        try await harness.until { harness.store.cursor == 4180 }
+        harness.fake.setVersion(pid: 5120, startedAt: "2026-10-07T15:00:00.000Z")
+        first.close()
+        while harness.fake.openedFeeds.count < 2 { try await harness.advance(by: 0.5) }
+        #expect(harness.fake.requests("GET", "/v1/events").last?.headers["last-event-id"] == "4180")
     }
 
     @Test func sameDaemonResumesWithLastEventIDAndReloads() async throws {
