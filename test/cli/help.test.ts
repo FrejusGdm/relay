@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { COMMANDS } from "../../src/cli/commands/registry";
 import { renderCommandHelp, renderTopHelp } from "../../src/cli/help";
+import { WITH_UNBUILT } from "../helpers/cli";
 
 const golden = (name: string) => readFileSync(join(import.meta.dir, "golden", `${name}.txt`), "utf8");
 const LOG_LEVEL_ROW = "      --log-level <level>  How much to log: debug, info, warn or error";
@@ -44,7 +45,8 @@ test("option rows use padEnd(23)", () => {
 });
 
 test("the help of each command that is not built yet ends with the not-built line", () => {
-  for (const def of COMMANDS.filter((def) => !def.built)) {
+  // The test-only command keeps this check from passing on an empty list once every command is built.
+  for (const def of WITH_UNBUILT.filter((def) => !def.built)) {
     expect(renderCommandHelp(def).endsWith("\n\nNot built yet. This version only reads your settings.\n")).toBe(true);
   }
 });

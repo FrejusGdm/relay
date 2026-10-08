@@ -104,7 +104,8 @@ describe("Help, version and usage errors touch nothing", () => {
 describe("Relay folder safety", () => {
   test("the first run creates the folder with mode 0700 and no settings file", async () => {
     const relayHome = missingRelayHome();
-    expect((await runRelay(["providers"], { env: { RELAY_HOME: relayHome } })).code).toBe(69);
+    // relay policy show claude is a built command that only prints fixed text.
+    expect((await runRelay(["policy", "show", "claude"], { env: { RELAY_HOME: relayHome } })).code).toBe(0);
     expect(statSync(relayHome).mode & 0o777).toBe(0o700);
     expect(existsSync(join(relayHome, "config.toml"))).toBe(false);
   });
