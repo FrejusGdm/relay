@@ -2,7 +2,7 @@
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, `add-relay-switch`
-(see `docs/handoff.md`), task groups 1 to 7 of `add-handoff-evaluation`, task groups 1 to 7 of
+(see `docs/handoff.md`), task groups 1 to 8 of `add-handoff-evaluation`, task groups 1 to 7 of
 `add-website`, task groups 1 to 6 and 8 to 10 of `add-daemon-api-and-status`, task groups 1 to 5
 of `add-mac-menu-bar-app`, and task groups 1 to 7 of `add-lifetime-license`.
 
@@ -408,8 +408,11 @@ messages.
 program, run with `bun run eval:handoff <command>`, and is never compiled into the `relay` binary.
 It has its command line, the four fixture tasks, the plan files, the checks that `run` makes
 before it starts, the runner that performs baseline and handoff runs through `relay`, and the
-summary with its decision rules. Its own tests use a stub `relay` instead of the real program, so
-they start no agent.
+summary with its decision rules. `eval/handoff/README.md` is the guide for the person who runs it.
+Its own tests use a stub `relay` instead of the real program, so they start no agent; one
+end-to-end test, `test/e2e-fake-agents.test.ts`, runs the smoke plan against a real `relay` program
+named by `RELAY_BIN` with relay's fake agents, and CI runs it on Linux against the program it
+builds.
 
 ```mermaid
 flowchart TD
@@ -495,7 +498,7 @@ sequenceDiagram
   participant R as relay run
   participant W as relay switch
   H->>S: git archive of .start/, one commit, the person's note in NOTES.md
-  H->>S: relay init, .relay/task.md, record the four safety values, snapshot 0
+  H->>S: relay init, relay status --json, .relay/task.md, record the four safety values, snapshot 0
   H->>R: relay run with the first target, --headless --json
   loop every 500 ms
     H->>S: read new lines of .relay/events.jsonl
@@ -643,7 +646,9 @@ so the views in `RelayUI` hold no rules. `HostFinder` finds the app that runs th
 walking up its parent processes, `SwitchFlow` sends the one action the app has, a switch, and
 `RelayLink` accepts only `relay://job/<id>` links, which open a window and nothing else. `Relay` is
 the app itself. The tests run against `FakeDaemon`, a small
-Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
+Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The Bun test
+`test/mac/fixtures-match-daemon.test.ts` runs the real daemon on Linux, makes a handoff with the
+fake agents, and checks that those files have the same keys as the daemon's answers and events. The workflow
 downloads the fonts, runs the tests (which also render the cards to PNG files), builds and signs
 `Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots. A
 release tag runs the same workflow with the tag's version, and `attach-to-release.sh` uploads that

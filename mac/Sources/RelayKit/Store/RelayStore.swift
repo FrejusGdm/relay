@@ -233,7 +233,7 @@ public final class RelayStore {
             return false
         }
         capabilities = version.capabilities
-        let instance = DaemonInstance(pid: version.pid, startedAt: version.startedAt)
+        let instance = DaemonInstance(version)
         if cursorInstance != instance {
             cursor = nil
             sequence = [:]
@@ -477,7 +477,18 @@ public final class RelayStore {
     }
 }
 
-struct DaemonInstance: Equatable {
-    let pid: Int32
-    let startedAt: Date
+/// What the event cursor belongs to (design.md decision 7): the index's `stream_epoch` when the
+/// daemon sends it, so the cursor survives a restart that kept the index; otherwise the daemon's
+/// process ID and start time.
+enum DaemonInstance: Equatable {
+    case epoch(String)
+    case process(pid: Int32, startedAt: Date)
+
+    init(_ version: VersionInfo) {
+        if let epoch = version.streamEpoch {
+            self = .epoch(epoch)
+        } else {
+            self = .process(pid: version.pid, startedAt: version.startedAt)
+        }
+    }
 }

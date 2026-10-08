@@ -220,6 +220,13 @@ program is never signalled. The switch itself runs in terminal A, which holds th
 next agent starts there. A request that `relay run` does not take within 5 seconds is removed and
 `relay switch` exits with code 33.
 
+The questions are asked in terminal B, and only `relay switch` writes the answers to config.toml,
+for example a new account on the project's allow list. `relay run` receives the answers with the
+request and only reads them: it neither asks again nor writes config.toml, and its own copy of the
+settings, read when it started, does not decide whether an account is new. Whichever relay command
+adds an account reads config.toml again while it holds the config lock and leaves the file as it is
+when the account is already there, so an account is never listed twice.
+
 ## What the next agent receives
 
 The handoff gives context tiers 0 and 1 only: the repository and the diff since the job started,

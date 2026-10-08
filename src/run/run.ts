@@ -802,7 +802,8 @@ export class JobSupervisor {
 
   private async serveRequest(worker: Worker, request: SwitchRequest, print: (line: string) => void): Promise<{ worker: Worker | null; result: Record<string, unknown> }> {
     const env = handoffEnv(this.ctx, this.registry);
-    const asker: Asker = { terminal: false, yes: false, say: print, ask: async () => null, preset: request.answers };
+    const asker: Asker = { terminal: false, yes: false, say: print, ask: async () => null,
+      preset: request.answers === undefined ? undefined : { ...request.answers, recorded: true } };
     const pre = await preflight(env, {
       cwd: this.job.worktreeRoot, arg: request.to, command: "switch", startMode: request.no_start ? "none" : worker.plan.mode,
       noSummary: request.ask_for_notes === "flag", newChecks: request.new_checks, asker, held: worker.held,

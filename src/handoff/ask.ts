@@ -13,6 +13,9 @@ export interface Asker {
     newAccount?: AnswerHow;
     personalAccount?: AnswerHow;
     instructionFiles?: { how: AnswerHow; paths: string[] };
+    // True when the process that asked has already written these answers to config.toml: a relay
+    // switch or the daemon that handed the switch to this relay run.
+    recorded?: boolean;
   };
   say(line: string): void;
   // Prints the question and reads one answer line; null at the end of input.

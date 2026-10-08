@@ -113,6 +113,11 @@ gh run view "$run" --repo FrejusGdm/relay --log | grep -E 'Test run with|Smoke t
 gh run download "$run" --repo FrejusGdm/relay --name mac-app-screenshots --dir "$TMPDIR/mac-shots-$run"
 ```
 
+The fake daemon answers with the JSON files in `mac/Tests/Fixtures/api/`. So that they cannot
+drift from the real API, the Bun test `test/mac/fixtures-match-daemon.test.ts` starts the real
+daemon on Linux, makes a handoff with the fake agents, and fails when a file's keys differ from
+the daemon's answer or event at any depth. It runs with the rest of the Bun suite.
+
 The fonts are not in the repository. `mac/scripts/fetch-fonts.sh` downloads Public Sans and IBM
 Plex Mono in the workflow and checks each file against `mac/Resources/Fonts/SOURCES.md`.
 

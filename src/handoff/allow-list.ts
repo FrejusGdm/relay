@@ -7,8 +7,8 @@ import { basename, dirname } from "node:path";
 import { CommandError } from "../cli/errors";
 import { ExitCode } from "../cli/exit-codes";
 import { appendTable, editConfig, type ConfigContext } from "../core/config/edit";
-import { validateConfig } from "../core/config/validate";
 import type { Account, Project, RelayConfig } from "../core/config/types";
+import { validateConfig } from "../core/config/validate";
 import { expandPath } from "../core/paths";
 import type { Repository } from "../git/repo";
 import { parseToml } from "../platform/toml";
@@ -57,7 +57,14 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
     : "Nothing changed.";
   const hint = `Run "relay ${request.command} ${to.id}" in a terminal, or add --yes.`;
 
-  if (!entry?.allow.includes(to.id)) {
+  // When a relay run performs a switch that relay switch or the daemon handed to it, the process that
+  // asked has already written the answer to config.toml, and its answers arrive as `asker.preset`
+  // with `recorded`. The relay run then only reads them: it neither asks again nor writes, and its
+  // own copy of config.toml, read when it started, does not decide whether the account is new. An
+  // answer given through the local API (a preset without `recorded`) is still written here.
+  const answeredElsewhere = asker.preset?.recorded === true;
+  const isNew = answeredElsewhere ? asker.preset!.newAccount !== undefined : !entry?.allow.includes(to.id);
+  if (isNew) {
     const question = `This sends the repository and the job notes to ${company} through the account ${to.id}. Continue? [y/N]`;
     const how = asker.preset?.newAccount ?? await answer(asker, question, [`${to.id} has not worked on this project before. Sending the repository to ${company} needs your yes.`, hint], nothingChanged,
       request.from?.provider === to.provider ? [policyOf(to.provider).ownAccountsNote] : [], true);
@@ -70,8 +77,9 @@ export async function checkAllowList(request: AllowRequest): Promise<AllowResult
     const how = asker.preset?.personalAccount ?? await answer(asker, "Continue? [y/N]", [warning, hint], nothingChanged, [warning]);
     result.confirmations.push({ question: warning, how });
   }
-  // Written only once every question has its yes, so a "no" leaves config.toml as it was.
-  if (result.allowed !== null) addToAllowList(request);
+  // Written only once every question has its yes, so a "no" leaves config.toml as it was, and only
+  // by the process that asked.
+  if (result.allowed !== null && !answeredElsewhere) addToAllowList(request);
   return result;
 }
 
@@ -86,16 +94,21 @@ async function answer(asker: Asker, question: string, needsYes: string[], refusa
 }
 
 // Adds the account to the entry's allow list through the one writer of config.toml, which keeps every
-// other line as it was. A project without an entry gets one, with the outgoing account too. The
-// entry is looked for again in the file as it is under the config lock, because another relay
-// process may have changed it since this one read config.toml: a relay switch that handed the switch
-// to a relay run, or the daemon, has already added the account.
+// other line as it was. A project without an entry gets one, with the outgoing account too. The entry
+// is looked for again in the file as it is while relay holds the config lock, and a file that already
+// allows the account is left as it is, so two relay processes never add the account twice.
 function addToAllowList(request: AllowRequest): void {
   const { to, configContext } = request;
   editConfig(
     configContext,
     (text) => {
-      const entry = projectEntry(validateConfig(parseToml(text), configContext).config, request.repo);
+      let entry: Project | null;
+      try {
+        entry = projectEntry(validateConfig(parseToml(text), configContext).config, request.repo);
+      } catch {
+        // The file no longer reads as TOML; the unchanged text fails the check, and nothing is saved.
+        return text;
+      }
       if (entry?.allow.includes(to.id)) return text;
       if (entry === null) {
         const accounts = [...(request.from === null ? [] : [request.from.id]), to.id].map((id) => JSON.stringify(id));
