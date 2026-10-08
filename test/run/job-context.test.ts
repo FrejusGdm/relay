@@ -17,7 +17,7 @@ test("a repository without .relay/state.json is not set up (exit 3)", async () =
     expect(result).toMatchObject({ code: 3, stderr: "relay is not set up here. Run relay init first.\n" });
   } finally {
     other.cleanup();
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -28,7 +28,7 @@ test("a folder outside any repository is refused with exit 3", async () => {
     mkdirSync(outside);
     await expect(findJobContext(outside, fixture.relayHome)).rejects.toMatchObject({ code: 3 });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -43,7 +43,7 @@ test("a job whose worktree root moved is refused with exit 3", async () => {
     const context = await findJobContext(join(fixture.scratch.repo, "src"), fixture.relayHome);
     expect(context.job).toEqual({ id: fixture.jobId, worktreeRoot: fixture.scratch.repo, relayHome: fixture.relayHome });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 

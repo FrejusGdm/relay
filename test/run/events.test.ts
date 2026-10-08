@@ -1,8 +1,8 @@
 // The worker events relay run writes to .relay/events.jsonl (task 9.4; design decision 16).
 import { expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { tryLock } from "../../src/platform/file-lock";
 import { jobEvents, relayRun, resetTime, runFixture, steps, workers } from "./helpers";
 
 const SESSION = "7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f";
@@ -63,7 +63,7 @@ test("a headless Claude run writes each event type with the fields of the table,
     expect(JSON.stringify(record)).not.toContain(token);
     expect(record!.argv).toContain("<instructions>");
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -83,7 +83,7 @@ test("a limit: turn_failed, then availability quota_exhausted, then worker_ended
       windows: [{ name: "five_hour", window_minutes: 300, used_percent: 100, resets_at: resets.toISOString() }],
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -107,16 +107,16 @@ test("a task that starts with -- or is the single word update reaches a headless
       expect(seen.argv).not.toContain("--dangerously-bypass-approvals-and-sandbox");
       if (account === "codex:personal") expect(workers(fixture)[0]!.argv.slice(-2)).toEqual(["--", "<prompt>"]);
     } finally {
-      fixture.cleanup();
+      await fixture.cleanup();
     }
   }
 }, 30_000);
 
 // Holds the job's events lock as another relay process would, until the returned function runs.
 function holdEventsLock(fixture: { relayHome: string; jobId: string }): () => void {
-  const path = join(fixture.relayHome, "locks", `${fixture.jobId}.events.lock`);
-  writeFileSync(path, JSON.stringify({ pid: process.pid, command: "append-event", started_at: new Date().toISOString(), host: hostname() }), { mode: 0o600 });
-  return () => rmSync(path, { force: true });
+  const held = tryLock(join(fixture.relayHome, "locks", `${fixture.jobId}.events.lock`));
+  if (held === null) throw new Error("The events lock is already held.");
+  return () => held.release();
 }
 
 test("a limit the agent reports while relay is still starting it still gives an availability event", async () => {
@@ -131,7 +131,7 @@ test("a limit the agent reports while relay is still starting it still gives an 
     expect(result.code).toBe(23);
     expect(jobEvents(fixture).find((event) => event.type === "availability")?.data).toMatchObject({ status: "quota_exhausted" });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -145,6 +145,6 @@ test("when relay cannot write worker_started, it stops the agent and records the
     expect(record).toMatchObject({ end_reason: "relay_stopped", ended_at: expect.any(String) });
   } finally {
     release();
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 }, 30_000);

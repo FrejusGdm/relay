@@ -43,7 +43,7 @@ test("Ctrl+C in the terminal reaches only the agent; relay records the worker wh
       "worker_started", "worker_session_identified", "turn_completed", "availability", "worker_ended",
     ]);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 }, 30_000);
 
@@ -61,7 +61,7 @@ test("an interactive run exits 23 when the last turn stopped at a limit", async 
     expect(workers(fixture)[0]!.argv.slice(-2)).toEqual(["--", "<prompt>"]);
     expect(jobEvents(fixture).find((event) => event.type === "turn_failed")?.data).toMatchObject({ reason: "rate_limit", source: "hook" });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 }, 30_000);
 
@@ -85,7 +85,7 @@ test("after the agent exits, relay restores the terminal before it prints", asyn
     expect(restore).toBeGreaterThan(output.indexOf("Hello."));
     expect(restore).toBeLessThan(output.indexOf("Recorded worker"));
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 }, 30_000);
 
@@ -103,7 +103,7 @@ test("a one-word task such as update reaches an interactive agent as its prompt,
       expect(argv.at(-1)!.trim()).toBe("update");
       expect(workers(fixture)[0]!.argv.slice(-2)).toEqual(["--", "<prompt>"]);
     } finally {
-      fixture.cleanup();
+      await fixture.cleanup();
     }
   }
 }, 30_000);

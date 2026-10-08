@@ -21,7 +21,7 @@ test("--resume last resumes the job's last Codex thread on the same account", as
     expect(messages.some((message) => message.method === "thread/start")).toBe(false);
     expect(workers(fixture)[0]).toMatchObject({ resumed_from: thread, provider_session_id: thread });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -33,7 +33,7 @@ test("--resume last with no earlier session on the account exits 2", async () =>
     });
     expect(workers(fixture)).toEqual([]);
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -62,7 +62,7 @@ test("a session started on another account is refused with exit 25; an unknown o
     expect(argv[argv.indexOf("--resume") + 1]).toBe(unknown);
     expect(workers(fixture)[0]).toMatchObject({ account: "claude:home", resumed_from: unknown, provider_session_id: unknown });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -80,6 +80,6 @@ test("--resume last skips a session that the program never confirmed", async () 
     expect(result.code).toBe(0);
     expect(workers(fixture).find((entry) => entry.resumed_from !== null)).toMatchObject({ resumed_from: confirmed.provider_session_id });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
