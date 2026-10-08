@@ -71,12 +71,16 @@ export function runtimeDirIsPrivate(dir: string, uid: number = process.getuid!()
 }
 
 export function checkSocketPathLength(path: string, platform: string = process.platform): void {
+  const problem = socketPathProblem(path, platform);
+  if (problem !== null) throw new DaemonStartError(`relay cannot start: ${problem}.`);
+}
+
+// Why a socket path cannot be used, or null when it can. The command-line tool names this reason
+// when the daemon cannot start, so the person need not look in daemon.log.
+export function socketPathProblem(path: string, platform: string = process.platform): string | null {
   const max = SOCKET_PATH_MAX[platform] ?? 103;
-  if (Buffer.byteLength(path) > max) {
-    throw new DaemonStartError(
-      `relay cannot start: the socket path ${printable(path)} is too long. Set RELAY_HOME to a shorter path.`,
-    );
-  }
+  if (Buffer.byteLength(path) <= max) return null;
+  return `the socket path ${printable(path)} is too long (at most ${max} bytes on ${platform === "linux" ? "Linux" : "macOS"}). Set RELAY_HOME to a shorter path`;
 }
 
 // Removes a socket left behind by a daemon that crashed. Called only while the daemon lock is

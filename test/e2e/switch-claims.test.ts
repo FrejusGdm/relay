@@ -63,6 +63,19 @@ test("a listed file that did not change, and a file that does not exist", async 
   expect(checkpointMd()).toContain(`- The notes mention \`src/auth/oauth.ts\`, which does not exist in checkpoint ${work}.\n`);
 });
 
+test("job files under .relay/ that the agent changed are not reported as unchanged", async () => {
+  fixture = await e2eFixture();
+  const notes = NOTES.replace("- src/auth/google.ts", "- src/auth/google.ts\n- .relay/task.md\n- .relay/decisions.md");
+  const writes = Scenarios.fixture("claude-edits-two-files.json");
+  writes.turns![0]!.steps.unshift(
+    { write: ".relay/task.md", content: "# Task\n\nAdd the OAuth callback.\n" },
+    { write: ".relay/decisions.md", content: "# Decisions\n\n- Sessions live in signed cookies.\n" },
+  );
+  expect(await handoffWith(notes, [], writes)).toMatchObject({ code: 0 });
+  expect(checkpointMd()).not.toContain("did not change while");
+  expect(jobEvents(fixture).findLast((event) => event.type === "handoff")!.data.mismatches).toEqual([]);
+});
+
 test("a check that rewrites a snapshot: reported, not reverted, and the work checkpoint holds the old file", async () => {
   fixture = await e2eFixture();
   fixture.scratch.write("test/__snapshots__/a.snap", "old\n");

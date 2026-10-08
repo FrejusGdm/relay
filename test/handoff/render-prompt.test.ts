@@ -120,7 +120,7 @@ describe("Prompt and instructions hold only relay's text", () => {
     const checkpoint = renderCheckpoint({
       jobId: "3f9a2c1d", handoff: 3, writtenAt: new Date("2026-10-07T14:19:30Z"), title: "Build authentication",
       from: { id: "claude:personal", provider: "claude", name: "personal" }, to: { id: "codex:personal", provider: "codex", name: "personal" },
-      worker: { startedAt: null, endedAt: null, howItEnded: "stopped by relay switch", startCheckpoint: null, filesChanged: [], commits: 0 },
+      worker: { startedAt: null, endedAt: null, howItEnded: "stopped by relay switch", startCheckpoint: null, filesChanged: [], jobFilesChanged: [], commits: 0 },
       worktreeRoot: "/p", branch: "main", base: null, checkpoint: { number: 7, commit: "912ec1f".padEnd(40, "2") },
       notes: { source: "agent", parsed: notes }, checks: [check], mismatches: [MISMATCH], diffStat: [],
       instructionFiles: null, commitLines: [`a1b2c3d ${markers[1]}`], eventLines: [`- 14:11 ran \`echo ${markers[2]}\`, exit code 0`],

@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { closeSync, constants, openSync } from "node:fs";
 import { join } from "node:path";
 import { VERSION } from "../core/version";
-import { runtimeDir } from "../daemon/paths";
+import { runtimeDir, socketPath, socketPathProblem } from "../daemon/paths";
 import { printable } from "../core/quote";
 import { getVersion, UntrustedRuntime } from "./api-client";
 
@@ -83,11 +83,14 @@ export async function ensureDaemon(opts: StartOptions): Promise<boolean> {
     if (!(error instanceof UntrustedRuntime)) throw error;
     opts.err(`${error.message}\n`);
   }
-  opts.err(couldNotStartMessage(opts.relayHome));
+  opts.err(couldNotStartMessage(opts.relayHome, opts.env));
   return false;
 }
 
-export function couldNotStartMessage(relayHome: string): string {
+// A socket path that is too long is named directly; any other reason is in daemon.log.
+export function couldNotStartMessage(relayHome: string, env: Record<string, string | undefined>): string {
+  const problem = socketPathProblem(socketPath(runtimeDir(env, relayHome)));
+  if (problem !== null) return `relay could not start its background service: ${problem}.\n`;
   return `relay could not start its background service. Details are in ${printable(join(relayHome, "logs", "daemon.log"))}.\n`;
 }
 

@@ -79,6 +79,17 @@ test("relay account remove keeps the profile folder and says how to sign out", a
   expect(readFileSync(join(profile, "settings.json"), "utf8")).toBe("{}\n");
 });
 
+test("relay account remove without a terminal names its question and changes nothing", async () => {
+  const relayHome = relayWith(TWO);
+  const before = readFileSync(join(relayHome, "config.toml"), "utf8");
+  const result = await runRelayInProcess(["account", "remove", "claude:work"], { relayHome, env: fakeEnv() });
+  expect(result).toEqual({
+    code: 7, stdout: "",
+    stderr: 'relay needs your yes to the question "Remove claude:work from config.toml?" and has no terminal to ask it in.\nRun the command again in a terminal, or add --yes.\n',
+  });
+  expect(readFileSync(join(relayHome, "config.toml"), "utf8")).toBe(before);
+});
+
 test("relay account remove refuses while a project allows the account", async () => {
   const relayHome = relayWith(`${TWO}\n[[projects]]\npath = "/srv/app"\nallow = ["claude:work"]\n`);
   const before = readFileSync(join(relayHome, "config.toml"), "utf8");

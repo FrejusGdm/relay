@@ -77,8 +77,15 @@ export interface RunOptions {
 const PERMISSIONS = ["read-only", "edit-in-workspace", "full-access"];
 // How long a turn may take to end after Ctrl+C before relay stops the agent, as the adapters wait.
 const INTERRUPT_WAIT_MS = 10_000;
-// How long a headless agent started by a handoff has to report its session.
+// How long a headless agent started by a handoff has to report its session or show other work.
 const HEADLESS_START_MS = 60_000;
+const STARTED_KINDS = new Set<WorkerEvent["kind"]>(["session_started", "message", "tool", "turn_completed"]);
+
+// Tests shorten the start check with RELAY_TEST_HEADLESS_START_MS.
+function headlessStartMs(env: Record<string, string | undefined>): number {
+  const value = Number(env.RELAY_TEST_HEADLESS_START_MS);
+  return process.env.RELAY_TEST === "1" && Number.isInteger(value) && value > 0 ? value : HEADLESS_START_MS;
+}
 // Leaves the alternate screen, shows the cursor and resets styles, in case the agent did not.
 const RESTORE_TERMINAL = "\x1b[?1049l\x1b[?25h\x1b[0m";
 const CHECK_LIMIT = 500;
@@ -621,18 +628,24 @@ export class JobSupervisor {
     let resolveStarted!: (outcome: StartOutcome) => void;
     const started = new Promise<StartOutcome>((done) => { resolveStarted = done; });
     let startSettled = !plan.startCheck;
+    let startTimer: ReturnType<typeof setTimeout> | undefined;
     const settleStart = (outcome: StartOutcome) => {
       if (startSettled) return;
       startSettled = true;
+      clearTimeout(startTimer);
       resolveStarted(outcome);
     };
     if (!plan.startCheck) resolveStarted({ ok: true, workerId });
-    const startTimer = plan.startCheck && !headless
-      ? setTimeout(() => settleStart({ ok: true, workerId }), ctx.config.handoff.startCheckSeconds * 1000)
-      : plan.startCheck ? setTimeout(() => {
-        settleStart({ ok: false, reason: `${adapter.displayName} did not report a session within 60 seconds` });
+    else if (!headless) startTimer = setTimeout(() => settleStart({ ok: true, workerId }), ctx.config.handoff.startCheckSeconds * 1000);
+    else {
+      // The agent is stopped only when it has shown no sign of starting, never once it has started.
+      const limit = headlessStartMs(ctx.env);
+      startTimer = setTimeout(() => {
+        if (startSettled) return;
+        settleStart({ ok: false, reason: `${adapter.displayName} did not report a session within ${limit / 1000} seconds` });
         stop();
-      }, HEADLESS_START_MS) : undefined;
+      }, limit);
+    }
 
     const facts = new Facts(ctx, job, account, record, baseline);
     const print = (line: string) => {
@@ -650,8 +663,9 @@ export class JobSupervisor {
             status = { code: event.code, signal: event.signal };
             break;
           }
+          // A session, a message, a tool call or a finished turn shows that a headless agent started.
+          if (headless && STARTED_KINDS.has(event.kind)) settleStart({ ok: true, workerId });
           if (event.kind === "session_started") {
-            if (headless) settleStart({ ok: true, workerId });
             if (!sessionShown) {
               sessionShown = true;
               print(sessionLine(adapter.displayName, account.id, event.providerSessionId));

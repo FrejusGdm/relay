@@ -264,14 +264,15 @@ describe("relay daemon start, stop and status", () => {
     }
   }, 20_000);
 
-  test("start reports a daemon that refuses to start, with exit code 10", async () => {
-    // The socket path in this folder is too long, which only the daemon checks.
+  test("start reports a daemon that refuses to start, with exit code 10, and names a socket path that is too long", async () => {
     const relayHome = join(tempRelayHome(), "x".repeat(110));
     mkdirSync(relayHome, { mode: 0o700 });
+    const socket = join(relayHome, "run", "relay.sock");
+    const max = process.platform === "linux" ? "107 bytes on Linux" : "103 bytes on macOS";
     expect(await relay(relayHome, "start")).toEqual({
       code: 10,
       stdout: "",
-      stderr: `relay could not start its background service. Details are in ${join(relayHome, "logs", "daemon.log")}.\n`,
+      stderr: `relay could not start its background service: the socket path ${socket} is too long (at most ${max}). Set RELAY_HOME to a shorter path.\n`,
     });
     expect(readFileSync(join(relayHome, "logs", "daemon.stderr.log"), "utf8")).toContain("is too long");
   }, 20_000);

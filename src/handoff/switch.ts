@@ -252,7 +252,7 @@ export async function performHandoff(run: HandoffRun): Promise<HandoffResult> {
       },
     });
     const mismatches = notes.parsed === null ? [] : await compareClaims(repo, {
-      notes: notes.parsed, checks, changedWhileWorking: facts.filesChanged, workCheckpoint: checkpoint.commit, from: fromProvider,
+      notes: notes.parsed, checks, changedWhileWorking: [...facts.filesChanged, ...facts.jobFilesChanged], workCheckpoint: checkpoint.commit, from: fromProvider,
     });
     if (mismatches.length > 0) {
       run.progress(`Found ${mismatches.length} ${mismatches.length === 1 ? "difference" : "differences"} between the notes and the repository`);

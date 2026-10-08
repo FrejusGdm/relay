@@ -1,8 +1,9 @@
 // relay checkpoints (tasks.md 6.1): the checkpoints spec, "Listing checkpoints". Every test
 // compares captureState() and events.jsonl before and after, because listing only reads.
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from "bun:test";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { listLines } from "../../src/cli/commands/checkpoints";
 import { listCheckpoints } from "../../src/checkpoint/list";
 import { saveCheckpoint } from "../../src/checkpoint/save";
@@ -92,6 +93,47 @@ test("the JSON list has the fields of the spec, newest first", async () => {
     expect(Math.abs(Date.parse(item.created_at) - Date.now())).toBeLessThan(60_000);
   }
   expect(personState(scratch.repo)).toEqual(before);
+});
+
+// A git on PATH that behaves as git 2.39 on macOS does: in for-each-ref, every
+// %(trailers:key=...) atom of a format uses the keys of all such atoms.
+function gitWithSharedTrailerKeys(): string {
+  // The real git, not the test guard (test/setup.ts), which would run this wrapper again.
+  const real = Bun.which("git", { PATH: process.env.PATH!.split(delimiter).filter((dir) => !dir.endsWith("guard-bin")).join(delimiter) })!;
+  const bin = mkdtempSync(join(tmpdir(), "relay-git-"));
+  writeFileSync(join(bin, "git"), `#!/bin/sh
+for arg do
+  shift
+  case "$arg" in
+    --format=*trailers:key=*)
+      keys=$(printf '%s' "$arg" | grep -o 'trailers:key=[^,)]*' | sed 's/^trailers://' | paste -sd, -)
+      arg=$(printf '%s' "$arg" | sed "s/trailers:key=[^,)]*/trailers:$keys/g")
+      ;;
+  esac
+  set -- "$@" "$arg"
+done
+exec '${real}' "$@"
+`, { mode: 0o755 });
+  return bin;
+}
+
+test("with a git that shares the trailer keys between atoms, each checkpoint still has only its kind, head and left-out paths", async () => {
+  await threeKinds();
+  const bin = gitWithSharedTrailerKeys();
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}${delimiter}${path}`;
+  try {
+    const list = await listCheckpoints(await openRepository(scratch.repo), jobId(scratch));
+    const commit = sha(scratch, "HEAD");
+    expect(list.map(({ number, kind, head, leftOut }) => ({ number, kind, head, leftOut }))).toEqual([
+      { number: 3, kind: "pre_rollback", head: commit, leftOut: ["big.bin"] },
+      { number: 2, kind: "manual", head: commit, leftOut: ["big.bin"] },
+      { number: 1, kind: "baseline", head: commit, leftOut: [] },
+    ]);
+  } finally {
+    process.env.PATH = path;
+    rmSync(bin, { recursive: true, force: true });
+  }
 });
 
 test("a job with only a baseline lists one checkpoint; without commits its head is null", async () => {
