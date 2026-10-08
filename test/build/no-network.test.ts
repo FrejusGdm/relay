@@ -82,14 +82,23 @@ function isUnixSocketCall(node: Node): boolean {
   );
 }
 
+// add-t3-limit-rules: the T3 Code client talks HTTP to T3 on this computer (config only accepts
+// 127.0.0.1 or localhost), and the sign-in briefly listens on 127.0.0.1 for T3's redirect. Only
+// these two files, and only these names; any other network use under src/t3/ is still refused.
+const T3_ALLOWED: Record<string, ReadonlySet<string>> = {
+  "src/t3/client.ts": new Set(["fetch"]),
+  "src/t3/oauth.ts": new Set(["fetch", "Bun.serve"]),
+};
+
 function scan(source: SourceFile, file: string, found: string[]): void {
   const inClient = file.startsWith("src/client/");
+  const t3Allowed = Object.hasOwn(T3_ALLOWED, file) ? T3_ALLOWED[file]! : new Set<string>();
   const allowed = new Set<string>();
   const key = (node: Node) => `${node.kind}:${node.pos}:${node.end}`;
   const visit = (node: Node): undefined => {
     if (inClient && isUnixSocketCall(node) && isCallExpression(node)) allowed.add(key(node.expression));
     const use = networkUse(node);
-    if (use !== undefined && !allowed.has(key(node))) {
+    if (use !== undefined && !allowed.has(key(node)) && !t3Allowed.has(use)) {
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
       found.push(`${file}:${line}: ${use}`);
     }
@@ -208,6 +217,21 @@ test("src/client/ may only call fetch and Bun.connect with a unix option", async
       'src/client/bad.ts:7: "node:net"',
       "src/client/bad.ts:8: fetch",
       "src/client/bad.ts:9: fetch",
+    ]);
+  });
+});
+
+test("src/t3/ may use only fetch and the sign-in listener, in the two files that need them", async () => {
+  await withScratchSource({
+    "t3/client.ts": ['await fetch("x");', "Bun.serve({ port: 1 });"],
+    "t3/oauth.ts": ['await fetch("x");', 'Bun.serve({ hostname: "127.0.0.1", port: 0 });', 'import "node:net";', "Bun.connect({});"],
+    "t3/other.ts": ['await fetch("x");'],
+  }, async (root) => {
+    expect(await forbiddenNetworkUse(root)).toEqual([
+      "src/t3/client.ts:2: Bun.serve",
+      'src/t3/oauth.ts:3: "node:net"',
+      "src/t3/oauth.ts:4: Bun.connect",
+      "src/t3/other.ts:1: fetch",
     ]);
   });
 });
