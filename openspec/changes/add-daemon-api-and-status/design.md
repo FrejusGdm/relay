@@ -326,7 +326,7 @@ Event types this change reads. The names and fields are the ones phases 2 to 4 w
 | `worker_ended` | phases 3 and 4, daemon | `worker_id`, `exit_code`, `signal`, `end_reason` |
 | `handoff` | phase 4 | `from_worker_id`, `to_target`, `checkpoint_number` |
 | `availability` | phase 3, daemon | `target`, `status`, `reason`, `retry_at`, `measured_at`, `source`, `windows` |
-| `hook` | daemon (new) | `provider`, `event`, the allow-listed fields |
+| `hook` | daemon (new) | `provider`, `event`, the allow-listed fields; also `received_at`, `relay_worker` and `worker_id` for interactive workers (decision 18) |
 
 Unknown types are kept in the replay buffer as they are and otherwise ignored. A type must be 1 to
 64 characters from `a` to `z` and `_`, because it is written into the event stream's `event:`
@@ -501,6 +501,7 @@ depth from `docs/research/security.md` section 1, "Recommendation", item 2). Err
 | 500 | `internal_error` | "Something went wrong inside relay. Details are in the daemon log." |
 | 503 | `shutting_down` | "The relay daemon is stopping." |
 | 503 | `too_many_streams` | "The relay daemon already serves 32 event streams." |
+| 503 | `hook_queue_full` | "The relay daemon is behind on hook events." (1,000 events wait; `relay hook` spools the event) |
 
 `src/api/engine-errors.ts` maps the engines' typed errors (the same errors phase 2 maps to exit
 codes in `src/cli/exit-codes.ts`) to these rows.
@@ -524,7 +525,7 @@ endpoints the brief asks for. Job IDs in paths must match `^[0-9a-f]{8}$` and ta
 | `GET /v1/events` | `200` event stream (decision 15) |
 | `POST /v1/jobs/{job}/checkpoint` | `201` `{"checkpoint":Checkpoint}` (decision 17) |
 | `POST /v1/jobs/{job}/switch` | `200` `{"handoff":{…},"worker":Worker}` (decision 17) |
-| `POST /v1/hooks/{provider}/{event}` | `202` `{"accepted":true}` (decision 18) |
+| `POST /v1/hooks/{provider}/{event}` | `202` `{"accepted":true}`, `400 bad_request` or `503 hook_queue_full` (decision 18) |
 
 Shapes (every field always present; unknown values are `null`):
 
@@ -699,6 +700,54 @@ Spool draining (`src/daemon/spool.ts`): one second after start, rename `spool/ho
 `spool/hooks.<pid>.draining`, wait 1 second (longer than any hook can live, so a hook that opened
 the old file has finished), process each line through the same queue, then delete the file.
 Leftover `.draining` files from a crash are processed first.
+
+Decisions added while building task group 8:
+
+- **Draining while the daemon runs.** A hook spools its event whenever the daemon does not answer
+  within 150 ms, also while the daemon runs but is slow. So the daemon drains the spool again, with
+  the same rename and wait, after every hook event it accepts and every 2 seconds, whenever
+  `spool/hooks.jsonl` is not empty. A hook whose `202` arrived too late has also spooled its line,
+  so the queue remembers the last 2,000 lines it took and takes a repeated line only once.
+- **Checking every line again.** The daemon checks each line from a request or the spool with
+  `parseSpoolLine` (`src/hooks/fields.ts`): provider, event name, `relay_job`, `relay_target` and
+  `relay_worker` formats, `profile` as `default` or an absolute path, `received_at` at most one
+  minute ahead, and the allow list and the 1,024-character cut once more. A request that fails
+  gets `400 bad_request`; a spool line that fails is skipped. When 1,000 events are waiting, a
+  request gets `503 hook_queue_full`, and the hook spools the event.
+- **Accounts found through the profile folder.** Step 3 says availability changes "only when an
+  account is known, from `relay_target` or the worker", while task 8.2 tests "an event without
+  `relay_target` attributed through `profile`". The daemon reads it as: the account found in step
+  1, through `relay_target`, the worker or the profile folder, is the account whose availability
+  changes, as phase 3's `relay account status` and `relay status` without the daemon also do. Only
+  accounts in `config.toml` count, so an agent cannot add an account by naming one.
+
+#### Hook events for interactive workers
+
+Phase 3's interactive workers (`src/adapters/claude/interactive.ts`, `src/adapters/codex/interactive.ts`)
+learn that a turn ended or failed from relay's hooks, by reading the spool every second. Once the
+daemon accepts the events, they no longer reach the spool. Each event must still be stored in one
+place only, so the workers read the place the event went:
+
+- Without a daemon, the event is a line in the spool, as before.
+- With a daemon, the event is the `hook` event the daemon appends to the job's `events.jsonl`
+  (step 4). That event keeps what a worker needs to read it as the spool line it was:
+  `received_at` and `relay_worker` (the hook's `RELAY_WORKER`), next to `provider`, `event` and the
+  allowed fields. It also holds `worker_id`, the worker the daemon attributed the event to.
+
+`src/hooks/feed.ts` gives a worker both: the spool's lines and, read on from where it stopped, the
+`hook` events of its job's `events.jsonl` (the worker's `cwd` is the job's worktree root), turned
+back into spool lines. Lines are counted by a key made of `received_at`, provider, event,
+`relay_worker` and the fields, so a line that the daemon drains from the spool into `events.jsonl`
+is handed out once, while two identical events are still handed out twice. A line is never in
+both places at once, because a spool being drained is a `.draining` file, which the feed does not
+read. The workers keep their own filters (the worker ID or the session ID, and events after the
+worker started).
+
+Other designs were rejected: the daemon writing the event back to the spool would make it a second
+copy that the next drain records again; the worker following the daemon's event stream would make
+it depend on the daemon and need a second path for the spool anyway. Events without a job (an
+agent started outside relay) reach no interactive worker, which is right, because relay starts
+interactive workers only inside a job.
 
 Installing the hooks is phase 3's `relay hooks install <account>`, which writes one entry per
 event into the account's `settings.json` (Claude Code) or `hooks.json` (Codex) with the command

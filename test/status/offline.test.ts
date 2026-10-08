@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runRelay } from "../helpers/cli";
-import { jobId, setUpJob, sha } from "../helpers/job";
+import { FAKE_SCANNER, jobId, setUpJob, sha } from "../helpers/job";
 import { removeTempRelayHomes, spawnDaemon, stopDaemon, waitForDaemon } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 async function project(): Promise<ScratchRepo> {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(scratch);
   writeFileSync(join(scratch.relayHome, "config.toml"), '[accounts."claude:work"]\n[accounts."codex:personal"]\n', { mode: 0o600 });
   return scratch;
@@ -58,6 +58,22 @@ test("a rate_limit hook spooled while the daemon was down shows as limit reached
   expect(result.stdout).toContain("claude:work      ────────────────   limit reached · reset unknown\n");
   const json = JSON.parse((await status(scratch, "--json")).stdout);
   expect(json.accounts[0]).toMatchObject({ target: "claude:work", availability: { status: "rate_limited", source: "hook", reason: "Claude Code reported a rate limit" } });
+}, 30_000);
+
+test("a spooled hook from the default profile belongs to the account that uses ~/.claude, not to one without profile_dir", async () => {
+  const scratch = await project();
+  mkdirSync(join(scratch.home, ".claude"), { mode: 0o700 });
+  writeFileSync(join(scratch.relayHome, "config.toml"), '[accounts."claude:work"]\n[accounts."claude:home"]\nprofile_dir = "~/.claude"\n', { mode: 0o600 });
+  mkdirSync(join(scratch.relayHome, "spool"), { mode: 0o700 });
+  const line = {
+    v: 1, received_at: new Date().toISOString(), provider: "claude", event: "StopFailure",
+    relay_job: null, relay_target: null, relay_worker: null, profile: "default",
+    fields: { session_id: "s1", hook_event_name: "StopFailure", error: "rate_limit" },
+  };
+  writeFileSync(join(scratch.relayHome, "spool", "hooks.jsonl"), `${JSON.stringify(line)}\n`, { mode: 0o600 });
+  const json = JSON.parse((await status(scratch, "--json")).stdout);
+  const byTarget = Object.fromEntries(json.accounts.map((account: { target: string; availability: { status: string } }) => [account.target, account.availability.status]));
+  expect(byTarget).toEqual({ "claude:home": "rate_limited", "claude:work": "unknown" });
 }, 30_000);
 
 test("relay status --json is the same with and without the daemon, except daemon, saved_state and generated_at", async () => {

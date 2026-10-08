@@ -35,8 +35,9 @@ renamed, so clients must ignore fields they do not know. A client checks `capabi
 | `accounts` | `GET /v1/providers`, `GET /v1/accounts`, `GET /v1/accounts/{target}` |
 | `jobs` | `GET /v1/jobs`, `GET /v1/jobs/{job}`, `.../workers`, `.../checkpoints` |
 | `events.sse` | `GET /v1/events` |
+| `hooks` | `POST /v1/hooks/{provider}/{event}` |
 
-Later work adds `jobs.checkpoint`, `jobs.switch` and `hooks`.
+Later work adds `jobs.checkpoint` and `jobs.switch`.
 
 ## Endpoints
 
@@ -44,7 +45,7 @@ Later work adds `jobs.checkpoint`, `jobs.switch` and `hooks`.
 
 ```
 $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/version
-{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse"],"agents_running":[]}
+{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","hooks"],"agents_running":[]}
 ```
 
 `stream_epoch` changes whenever the daemon rebuilds its index. A rebuilt index numbers its events
@@ -153,6 +154,23 @@ The daemon keeps the newest 10,000 events for resuming. It reads the events for 
 the client has read what it was sent, so a client that stops reading slows only its own stream. A comment line `: ping` arrives every
 15 seconds. At most 32 streams can be open at once; the next one gets `503 too_many_streams`.
 
+### POST /v1/hooks/{provider}/{event}
+
+`relay hook` sends each hook event here (`docs/hooks.md`). The body is the event as one line of
+the hook spool. The daemon checks the line again, keeps only the allowed fields, puts it on its
+hook queue and answers at once, before it records anything.
+
+```
+$ curl -s --unix-socket ~/.relay/run/relay.sock -X POST http://relay/v1/hooks/claude/StopFailure \
+    -d '{"v":1,"received_at":"2026-10-08T12:02:11.120Z","provider":"claude","event":"StopFailure","relay_job":null,"relay_target":"claude:work","relay_worker":null,"profile":"default","fields":{"error":"rate_limit"}}'
+{"accepted":true}
+```
+
+The answer is `202`. The provider must be `claude` or `codex`, and the event a name of letters,
+digits and underscores that matches the body; otherwise the answer is `400 bad_request`. When
+1,000 events are already waiting, the answer is `503 hook_queue_full`, and `relay hook` writes the
+event to the spool instead.
+
 ## Errors
 
 Every error answer has the body `{"error": {"code": "...", "message": "..."}}`, with a plain
@@ -181,6 +199,7 @@ $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/jobs/ffffffff
 | 500 | `internal_error` | A bug in relay; details are in the daemon log. |
 | 503 | `shutting_down` | The daemon is stopping. |
 | 503 | `too_many_streams` | 32 event streams are already open. |
+| 503 | `hook_queue_full` | 1,000 hook events are already waiting. |
 
 The design lists more codes (`operation_in_progress`, `confirmation_required` and others) for the
 checkpoint and switch endpoints, which later work adds.

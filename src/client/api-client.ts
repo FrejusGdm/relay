@@ -92,10 +92,24 @@ export async function getStatusSources(
   }
 }
 
+// POST /v1/hooks/<provider>/<event> with a spool line as the body (design.md decision 18, step 5).
+// True only when the daemon accepted the event with 202 within timeoutMs. Throws UntrustedRuntime
+// as request() does.
+export async function postHook(runDir: string, provider: string, event: string, body: string, options: { timeoutMs: number }): Promise<boolean> {
+  const response = await request(runDir, `/v1/hooks/${provider}/${event}`, options.timeoutMs, { method: "POST", body });
+  await response?.body?.cancel().catch(() => {});
+  return response?.status === 202;
+}
+
 // The only connection to the daemon. Before it connects, it checks that the runtime directory is
 // private and that the socket is a socket owned by this user, not a symbolic link, and throws
 // UntrustedRuntime otherwise. Returns null when there is no socket or nothing answers in time.
-async function request(runDir: string, path: string, timeoutMs: number): Promise<Response | null> {
+async function request(
+  runDir: string,
+  path: string,
+  timeoutMs: number,
+  init: { method: "POST"; body: string } | null = null,
+): Promise<Response | null> {
   checkRuntimeDir(runDir);
   const socket = socketPath(runDir);
   const stats = lstatSync(socket, { throwIfNoEntry: false });
@@ -104,7 +118,8 @@ async function request(runDir: string, path: string, timeoutMs: number): Promise
     throw new UntrustedRuntime(`relay will not use ${printable(socket)}: it is not a socket owned by you.`);
   }
   try {
-    return await fetch(`http://relay${path}`, { unix: socket, signal: AbortSignal.timeout(timeoutMs) });
+    const body = init === null ? {} : { ...init, headers: { "Content-Type": "application/json" } };
+    return await fetch(`http://relay${path}`, { unix: socket, signal: AbortSignal.timeout(timeoutMs), ...body });
   } catch {
     return null;
   }

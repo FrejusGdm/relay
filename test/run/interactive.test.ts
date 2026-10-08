@@ -34,13 +34,16 @@ test("Ctrl+C in the terminal reaches only the agent; relay records the worker wh
     run.child.stdin!.end();
     expect(await run.exited).toBe(0);
     const [record] = workers(fixture);
-    expect(run.stdout()).toEndWith(`Recorded worker ${record!.worker_id} (claude:work).\n`);
+    // add-relay-switch: after the agent exits, relay saves a checkpoint of kind auto.
+    expect(run.stdout()).toMatch(new RegExp(`Recorded worker ${record!.worker_id} \\(claude:work\\)\\.\\nClaude Code · work stopped \\(exit code 0\\)\\nNo changes since checkpoint [0-9a-f]{6}\\n$`));
     expect(record).toMatchObject({ mode: "interactive", transport: "claude-interactive", permission: null, log_path: null, exit_code: 0, end_reason: "exited" });
-    expect(record!.argv).toEqual(["--session-id", record!.provider_session_id!, "--append-system-prompt", "<instructions>"]);
+    // add-relay-switch: a new job's agent gets the start prompt.
+    expect(record!.argv).toEqual(["--session-id", record!.provider_session_id!, "--append-system-prompt", "<instructions>", "--", "<prompt>"]);
     const types = jobEvents(fixture).map((event) => event.type);
-    // The interrupted turn fires no hook; the finished one fires Stop.
+    // The interrupted turn fires no hook; the finished ones fire Stop. add-relay-switch: the start
+    // prompt is the first turn, so the two lines typed run two more turns.
     expect(types.slice(types.indexOf("worker_started"))).toEqual([
-      "worker_started", "worker_session_identified", "turn_completed", "availability", "worker_ended",
+      "worker_started", "worker_session_identified", "turn_completed", "availability", "turn_completed", "worker_ended",
     ]);
   } finally {
     await fixture.cleanup();
@@ -100,7 +103,8 @@ test("a one-word task such as update reaches an interactive agent as its prompt,
       expect(await run.exited).toBe(0);
       const argv = (JSON.parse(readFileSync(record, "utf8")) as { argv: string[] }).argv;
       expect(argv.at(-2)).toBe("--");
-      expect(argv.at(-1)!.trim()).toBe("update");
+      // add-relay-switch: the task comes at the end of the start prompt.
+      expect(argv.at(-1)!).toEndWith("\n\nYour request: update");
       expect(workers(fixture)[0]!.argv.slice(-2)).toEqual(["--", "<prompt>"]);
     } finally {
       await fixture.cleanup();

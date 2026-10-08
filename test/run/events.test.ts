@@ -1,9 +1,12 @@
 // The worker events relay run writes to .relay/events.jsonl (task 9.4; design decision 16).
-import { expect, test } from "bun:test";
+import { expect, test, setDefaultTimeout } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tryLock } from "../../src/platform/file-lock";
 import { jobEvents, relayRun, resetTime, runFixture, steps, workers } from "./helpers";
+
+// add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
+setDefaultTimeout(30_000);
 
 const SESSION = "7c1e9a52-0b7e-4c1e-9f0a-3d5b2a1c4e8f";
 
@@ -31,6 +34,8 @@ test("a headless Claude run writes each event type with the fields of the table,
     expect(all.map((event) => event.type)).toEqual([
       "worker_started", "worker_session_identified", "command_ran", "command_ran", "file_changed", "command_ran",
       "permission_denied", "turn_completed", "availability", "worker_ended",
+      // add-relay-switch: the checkpoint relay saves when the agent exits.
+      "checkpoint_saved",
     ]);
     const [started, session, curl, test, changed, refused, denied, turn, availability, ended] = all;
     expect(started!.data).toEqual({
@@ -97,12 +102,13 @@ test("a task that starts with -- or is the single word update reaches a headless
       expect(result).toMatchObject({ code: 0, stderr: "" });
       const seen = JSON.parse(readFileSync(record, "utf8")) as { argv: string[]; input: string[] };
       const at = seen.argv.length - 1;
+      // add-relay-switch: the task comes at the end of the start prompt.
       if (account === "claude:work") {
         expect(seen.argv.map((arg) => arg.trim())).not.toContain(prompt);
-        expect(JSON.parse(seen.input[0]!).message.content).toBe(prompt);
+        expect(JSON.parse(seen.input[0]!).message.content).toEndWith(`\n\nYour request: ${prompt}`);
       } else {
         expect(seen.argv[at - 1]).toBe("--");
-        expect(seen.argv[at]!.trim()).toBe(prompt);
+        expect(seen.argv[at]!).toEndWith(`\n\nYour request: ${prompt}`);
       }
       expect(seen.argv).not.toContain("--dangerously-bypass-approvals-and-sandbox");
       if (account === "codex:personal") expect(workers(fixture)[0]!.argv.slice(-2)).toEqual(["--", "<prompt>"]);

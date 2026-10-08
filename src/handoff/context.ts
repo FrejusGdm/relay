@@ -53,6 +53,21 @@ export async function diffStat(repo: Repository, base: string | null, work: stri
   return output.split("\n").filter((line) => line !== "").slice(0, STAT_LINES);
 }
 
+// How many files changed from the job's base to the work checkpoint, and the lines added and
+// removed (binary files count as files only).
+export async function diffNumbers(repo: Repository, base: string | null, work: string): Promise<{ files: number; added: number; removed: number }> {
+  const output = await read(repo, ["diff", "--numstat", "--no-renames", await baseTree(repo, base), work, ...WITHOUT_JOB_FILES], "the diff");
+  const numbers = { files: 0, added: 0, removed: 0 };
+  for (const line of output.split("\n")) {
+    const match = /^(\d+|-)\t(\d+|-)\t/.exec(line);
+    if (match === null) continue;
+    numbers.files++;
+    numbers.added += match[1] === "-" ? 0 : Number(match[1]);
+    numbers.removed += match[2] === "-" ? 0 : Number(match[2]);
+  }
+  return numbers;
+}
+
 // "<short hash> <subject>" for the newest 20 commits from the job's base to the work checkpoint's
 // HEAD, newest first. The subjects were written by agents.
 export async function commitLines(repo: Repository, base: string | null, work: string): Promise<string[]> {
@@ -156,7 +171,7 @@ function checkFromEvent(data: Record<string, unknown>): CheckResult {
     exitCode: number(data.exit_code), signal: typeof data.signal === "string" ? data.signal : null,
     seconds: number(data.seconds) ?? 0,
     counts: passed === null || failed === null ? null : { passed, failed, skipped: number(data.skipped) ?? 0 },
-    logPath: "", excerpt: [], changedFiles: [], timeoutSeconds: number(data.seconds) ?? 0,
+    logPath: "", excerpt: [], changedFiles: [], timeoutSeconds: number(data.seconds) ?? 0, ranAt: new Date(0),
     error: "the shell did not start",
   };
 }

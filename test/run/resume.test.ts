@@ -1,9 +1,12 @@
 // relay run --resume <session ID> and --resume last (task 9.7).
-import { expect, test } from "bun:test";
+import { expect, test, setDefaultTimeout } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeWorkerRecord } from "../../src/run/worker-record";
 import { relayRun, runFixture, steps, workers } from "./helpers";
+
+// add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
+setDefaultTimeout(30_000);
 
 const done = steps({ say: "Done." });
 

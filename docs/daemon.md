@@ -8,9 +8,10 @@ network port. The behaviour comes from the OpenSpec change `add-daemon-api-and-s
 
 Today the daemon starts, stops, keeps to one copy per relay folder, checks every connection,
 keeps an index of jobs, workers, checkpoints and accounts in SQLite, follows the job files as
-commands change them, and answers the read endpoints and the live event stream that
-`docs/api.md` describes. The checkpoint and switch endpoints and the hook events come with the
-later task groups of the change, and each one extends this page.
+commands change them, answers the read endpoints and the live event stream that `docs/api.md`
+describes, and receives the agents' hook events (`docs/hooks.md`, "How hook events reach the
+daemon"). The checkpoint and switch endpoints come with the later task groups of the change, and
+each one extends this page.
 
 ## Where its files are
 
@@ -23,6 +24,8 @@ later task groups of the change, and each one extends this page.
   relay.db, relay.db-wal, relay.db-shm   the index (a cache), mode 0600
   projects.list                  the known project roots, one per line
   locks/<job>.events.lock        held for the moment one event is appended to a job's log
+  spool/hooks.jsonl              hook events written while the daemon did not answer, mode 0600
+  spool/hooks.<pid>.draining     the spool while a starting daemon reads it
   logs/daemon.log                the daemon's log, JSON lines, 10 MB x 5 files
   logs/daemon.stderr.log         what the detached daemon prints, such as a crash trace
 ```
@@ -166,7 +169,7 @@ You can talk to the daemon yourself with `curl`:
 
 ```
 $ curl -s --unix-socket ~/.relay/run/relay.sock http://relay/v1/version
-{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse"],"agents_running":[]}
+{"api":"v1","daemon_version":"0.1.0","pid":4121,"started_at":"2026-10-08T12:02:11.402Z","schema_version":1,"stream_epoch":"9c41d0e2a7b35f18","capabilities":["accounts","jobs","events.sse","hooks"],"agents_running":[]}
 ```
 
 `capabilities` lists the groups of endpoints the daemon offers. Clients check it, not the version

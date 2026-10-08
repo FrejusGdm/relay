@@ -5,18 +5,18 @@ The source is in `src/cli/`. In this version every command shows its help and ch
 arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
 `relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
-`relay statusline`, which `docs/hooks.md` describes, `relay daemon` and
-`relay doctor --reindex`, which `docs/daemon.md` describes, and `relay run`, which the section
-"Running an agent" of `docs/adapters.md` describes, and `relay license`, which
-`docs/licensing.md` describes; the other commands do not yet. The change
-named in the "Built by" column builds each one.
+`relay statusline`, which `docs/hooks.md` describes, `relay run`, which the section "Running an
+agent" of `docs/adapters.md` describes, `relay switch`, which `docs/handoff.md` describes,
+`relay daemon` and `relay doctor --reindex`, which `docs/daemon.md` describes, and `relay license`,
+which `docs/licensing.md` describes; the other commands do not yet. The change named in the
+"Built by" column builds each one.
 
 ## Commands
 
 | Command | Usage | Arguments | Built by |
 |---|---|---|---|
 | `init` | `relay init [--title <text>]` | none | `add-checkpoint-engine` |
-| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
+| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
 | `checkpoint` | `relay checkpoint [-m <text>] [--include <path>]... [--json]` | none | `add-checkpoint-engine` |
 | `checkpoints` | `relay checkpoints [--json]` | none | `add-checkpoint-engine` |
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
@@ -254,10 +254,12 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 23 | `LimitReached` | The agent stopped at a usage or rate limit. |
 | 24 | `AgentFailed` | The agent failed, crashed or asked for a permission. |
 | 25 | `Refused` | Refused by a relay rule: full access, the project's allow list, or a session started on another account. |
+| 31 | `StartFailed` | The next agent did not start; the handoff is ready to retry. |
 | 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
+| 33 | `CannotStop` | The current agent could not be stopped, or the `relay run` that holds it did not answer. |
 | 50 | `LicenseInvalid` | The license key is not valid: wrong format, a test key, an unknown signing key, a failed signature check, or another product. |
 | 51 | `LicenseMissing` | No license is active (from `relay license status`, and later from a paid feature). |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 31 and 33 by `add-relay-switch`, 40 to 42 by `add-t3-limit-rules`. The other numbers are free. `add-lifetime-license` uses 50 and 51 because 40 to 42 were already taken. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 40 to 42 by `add-t3-limit-rules`. The other numbers are free. `add-lifetime-license` uses 50 and 51 because 40 to 42 were already taken. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |
@@ -271,11 +273,12 @@ convention of 128 plus the signal number.
 
 Every command can also exit with 2 for a wrong command line, 70 for a bug in relay, 78 for a
 problem with the relay folder or `config.toml`, and 130 or 143 when a signal stops it. The table
-lists the other codes of the commands that `add-provider-adapters` and `add-lifetime-license` build.
+lists the other codes of the commands that `add-provider-adapters`, `add-relay-switch` and `add-lifetime-license` build.
 
 | Command | Exit codes |
 |---|---|
-| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access, the allow list or a session of another account; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code |
+| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access or a session of another account; 4 a secret in the work when relay saves the checkpoint at the agent's exit, or in a handoff; 7 an answer is needed, such as the first handoff to an account or a change of the checks without a terminal; 31 the agent of a handoff did not start; 32 the handoff would raise the mode or the permission; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code |
+| `relay switch` | 0 switched or prepared; 1 a failure after the switch started; 3 not set up, or no agent worked on the job; 4 the secret scan; 5 git's settings or hooks changed; 6 the job is busy; 7 an answer is needed or was no; 20 to 22 the next agent's program or account is not ready; 25 full access; 31 the next agent did not start; 32 the mode or permission would go up; 33 the agent could not be stopped, or its `relay run` did not answer. After an interactive start, `relay switch` supervises the next agent and exits as `relay run` would. `docs/handoff.md` says what to do after each code |
 | `relay account` | 0 done; 1 the account table could not be found to remove; 6 another command is changing `config.toml`; 7 an answer is needed; 20 the program is missing; 21 no such account; 22 the sign-in did not finish; 78 an unsafe profile folder |
 | `relay hooks` | 0 done; 1 a settings file could not be changed, or relay runs from source without `RELAY_BIN`; 7 an answer is needed; 21 no such account; 78 an unsafe profile folder |
 | `relay policy show` | 0 done; 2 a provider relay has no adapter for |

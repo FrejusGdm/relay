@@ -17,7 +17,7 @@ beforeAll(async () => {
 afterAll(() => job.scratch.cleanup());
 
 const check = (command: string, outcome: CheckResult["outcome"], counts: CheckResult["counts"] = null, exitCode: number | null = outcome === "passed" ? 0 : 1): CheckResult => ({
-  command, outcome, exitCode, signal: null, seconds: 1, counts, logPath: "", excerpt: [], changedFiles: [], timeoutSeconds: 600,
+  command, outcome, exitCode, signal: null, seconds: 1, counts, logPath: "", excerpt: [], changedFiles: [], timeoutSeconds: 600, ranAt: new Date("2026-10-07T14:20:10Z"),
 });
 const BUN_FAILS = check("bun test", "failed", { passed: 231, failed: 1, skipped: 0 });
 const compare = async (notes: string, checks: CheckResult[] = [BUN_FAILS], changed = ["src/auth/callback.ts"]) =>

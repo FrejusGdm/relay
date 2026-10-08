@@ -38,8 +38,12 @@ Run these commands in order. They need git and Bun 1.4.2.
 
    ```sh
    bun run typecheck
-   bun test
+   bun test --parallel
    ```
+
+   `--parallel` runs the test files in one process per CPU core, each file in a fresh global
+   object; `bun run test` does the same. A plain `bun test` runs the files one after another, which
+   takes several times longer. See "Keeping the tests fast" below.
 
 4. Build the Linux program and test it.
 
@@ -106,6 +110,26 @@ command fails the test until someone reviews it. It also checks that each call s
 relay's settings, that refs are written only through `update-ref --stdin`, and that every ref
 under `refs/relay/` belongs to the job. It
 needs git and gitleaks on `PATH`, like the other checkpoint tests.
+
+## Keeping the tests fast
+
+On the build machine (8 cores), the whole suite took 839 seconds one file after another, and
+about 3 minutes with `--parallel` and the changes below. Most of the time goes to starting
+programs: the real gitleaks needs about half a second to start and almost a second for each scan,
+and each `relay init` and `relay checkpoint` runs it.
+
+- Tests whose subject is not the secret scan set up their jobs with the fake gitleaks:
+  `setUpJob("full", undefined, FAKE_SCANNER)` from `test/helpers/job.ts`, as the handoff tests do
+  with `test/handoff/job.ts`. `FAKE_SCANNER` sets `RELAY_GITLEAKS` to
+  `test/helpers/fake-gitleaks.ts`. The checkpoint, rollback, init and secret tests keep the real
+  gitleaks, because the scan is part of what they test.
+- A test that starts a process stops it before the test ends, and waits for it. A test that starts
+  a daemon through relay, for example with `relay doctor --reindex`, awaits `relay daemon stop`
+  before its relay folder is removed; otherwise the daemon keeps running after the suite and slows
+  every later run on the computer.
+- A test waits for an event, such as a line in a file or a process's exit, instead of sleeping for
+  a fixed time. Fixed sleeps remain only where a test proves that something does not happen
+  within a time the spec gives, such as the daemon's 2-second check.
 
 ## Continuous integration
 

@@ -1,14 +1,17 @@
 // End to end on a scratch repository (task 9.8): a Claude worker that edits two files and stops at
 // a limit, then a Codex run that the project's allow list refuses. The person's branch, index,
 // stash and uncommitted files stay as they were.
-import { expect, test } from "bun:test";
+import { expect, test, setDefaultTimeout } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readAvailability } from "../../src/accounts/availability";
 import { personState } from "../helpers/job";
 import { jobEvents, relayRun, resetTime, runFixture, steps, workers } from "./helpers";
 
-test("relay run claude:work hits a limit, and codex:personal is refused by the allow list", async () => {
+// add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
+setDefaultTimeout(30_000);
+
+test("relay run claude:work hits a limit, and codex:personal needs the person's yes", async () => {
   const fixture = await runFixture();
   try {
     const before = personState(fixture.scratch.repo);
@@ -24,8 +27,8 @@ test("relay run claude:work hits a limit, and codex:personal is refused by the a
 
     const codex = await relayRun(fixture, ["codex:personal", "--headless", "--prompt", "Continue."], steps({ say: "Continuing." }));
     expect(codex).toMatchObject({
-      code: 25,
-      stderr: "This project allows only claude:work. To hand the job to codex:personal, use relay switch, which asks before your code goes to another company.\n",
+      code: 7,
+      stderr: 'codex:personal has not worked on this project before. Sending the repository to OpenAI needs your yes.\nRun "relay run codex:personal" in a terminal, or add --yes.\n',
     });
 
     const [record] = workers(fixture);
@@ -33,7 +36,7 @@ test("relay run claude:work hits a limit, and codex:personal is refused by the a
     expect(record).toMatchObject({ account: "claude:work", transport: "claude-print", end_reason: "exited", exit_code: 1 });
     const listed = jobEvents(fixture);
     const types = listed.slice(listed.findIndex((event) => event.type === "worker_started")).map((event) => event.type);
-    expect(types).toEqual(["worker_started", "worker_session_identified", "file_changed", "file_changed", "turn_failed", "availability", "worker_ended"]);
+    expect(types.slice(0, types.indexOf("worker_ended") + 1)).toEqual(["worker_started", "worker_session_identified", "file_changed", "file_changed", "turn_failed", "availability", "worker_ended"]);
     expect(listed.filter((event) => event.type === "file_changed").map((event) => event.data.paths)).toEqual([["src/parser.ts"], ["src/parser.test.ts"]]);
     const availability = readAvailability(fixture.relayHome, { id: "claude:work", provider: "claude", name: "work" });
     expect(availability).toMatchObject({ state: "quota_exhausted", retryAt: resets, source: "stream_event" });

@@ -1,26 +1,41 @@
 import type { LogLevel, RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
-import { buildAgentEnv } from "../../accounts/environment";
-import { readCodexHookTrust } from "../../adapters/codex/hooks";
-import { PAID_FEATURES } from "../../license/features";
-import { acceptGitChanges } from "./accept-git-changes";
-import { account } from "./account";
-import { checkpoint } from "./checkpoint";
-import { checkpoints } from "./checkpoints";
-import { daemon } from "./daemon";
-import { doctor } from "./doctor";
-import { hook } from "./hook";
-import { hooksCommand } from "./hooks";
-import { init } from "./init";
-import { licenseCommand } from "./license";
 import { notBuilt } from "./not-built";
-import { policy } from "./policy";
-import { providers } from "./providers";
-import { rollback } from "./rollback";
-import { run } from "./run";
-import { status } from "./status";
-import { statusline, statuslineWithoutSettings } from "./statusline";
+
+// Each command's module is loaded only when that command runs. relay hook and relay statusline run
+// on every agent event and must finish quickly, so they never load the database or git code
+// (add-daemon-api-and-status, design decision 18).
+type Handler = (ctx: CommandContext) => Promise<number>;
+const lazy = <K extends string>(load: () => Promise<Record<K, Handler>>, name: K): Handler =>
+  async (ctx) => (await load())[name](ctx);
+const acceptGitChanges = lazy(() => import("./accept-git-changes"), "acceptGitChanges");
+const account = lazy(() => import("./account"), "account");
+const checkpoint = lazy(() => import("./checkpoint"), "checkpoint");
+const checkpoints = lazy(() => import("./checkpoints"), "checkpoints");
+const daemon = lazy(() => import("./daemon"), "daemon");
+const doctor = lazy(() => import("./doctor"), "doctor");
+const hook = lazy(() => import("./hook"), "hook");
+const init = lazy(() => import("./init"), "init");
+const policy = lazy(() => import("./policy"), "policy");
+const providers = lazy(() => import("./providers"), "providers");
+const rollback = lazy(() => import("./rollback"), "rollback");
+const run = lazy(() => import("./run"), "run");
+const license: Handler = async (ctx) => {
+  const [{ licenseCommand }, { PAID_FEATURES }] = await Promise.all([import("./license"), import("../../license/features")]);
+  return licenseCommand(PAID_FEATURES)(ctx);
+};
+const switchCommand = lazy(() => import("./switch"), "switchCommand");
+const status = lazy(() => import("./status"), "status");
+const statusline = lazy(() => import("./statusline"), "statusline");
+const hooks: Handler = async (ctx) =>
+  (await import("./hooks")).hooksCommand(async (hookAccount, context) => {
+    const [{ readCodexHookTrust }, { buildAgentEnv }] = await Promise.all([
+      import("../../adapters/codex/hooks"),
+      import("../../accounts/environment"),
+    ]);
+    return readCodexHookTrust(hookAccount, buildAgentEnv(hookAccount, context.env), context.homedir);
+  })(ctx);
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
@@ -87,7 +102,7 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "run",
-    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]",
+    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]",
     argsUsage: "[<provider[:account]>]",
     summary: "Start an agent inside a relay job",
     details: [
@@ -108,6 +123,9 @@ export const COMMANDS: CommandDef[] = [
       { name: "permission", value: "<level>", description: "headless: read-only or edit-in-workspace" },
       { name: "model", value: "<name>", description: "The model the agent uses" },
       { name: "json", description: "headless: print each worker event as JSON" },
+      { name: "check", value: "<command>", multiple: true, description: "A check relay runs at every handoff (\"\" clears them)" },
+      { name: "yes", description: "Answer yes to relay's own questions" },
+      { name: "no-summary", description: "Do not ask the previous agent for handoff notes" },
     ],
     minArgs: 0,
     maxArgs: 1,
@@ -190,14 +208,24 @@ export const COMMANDS: CommandDef[] = [
     usage: "relay switch <provider[:account]>",
     argsUsage: "<provider[:account]>",
     summary: "Hand the job to another agent or account",
-    details: ["relay saves a checkpoint, writes the handoff and starts the next agent."],
-    examples: ["relay switch codex:personal", "relay switch claude:startup"],
-    options: [],
+    details: [
+      "relay stops the current agent, saves a checkpoint, writes the handoff and starts the next agent.",
+      "The first handoff to an account asks first, because it sends your code to that account's company.",
+    ],
+    examples: ["relay switch codex:personal", "relay switch claude:startup", "relay switch codex:personal --no-start"],
+    options: [
+      { name: "yes", description: "Answer yes to relay's own questions" },
+      { name: "no-summary", description: "Do not ask the current agent for handoff notes" },
+      { name: "no-start", description: "Prepare the handoff without starting the next agent" },
+      { name: "json", description: "Print the result as one JSON object" },
+      { name: "check", value: "<command>", multiple: true, description: "A check relay runs at every handoff (\"\" clears them)" },
+      { name: "permission", value: "<level>", description: "headless jobs: read-only or edit-in-workspace" },
+    ],
     minArgs: 1,
     maxArgs: 1,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: switchCommand,
   },
   {
     name: "status",
@@ -296,7 +324,7 @@ export const COMMANDS: CommandDef[] = [
     maxArgs: 2,
     quiet: false,
     built: true,
-    handler: hooksCommand((account, ctx) => readCodexHookTrust(account, buildAgentEnv(account, ctx.env), ctx.homedir)),
+    handler: hooks,
   },
   {
     name: "hook",
@@ -331,7 +359,7 @@ export const COMMANDS: CommandDef[] = [
     quiet: true,
     built: true,
     handler: statusline,
-    withoutSettings: statuslineWithoutSettings,
+    withoutSettings: async (ctx) => (await import("./statusline")).statuslineWithoutSettings(ctx),
   },
   {
     name: "daemon",
@@ -382,6 +410,6 @@ export const COMMANDS: CommandDef[] = [
     maxArgs: 2,
     quiet: false,
     built: true,
-    handler: licenseCommand(PAID_FEATURES),
+    handler: license,
   },
 ];

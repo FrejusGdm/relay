@@ -13,7 +13,7 @@ import { applyEvent } from "../../src/state/apply-event";
 import { databasePath, openDatabase, streamEpoch } from "../../src/state/db";
 import { readEventsFrom } from "../../src/state/index-builder";
 import { streamSeq } from "../../src/state/queries";
-import { jobId, setUpJob } from "../helpers/job";
+import { FAKE_SCANNER, jobId, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, spawnDaemon, tempRelayHome, testSocket, waitForDaemon } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
@@ -241,7 +241,7 @@ test("a rebuilt database numbers its events above the old ones, so an old positi
 });
 
 test("a daemon sends an availability event for an event appended to a job, and shutdown before the stream ends", async () => {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(scratch);
   const daemon = spawnDaemon(scratch.relayHome);
   await waitForDaemon(scratch.relayHome);

@@ -14,16 +14,17 @@ const missingRelayHome = () => join(makeRelayHome(), "missing");
 describe("Commands that are not built yet", () => {
   // Every command except the quiet ones (hook and statusline) reports broken settings; relay init,
   // relay checkpoint, relay checkpoints, relay rollback, relay accept-git-changes, relay daemon,
-  // relay doctor, relay status, relay run, relay account, relay providers, relay policy and relay
-  // hooks are built.
+  // relay doctor, relay status, relay run, relay switch, relay account, relay providers, relay policy
+  // and relay hooks are built.
   const readSettings = COMMANDS.filter((def) => !def.quiet);
   const unbuilt = readSettings.filter((def) => !def.built);
 
-  test("there is one of them", () => {
-    expect(unbuilt).toHaveLength(1);
+  test("there are none left", () => {
+    expect(unbuilt).toHaveLength(0);
   });
 
-  test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(
+  // Kept for a command added later without its handler; bun refuses test.each on an empty list.
+  if (unbuilt.length > 0) test.each(unbuilt.map((def) => [def.name, def.minArgs] as const))(
     "relay %s with valid settings exits 69",
     async (name, minArgs) => {
       const relayHome = makeRelayHome('[accounts."claude:personal"]\n');

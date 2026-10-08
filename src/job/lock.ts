@@ -8,7 +8,7 @@
 // owner. The events lock is an flock lock instead (add-daemon-api-and-status, design decision 9):
 // the kernel releases it when its holder dies, so a crash never leaves it held.
 import { randomBytes } from "node:crypto";
-import { closeSync, linkSync, mkdirSync, openSync, readFileSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { CommandError } from "../cli/errors";
@@ -63,14 +63,23 @@ export function takeJobLock(relayHome: string, jobId: string, command: string): 
   throw new CommandError(ExitCode.Busy, ["Another relay command is working on this job. Try again when it finishes."]);
 }
 
-// Holds the worker lock of the job for `account` and returns the function that releases it. Only
-// one agent works on a job at a time; a lock left by a process that no longer runs is replaced.
-export function takeWorkerLock(relayHome: string, jobId: string, account: string): () => void {
+export function workerLockPath(relayHome: string, jobId: string): string {
+  return lockPath(relayHome, jobId, "worker.lock");
+}
+
+// The worker lock as its holder sees it: releasing removes the file only while this process still
+// owns it, and `update` replaces the owner's fields through a temporary file and a rename, for
+// example with the next worker after a handoff (add-relay-switch, design decision 15).
+export type WorkerLock = (() => void) & { update(fields: Record<string, unknown>): void };
+
+// Holds the worker lock of the job for `account` and returns it. Only one agent works on a job at
+// a time; a lock left by a process that no longer runs is replaced. `extra` holds the fields that
+// add-relay-switch adds to the owner.
+export function takeWorkerLock(relayHome: string, jobId: string, account: string, extra: Record<string, unknown> = {}): WorkerLock {
   const path = lockPath(relayHome, jobId, "worker.lock");
   for (let attempt = 0; attempt < 3; attempt++) {
-    const owner: WorkerOwner = { pid: process.pid, account, started_at: new Date().toISOString() };
-    const release = createLock(path, owner);
-    if (release !== null) return release;
+    const owner: Record<string, unknown> = { pid: process.pid, account, started_at: new Date().toISOString(), ...extra };
+    if (createLock(path, owner) !== null) return workerLock(path, owner);
     const current = readOwner(path, isWorkerOwner);
     if (current === "gone") continue;
     if (current !== null && isStale(current.parsed)) {
@@ -81,6 +90,30 @@ export function takeWorkerLock(relayHome: string, jobId: string, account: string
     throw new CommandError(ExitCode.Busy, [`Another agent is already working on this job${holder}.`]);
   }
   throw new CommandError(ExitCode.Busy, ["Another agent is already working on this job."]);
+}
+
+function workerLock(path: string, owner: Record<string, unknown>): WorkerLock {
+  const mine = () => {
+    const current = readOwner(path, isWorkerOwner);
+    return current !== null && current !== "gone" && current.parsed.pid === process.pid;
+  };
+  const release = () => {
+    if (mine()) unlinkSync(path);
+  };
+  return Object.assign(release, {
+    update(fields: Record<string, unknown>) {
+      if (!mine()) return;
+      Object.assign(owner, fields);
+      const temporary = `${path}.${randomBytes(4).toString("hex")}.tmp`;
+      const fd = openSync(temporary, "wx", 0o600);
+      try {
+        writeSync(fd, `${JSON.stringify(owner)}\n`);
+      } finally {
+        closeSync(fd);
+      }
+      renameSync(temporary, path);
+    },
+  });
 }
 
 // Runs `action` while holding the events lock, trying every 10 ms for up to 2 seconds.

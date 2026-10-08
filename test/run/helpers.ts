@@ -1,7 +1,7 @@
 // Shared steps for the relay run tests: a scratch repository with a job and two accounts, relay run
 // in the same process or as its own process, and readers for the job's events and worker records.
 import { spawn, type ChildProcess } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startAccountRecord } from "../../src/accounts/record";
 import { policyOf } from "../../src/policies/load";
@@ -9,7 +9,7 @@ import { readWorkerRecords, type WorkerRecord } from "../../src/run/worker-recor
 import type { Scenario } from "../fakes/scenario";
 import { MAIN, runRelayInProcess, type RelayResult } from "../helpers/cli";
 import { fakeEnv } from "../helpers/fake-programs";
-import { events, jobId, setUpJob } from "../helpers/job";
+import { events, FAKE_SCANNER, jobId, setUpJob } from "../helpers/job";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
 export const ACCOUNTS = '[accounts."claude:work"]\n\n[accounts."codex:personal"]\n';
@@ -27,6 +27,11 @@ export interface RunFixture {
 // failed expectation.
 const running = new Set<ChildProcess>();
 
+// Registers a relay process another helper started, so that cleanup stops it too.
+export function trackRun(child: ChildProcess): void {
+  running.add(child);
+}
+
 // SIGTERM makes relay stop its agent, which runs in its own process group, before relay exits.
 async function stopRunning(): Promise<void> {
   for (const child of running) {
@@ -42,7 +47,8 @@ async function stopRunning(): Promise<void> {
 // A job in a scratch repository, with config.toml holding `config` and account records that say the
 // person has seen the current policies, so no policy notice is printed.
 export async function runFixture(config = ACCOUNTS, kind: "full" | "empty" = "full"): Promise<RunFixture> {
-  const scratch = await setUpJob(kind);
+  // relay run never scans for secrets, so the job is set up with the fake scanner.
+  const scratch = await setUpJob(kind, undefined, FAKE_SCANNER);
   writeFileSync(join(scratch.relayHome, "config.toml"), config, { mode: 0o600 });
   for (const [provider, name] of [["claude", "work"], ["codex", "personal"]] as const) {
     startAccountRecord(scratch.relayHome, { id: `${provider}:${name}`, provider, name }, { policy_checked_on_seen: policyOf(provider).checkedOn });
@@ -106,4 +112,10 @@ export function resetTime(hours = 3): Date {
   const time = new Date(Date.now() + hours * 3600_000);
   time.setUTCSeconds(0, 0);
   return time;
+}
+
+// The first six characters of the job's latest checkpoint commit.
+export function latestCheckpoint(fixture: RunFixture): string {
+  const state = JSON.parse(readFileSync(join(fixture.scratch.repo, ".relay", "state.json"), "utf8")) as { latest_checkpoint: { commit: string } };
+  return state.latest_checkpoint.commit.slice(0, 6);
 }

@@ -8,7 +8,7 @@ import { appendEvent, type JobRef } from "../../src/job/events";
 import { openDatabase } from "../../src/state/db";
 import { buildIndex } from "../../src/state/index-builder";
 import { getAccount, getJob, listAccounts, listWorkers } from "../../src/state/queries";
-import { jobId, relay, setUpJob } from "../helpers/job";
+import { FAKE_SCANNER, jobId, relay, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, tempRelayHome } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
@@ -31,11 +31,11 @@ async function deadPid(): Promise<number> {
 }
 
 test("jobs, workers, the last checkpoint and the newest availability per account come from the files", async () => {
-  const first = await setUpJob();
+  const first = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(first);
   first.write("feature.ts", "export const done = true;\n");
   expect((await relay(first, ["checkpoint", "-m", "Feature done"], { quiet: true })).code).toBe(0);
-  const second = await setUpJob();
+  const second = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(second);
 
   const job: JobRef = { id: jobId(first), worktreeRoot: first.repo, relayHome: first.relayHome };
@@ -109,9 +109,9 @@ test("jobs, workers, the last checkpoint and the newest availability per account
 }, 30_000);
 
 test("a project whose folder was deleted is marked missing and the others are indexed", async () => {
-  const kept = await setUpJob();
+  const kept = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(kept);
-  const gone = await setUpJob();
+  const gone = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(gone);
   const goneId = jobId(gone);
   rmSync(gone.repo, { recursive: true, force: true });

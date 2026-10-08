@@ -69,7 +69,7 @@ async function gather(ctx: CommandContext, root: string, jobId: string): Promise
     ctx.io.err(`${error.message}\n`);
   }
   // The daemon did not answer, or has not indexed this project yet.
-  const saved = await fromFiles(ctx.relayHome, root, jobId, ctx.config.accounts);
+  const saved = await fromFiles(ctx.relayHome, root, jobId, ctx.config.accounts, ctx.homedir);
   return saved === null ? null : { ...saved, daemon, savedState: true };
 }
 

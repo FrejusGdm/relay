@@ -6,7 +6,7 @@ import type { Account } from "../core/config/types";
 import { resolveHomedir } from "../core/paths";
 import { printable } from "../core/quote";
 
-const DEFAULT_FOLDERS = { claude: ".claude", codex: ".codex" } as const;
+export const DEFAULT_FOLDERS = { claude: ".claude", codex: ".codex" } as const;
 
 // True when the account uses the provider's own folder, ~/.claude or ~/.codex. relay then leaves
 // the profile variable unset (design decision 6).
