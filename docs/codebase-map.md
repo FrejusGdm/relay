@@ -2,7 +2,7 @@
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 5 of `add-provider-adapters`, task groups 1 to 7 of
-`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 3 of
+`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, task groups 1 to 6 of
 `add-daemon-api-and-status`, and task groups 1 to 4 of `add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
@@ -15,7 +15,7 @@ flowchart TD
 
   subgraph src["src/"]
     cli["src/cli/<br/>main.ts, run.ts, router.ts, help.ts,<br/>io.ts, errors.ts, exit-codes.ts"]
-    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>daemon.ts, account.ts, providers.ts, policy.ts,<br/>not-built.ts: their handlers"]
+    commands["src/cli/commands/<br/>registry.ts: the sixteen commands<br/>init.ts, checkpoint.ts, checkpoints.ts,<br/>rollback.ts, accept-git-changes.ts, hook.ts,<br/>daemon.ts, doctor.ts, account.ts, providers.ts,<br/>policy.ts, not-built.ts: their handlers"]
     checkpoint["src/checkpoint/<br/>save.ts: saveCheckpoint, the one checkpoint function<br/>snapshot.ts: the tree, built with a temporary index<br/>commit.ts: the commit and its refs<br/>list.ts: relay checkpoints<br/>rollback.ts: relay rollback"]
     core["src/core/<br/>version.ts: the version from package.json<br/>paths.ts: the home and relay folders<br/>relay-home.ts: folder and file safety checks<br/>quote.ts: escapes text relay repeats<br/>log.ts: the JSON-lines log files<br/>cleanup.ts: what to undo on a signal"]
     config["src/core/config/<br/>load.ts, validate.ts, log-level.ts,<br/>types.ts: reading and checking config.toml<br/>edit.ts: the one writer of config.toml"]
@@ -23,8 +23,9 @@ flowchart TD
     adapters["src/adapters/<br/>providers.ts: the list of providers<br/>types.ts: the adapter interface and events<br/>registry.ts: the adapter of each provider<br/>process.ts: the only code that starts agents<br/>lines.ts, text.ts, reset-time.ts: output lines,<br/>TOML strings and reset times<br/>program.ts: finding a program and its version<br/>claude/, codex/: adapter.ts, policy.toml,<br/>tested-versions.json; codex/protocol-used.json"]
     policies["src/policies/<br/>schema.ts, load.ts: the policy files<br/>switching.ts: mayAutoSwitch"]
     accounts["src/accounts/<br/>environment.ts: the agent's environment<br/>profile.ts: profile folders and their checks<br/>registry.ts: accounts in the settings<br/>record.ts, availability.ts, files.ts:<br/>account.json and availability.json"]
-    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log"]
-    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, routes/version.ts"]
+    daemon["src/daemon/<br/>main.ts: relay daemon run<br/>paths.ts: runtime directory checks<br/>singleton.ts: daemon.lock, daemon.pid<br/>log.ts: logs/daemon.log<br/>follow.ts: follows events.jsonl and projects.list"]
+    api["src/api/<br/>server.ts: the socket listener and peer check<br/>http1.ts: the HTTP/1.1 layer<br/>router.ts, errors.ts, snapshot.ts<br/>sse.ts: the event stream<br/>routes/: version, providers, accounts, jobs, events"]
+    state["src/state/<br/>schema.sql, db.ts: relay.db<br/>index-builder.ts, apply-event.ts: filling it<br/>queries.ts, availability.ts: reading it<br/>projects-list.ts: projects.list"]
     client["src/client/<br/>api-client.ts: the only fetch, over the socket<br/>ensure-daemon.ts: starts the daemon"]
     git["src/git/<br/>run.ts: the only code that starts git<br/>repo.ts: finds the repository<br/>trust.ts: the trust record of git settings and hooks"]
     job["src/job/<br/>id.ts, names.ts: job IDs and job file names<br/>files.ts, state.ts: templates and state.json<br/>events.ts: the only writer of events.jsonl<br/>lock.ts: the job lock, the events lock<br/>and the config lock<br/>exclude.ts: the /.relay/ exclude line"]
@@ -41,7 +42,7 @@ flowchart TD
     coretests["core/: paths, relay folder, settings and log tests<br/>fixtures/config/: settings files"]
     fake["fixtures/fake-provider/<br/>guard programs, fake agent, scenarios"]
     buildtests["build/: no-network.test.ts"]
-    daemontests["platform/, daemon/, api/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer<br/>helpers/relay-home.ts: short relay folders, test daemons"]
+    daemontests["platform/, daemon/, api/, state/: locks, peer check,<br/>compiled probe, daemon lifecycle, HTTP layer, index,<br/>following, read endpoints, event stream<br/>api/fixtures/: expected answers<br/>helpers/relay-home.ts: short relay folders, test daemons"]
     fakes["fakes/<br/>fake-claude.ts, fake-codex.ts: the fake agents<br/>scenario.ts, record.ts, run-hooks.ts<br/>fake-adapter.ts: the in-process fake adapter<br/>fake-t3.ts: a fake T3 Code server"]
     adaptertests["adapters/, accounts/, policies/, docs/:<br/>adapter core, accounts, policies and document tests<br/>adapters/contract.ts, fixtures.ts, registry.ts:<br/>the contract suite<br/>fixtures/providers/: the provider fixtures<br/>helpers/child.ts, helpers/fake-programs.ts"]
   end
@@ -92,6 +93,13 @@ flowchart TD
   adaptertests -->|"start fake-claude through process.ts"| fakes
   adaptertests -->|"check"| adapters
   adaptertests -->|"check"| accounts
+  daemontests -->|"check"| state
+  daemon -->|"opens, rebuilds and follows the index with"| state
+  api -->|"answers from"| state
+  state -->|"reads checkpoints with"| checkpoint
+  state -->|"reads state.json with"| job
+  commands -->|"init.ts adds the project to projects.list with"| state
+  checkpoint -->|"save.ts adds the project of every job it finds to projects.list with"| state
   commands -->|"account.ts, providers.ts use"| adapters
   commands -->|"account.ts manages"| accounts
   commands -->|"account.ts writes config.toml through"| config
@@ -140,15 +148,27 @@ which checks the runtime directory with `src/daemon/paths.ts`, takes the daemon 
 the pid file with `src/daemon/singleton.ts`, logs to `logs/daemon.log` through
 `src/daemon/log.ts`, and starts the listener in `src/api/server.ts`. The listener checks each
 connecting user, hands the bytes to the small HTTP/1.1 layer in `src/api/http1.ts`, and that layer
-passes each request to `src/api/router.ts`, which answers `GET /v1/version` from
-`src/api/routes/version.ts` and builds error answers with `src/api/errors.ts`. The other
-`relay daemon` actions run in the command's own process: `src/client/ensure-daemon.ts` starts a
-detached daemon, and `src/client/api-client.ts` asks a running one for its version, after it has
-checked that the runtime directory is private and the socket is the user's own.
-`docs/daemon.md` describes the daemon, its files and the checks on the way to an answer in
-diagrams. The tests in `test/platform/`, `test/daemon/` and `test/api/` use the short relay
-folders and test daemons from `test/helpers/relay-home.ts`, because a socket path may have at most
-103 bytes on macOS.
+passes each request to `src/api/router.ts`, which finds the handler in `src/api/routes/` and
+builds error answers with `src/api/errors.ts`. The other `relay daemon` actions, and
+`relay doctor --reindex` in `src/cli/commands/doctor.ts`, run in the command's own process:
+`src/client/ensure-daemon.ts` starts a detached daemon, and `src/client/api-client.ts` asks a
+running one for its version or its jobs, after it has checked that the runtime directory is
+private and the socket is the user's own.
+
+Before it listens, `main.ts` opens `relay.db` with `src/state/db.ts`, which creates it from
+`src/state/schema.sql` when it is missing, damaged or of an old version; `src/state/index-builder.ts`
+then fills it from `config.toml`, `projects.list` (`src/state/projects-list.ts`), each project's
+`.relay/` files and the checkpoint refs, which it reads with `src/checkpoint/list.ts`.
+`src/state/apply-event.ts` is the one place that turns an event of the earlier phases into rows.
+`src/daemon/follow.ts` reads new lines of each `events.jsonl` and new roots in `projects.list`, and
+writes each change to the event stream in `src/api/sse.ts`. The routes read the index through
+`src/state/queries.ts`, with `src/state/availability.ts` for the stale reset rule, and
+`src/api/snapshot.ts` adds the `Relay-Stream-Seq` header. `docs/daemon.md` describes the daemon,
+its files, the index and the checks on the way to an answer in diagrams, and `docs/api.md` describes
+every endpoint. The tests in `test/platform/`, `test/daemon/`, `test/api/` and `test/state/` use the
+short relay folders and test daemons from `test/helpers/relay-home.ts`, because a socket path may
+have at most 103 bytes on macOS; `test/api/fixtures/` holds the expected answers of the read
+endpoints.
 
 `src/adapters/` holds the adapter interface of `add-provider-adapters` in `types.ts` and the
 registry that gives each provider's adapter in `registry.ts`; the Claude Code and Codex adapters
@@ -241,8 +261,9 @@ files with `src/job/files.ts` and `src/job/state.ts`, adds the exclude line with
 `src/job/exclude.ts`, records the git trust record with `src/git/trust.ts`, and appends the first
 event with `appendEvent` from `src/job/events.ts`. That function is the only code that writes
 `events.jsonl`, and `test/job/single-writer.test.ts` fails if another source file does.
-`src/job/lock.ts` holds the job lock, the short events lock and the config lock, which
-`src/core/config/edit.ts` holds while it changes `config.toml`, under `RELAY_HOME/locks/`, and
+`src/job/lock.ts` holds the job lock, the short events lock (an `flock` lock) and the config
+lock, which `src/core/config/edit.ts` holds while it changes `config.toml`, under
+`RELAY_HOME/locks/`, and
 `src/job/names.ts` names the job files for the modules that need the list. `src/text/invisible.ts`
 removes invisible characters from the job title, and `src/git/trust.ts` uses the same list to
 mark them in its report. `src/secrets/scan.ts` runs gitleaks on text relay builds itself, and

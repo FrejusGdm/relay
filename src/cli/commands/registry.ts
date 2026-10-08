@@ -6,6 +6,7 @@ import { account } from "./account";
 import { checkpoint } from "./checkpoint";
 import { checkpoints } from "./checkpoints";
 import { daemon } from "./daemon";
+import { doctor } from "./doctor";
 import { hook } from "./hook";
 import { init } from "./init";
 import { notBuilt } from "./not-built";
@@ -322,7 +323,7 @@ export const COMMANDS: CommandDef[] = [
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: doctor,
   },
 ];

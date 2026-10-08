@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "target_not_found",
+    "message": "No account named codex:work in config.toml."
+  }
+}

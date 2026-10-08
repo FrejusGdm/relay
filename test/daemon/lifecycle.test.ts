@@ -108,7 +108,7 @@ describe("relay daemon run", () => {
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line).msg);
-    expect(messages).toEqual(["daemon_started", "daemon_stopping", "daemon_stopped"]);
+    expect(messages).toEqual(["Rebuilt the index from 0 projects.", "daemon_started", "daemon_stopping", "daemon_stopped"]);
   }, 20_000);
 
   test("refuses a runtime directory others can read, on standard error and in daemon.log", async () => {

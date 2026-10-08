@@ -64,7 +64,7 @@ Every error response SHALL have a JSON body `{"error": {"code": <string>, "messa
 - **THEN** the response is `405` with error code `method_not_allowed` and an `Allow` header
 
 ### Requirement: Versioning
-`GET /v1/version` SHALL return `api`, `daemon_version`, `pid`, `started_at`, `schema_version` and a `capabilities` array. A request for any other major version path SHALL return `404` with code `unsupported_version` and `supported: ["v1"]`. Within `/v1`, fields SHALL only be added, never removed or renamed.
+`GET /v1/version` SHALL return `api`, `daemon_version`, `pid`, `started_at`, `schema_version`, a `stream_epoch` that changes whenever the index is rebuilt (the Mac app needs it to tell a rebuilt event stream from a restart), and a `capabilities` array. A request for any other major version path SHALL return `404` with code `unsupported_version` and `supported: ["v1"]`. Within `/v1`, fields SHALL only be added, never removed or renamed.
 
 #### Scenario: Capabilities
 - **WHEN** a client calls `GET /v1/version`
@@ -97,7 +97,7 @@ Every error response SHALL have a JSON body `{"error": {"code": <string>, "messa
 - **THEN** `GET /v1/jobs/3f9a2c1d/checkpoints` lists it first with its full commit hash and ref name
 
 ### Requirement: Live events stream
-`GET /v1/events` SHALL respond with `Content-Type: text/event-stream`, send each new event with an increasing `id`, accept `?job=<id>` to filter and `Last-Event-ID` or `?since=<id>` to resume, send a comment line every 15 seconds, and send a `reset` event when the requested position is no longer retained.
+`GET /v1/events` SHALL respond with `Content-Type: text/event-stream`, send each new event with an increasing `id`, accept `?job=<id>` to filter and `Last-Event-ID` or `?since=<id>` to resume, send a comment line every 15 seconds, and send a `reset` event, whose data holds the `stream_epoch`, when the requested position is no longer retained or is ahead of the newest event (the Mac app needs the second case to notice a cursor from a rebuilt database). The data of an `availability` event SHALL be the whole account object that `GET /v1/accounts/{target}` returns, so clients decode one shape. When the daemon finds that a worker's process is gone and no end was recorded, it SHALL send one `worker` event with state `stopped` (the Mac app needs it to show the change without polling).
 
 #### Scenario: Resume after a disconnect
 - **WHEN** a client reconnects with `Last-Event-ID: 4180` and events 4181 and 4182 exist
@@ -106,6 +106,21 @@ Every error response SHALL have a JSON body `{"error": {"code": <string>, "messa
 #### Scenario: Position too old
 - **WHEN** a client asks for `since=10` and the oldest retained event is 5000
 - **THEN** the stream first sends an event of type `reset` so the client reloads its data
+
+#### Scenario: Position ahead of the history
+- **WHEN** a client asks for `since=4180` and the newest event is 12, because the index was rebuilt
+- **THEN** the stream first sends an event of type `reset` with the new `stream_epoch`
+
+#### Scenario: A worker disappears
+- **WHEN** a worker's process ends without a `worker_ended` event
+- **THEN** within 2 seconds the stream sends one `worker` event for it with `state` `stopped`
+
+### Requirement: Snapshot position on GET answers
+Every `GET` answer except `GET /v1/events` SHALL carry the header `Relay-Stream-Seq` with the highest event stream `id` whose change the answer already shows, read together with the answer's data. The Mac app needs it to order an answer against the events it receives.
+
+#### Scenario: An answer and the stream agree
+- **WHEN** the newest event on the stream has `id` 4182 and a client calls `GET /v1/jobs/3f9a2c1d`
+- **THEN** the answer carries `Relay-Stream-Seq: 4182` and shows every change up to that event
 
 ### Requirement: Checkpoint and switch actions
 `POST /v1/jobs/{job}/checkpoint` and `POST /v1/jobs/{job}/switch` SHALL perform the operation by calling the checkpoint engine and the switch engine, SHALL allow one operation per job at a time, and SHALL accept no shell command and no path to execute.

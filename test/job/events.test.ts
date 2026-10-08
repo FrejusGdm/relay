@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendEvent, createEventLog, readEvents, type JobRef } from "../../src/job/events";
+import { tryLock } from "../../src/platform/file-lock";
 
 let root: string;
 let job: JobRef;
@@ -90,7 +91,9 @@ test("a blank line at the end of the log does not stop the next append", async (
   expect(readEvents(job).map((event) => event.id)).toEqual([1, 2]);
 });
 
-test("the events lock is gone after each append", async () => {
+test("the events lock is free after each append", async () => {
   await appendEvent(job, "a", {});
-  expect(() => readFileSync(join(job.relayHome, "locks", "3f9a2c1d.events.lock"))).toThrow();
+  const handle = tryLock(join(job.relayHome, "locks", "3f9a2c1d.events.lock"));
+  expect(handle).not.toBeNull();
+  handle!.release();
 });
