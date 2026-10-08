@@ -1,0 +1,14 @@
+Usage
+  relay init [--title <text>]
+
+Set up .relay/ in this project.
+relay creates the .relay/ folder for a job and keeps it out of your commits.
+
+Examples
+  relay init
+  relay init --title "Build authentication"
+
+Options
+      --title <text>       A short name for the job
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error

@@ -1,0 +1,30 @@
+relay keeps your coding work moving between agents and accounts.
+
+Usage
+  relay <command> [options]
+
+Commands
+  init                Set up .relay/ in this project
+  run                 Start an agent inside a relay job
+  checkpoint          Save the job so another agent can continue it
+  checkpoints         List the job's checkpoints
+  rollback            Return the files to an earlier checkpoint
+  accept-git-changes  Trust a change to git settings or hooks after you check it
+  switch              Hand the job to another agent or account
+  status              Show the job, its workers, accounts and checkpoints
+  account             Add, list, check, sign in to or remove accounts
+  providers           Show which agent programs are installed
+  policy              Show relay's notes on a provider's terms
+  hooks               Add, remove or check relay's hooks for an account
+  hook                Pass an event from an agent's hooks to relay
+  statusline          Record usage from Claude Code's status line
+  daemon              Start, stop or check relay's background service
+  doctor              Rebuild relay's index of jobs
+
+Options
+  -h, --help               Show help
+      --version            Show the version
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Run "relay <command> --help" for details about one command.
+Settings live in ~/.relay/config.toml, or in $RELAY_HOME/config.toml when RELAY_HOME is set.

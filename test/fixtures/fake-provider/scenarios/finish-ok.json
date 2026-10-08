@@ -1,0 +1,4 @@
+{
+  "description": "Prints two lines of progress and finishes.",
+  "steps": [{ "stdout": "working" }, { "stdout": "done" }, { "exit": 0 }]
+}

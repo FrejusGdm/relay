@@ -1,0 +1,58 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" alt="relay" width="196">
+  </picture>
+</p>
+
+# relay
+
+A scheduler and continuity layer for coding agents. When Claude Code, Codex or
+another coding agent you use stops, for example at its usage limit, relay moves the
+job to another of your agents, with the same repository, plan and decisions.
+Agents own cognition; relay owns state.
+
+## What relay does, and what it does not do
+
+relay works with the coding agents you already use and pay for yourself, such as
+Claude Code and Codex. When one of them stops, for example at its usage limit, relay
+saves your work and hands the job to another of your agents, with the same code, plan
+and decisions.
+
+- relay only starts the official programs you installed and signed in to yourself
+  (`claude`, `codex`). It does not use private APIs, scrape screens or change those
+  programs.
+- relay never reads, copies, stores or shares your logins, tokens or API keys. Each
+  tool keeps its own sign-in.
+- relay does not pool, share or rotate accounts to get around a provider's limits or
+  terms. It moves your work between different tools, each used under its own
+  provider's terms.
+- If you have more than one account with the same provider, for example a personal
+  and a work subscription, relay switches between them only when you ask it to. It
+  never does so on its own.
+- The first handoff to a different company's tool asks for your confirmation, because
+  it sends your code to that company.
+
+
+**Status:** early preview (v0.1.0): the command-line tool installs and checks its settings; the handoff itself is being built. Read [VISION.md](VISION.md) for the idea,
+[docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the open decisions, and
+[DESIGN.md](DESIGN.md) for the design direction.
+
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `VISION.md` | The idea behind relay |
+| `docs/research/` | Provider control surfaces, architecture, security, prior art and pricing, lessons from jstack, published advice on agent handoffs |
+| `docs/ROADMAP.md` | Phases, and the decisions still open |
+| `docs/first-version-index.md` | Every command, exit code, event, job file and module of the first version |
+| [Codebase map](docs/codebase-map.md) | The folders of the source code and tests, with a diagram |
+| [docs/cli.md](docs/cli.md) | The `relay` command line: commands, output and exit codes |
+| `DESIGN.md`, `docs/design/` | The design direction and its working preview |
+| `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |
+| `openspec/` | Project rules (`config.yaml`) and detailed change proposals for the first version |
+| `AGENTS.md`, `CLAUDE.md` | Instructions for coding agents |
+
+## Development
+
+To install, test and build relay, follow [docs/development.md](docs/development.md).

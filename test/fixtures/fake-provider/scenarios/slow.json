@@ -1,0 +1,4 @@
+{
+  "description": "Waits 200 milliseconds, then finishes.",
+  "steps": [{ "sleep_ms": 200 }, { "exit": 0 }]
+}

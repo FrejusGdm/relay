@@ -1,0 +1,9 @@
+id = "markdown-toc"
+title = "Complete the table of contents generator"
+language = "python"
+expected_agent_minutes = 20
+visible_test_command = ["python3", "{runners}/unittest_junit.py", "{junit}", "tests"]
+visible_test_match = "unittest"
+acceptance_test_command = ["python3", "{runners}/unittest_junit.py", "{junit}", "__acceptance__"]
+acceptance_total = 13
+acceptance_fail_at_start_min = 9

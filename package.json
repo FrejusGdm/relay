@@ -1,0 +1,29 @@
+{
+  "name": "relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "module": "src/cli/main.ts",
+  "bin": {
+    "relay": "./src/cli/main.ts"
+  },
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "relay": "bun --no-env-file src/cli/main.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p site/e2e",
+    "test": "bun test",
+    "eval:handoff": "bun run eval/handoff/src/main.ts",
+    "site:fonts": "sh site/scripts/fetch-fonts.sh",
+    "site:test": "bun test site/test",
+    "site:e2e": "playwright test --config site/playwright.config.ts",
+    "site:smoke": "sh site/scripts/smoke-test.sh",
+    "site:deploy": "bash site/scripts/deploy.sh",
+    "build:darwin-arm64": "bun build ./src/cli/main.ts --compile --target=bun-darwin-arm64 --minify --sourcemap --no-compile-autoload-dotenv --no-compile-autoload-bunfig --outfile=dist/relay-darwin-arm64",
+    "build:linux-x64": "bun build ./src/cli/main.ts --compile --target=bun-linux-x64 --minify --sourcemap --no-compile-autoload-dotenv --no-compile-autoload-bunfig --outfile=dist/relay-linux-x64"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
+}

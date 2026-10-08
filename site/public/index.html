@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>relay: never run out of limits again</title>
+<meta name="description" content="When one coding agent hits its limit, relay moves the work to another you already pay for, with the same code, plan and decisions.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/Satoshi-Variable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/PublicSans-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/styles.css">
+<script src="/site.js" defer></script>
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true">
+  <defs>
+    <symbol id="rc-right" viewBox="0 0 20 20"><path d="M3 10h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g" viewBox="0 0 16 12"><path d="M0 3.2 H8.2 V8.8 H16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="miter"/></symbol>
+  </defs>
+</svg>
+
+<!-- ===== relay card start ===== -->
+<template id="card-tpl">
+<div class="rc">
+  <article class="rc-card" aria-label="Illustrated coding job handoff">
+    <div class="rc-head">
+      <div class="rc-brand"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</div>
+      <button type="button" class="rc-pin" data-rc="pin" aria-pressed="false"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 5 0-1 4 3 3H4l3-3-1-4ZM8 9v5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg><span>Pin</span></button>
+    </div>
+    <p class="rc-title">Build authentication</p>
+    <p class="rc-repo"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h5l2 2h5v8H2Z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>relay / auth</p>
+    <div class="rc-line"><p class="rc-line-text" data-rc="line"><strong>Claude Code is working</strong> · building authentication</p></div>
+    <div class="rc-flow" aria-label="Claude Code hands the job to Codex">
+      <div class="rc-worker active" data-rc="claude" data-lane="0">
+        <div class="rc-worker-top"><span class="rc-worker-name">Claude Code</span><span class="rc-role" data-rc="claude-role">Current worker</span></div>
+        <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state working" data-rc="claude-state">Working</span></div>
+        <div class="rc-capacity"><div class="rc-capacity-fill" data-rc="fill"></div></div>
+      </div>
+      <div class="rc-conn">
+        <svg class="rc-arrow" viewBox="0 0 14 65" aria-hidden="true"><path d="M7 1v59m-5-5 5 6 5-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="rc-token" data-rc="token" aria-hidden="true">↓</span>
+        <p class="rc-transfer" data-rc="transfer"><b>Next worker: Codex</b>Same repository &amp; plan</p>
+      </div>
+      <div class="rc-worker" data-rc="codex" data-lane="2">
+        <div class="rc-worker-top"><span class="rc-worker-name">Codex</span><span class="rc-role" data-rc="codex-role">Next worker</span></div>
+        <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state" data-rc="codex-state">Ready</span></div>
+      </div>
+    </div>
+    <dl class="rc-facts">
+      <dt>Checkpoint</dt><dd><span class="mono" data-rc="hash">8f4a20</span> <span class="muted" data-rc="saved">· previous</span></dd>
+      <dt>Last tests</dt><dd><span class="rc-success">231 passed</span> · <span class="rc-error">1 failed</span></dd>
+      <dt>Carried over</dt><dd>Repository, checkpoint &amp; plan</dd>
+    </dl>
+    <div class="rc-actions">
+      <button type="button" class="rc-primary" data-rc="open" data-dialog="worker"><span data-rc="open-label">Open Claude Code</span><svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><use href="#rc-right"/></svg></button>
+      <div class="rc-secondary"><button type="button" class="rc-text-btn" data-dialog="checkpoint">View checkpoint</button><button type="button" class="rc-text-btn" data-dialog="switch">Switch worker…</button></div>
+    </div>
+  </article>
+  <div class="rc-playback"><span class="rc-note" data-rc="note">Illustrated manual handoff · 7.2 seconds</span><div class="rc-controls"><button type="button" class="rc-control" data-rc="pause" aria-pressed="false">Pause</button><button type="button" class="rc-control" data-rc="replay">Replay</button></div></div>
+  <dialog data-rc-dialog="worker"><h2 data-rc="worker-title">Codex worker</h2><p data-rc="worker-detail"></p><p>This illustration does not launch a coding agent.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <dialog data-rc-dialog="checkpoint"><h2>Checkpoint <span class="mono">912ec1</span></h2><p>Saved <time>14:19</time> · relay / auth</p><p>Authentication routes and session handling saved. Continue by reproducing the one failing test. Repository state and plan travel with this checkpoint.</p><p>Illustrated test result: <span class="rc-success">231 passed</span> · <span class="rc-error">1 failed</span>.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <dialog data-rc-dialog="switch"><h2>Switch worker manually</h2><p>Codex is the current worker. Claude Code reached its limit and resets at <time>18:00</time>.</p><p>In the first release, you choose the next worker. This illustration shows that choice carrying the saved checkpoint and plan to Codex.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <p class="sr-only" role="status" aria-live="polite" data-rc="announce"></p>
+</div>
+</template>
+<!-- ===== relay card end ===== -->
+
+<main>
+<!-- Hero -->
+<div class="hero-wrap">
+  <div class="wrap">
+    <nav class="site-nav" aria-label="Site">
+      <a class="wordmark" href="#top" id="top"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</a>
+      <div class="links"><a href="#how">How it works</a><a href="#pricing">Pricing</a><button type="button" class="nav-link" popovertarget="install">CLI setup</button></div>
+      <span class="spacer"></span>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark theme" title="Switch to dark theme">
+        <svg class="icon-moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.25 12.4A6.75 6.75 0 0 1 7.6 3.75a6.75 6.75 0 1 0 8.65 8.65Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" viewBox="0 0 20 20" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="3.25"/><path d="M10 2.25v1.5M10 16.25v1.5M2.25 10h1.5M16.25 10h1.5M4.52 4.52l1.06 1.06M14.42 14.42l1.06 1.06M4.52 15.48l1.06-1.06M14.42 5.58l1.06-1.06"/></g></svg>
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" popovertarget="install">Get relay</button>
+    </nav>
+  </div>
+  <div class="hero" id="story">
+    <div class="wrap hero-grid">
+      <div>
+        <h1 class="display" id="hl">Never run out of limits again.</h1>
+        <p class="lede" id="lede">When one coding agent hits its limit, relay moves the work to another you already pay for, with the same code, plan and decisions.</p>
+        <div class="ctas">
+          <button type="button" class="btn btn-primary" popovertarget="install" data-install-focus="install-macos">Get relay</button>
+          <button type="button" class="text-link" popovertarget="install">CLI setup</button>
+        </div>
+      </div>
+      <figure class="hero-demo">
+        <div id="hero-card"></div>
+        <figcaption class="sr-only">An illustrated handoff. Claude Code on the personal account reaches its limit, relay saves checkpoint 912ec1, and the job Build authentication moves to Codex.</figcaption>
+      </figure>
+    </div>
+  </div>
+</div>
+
+<!-- Provider row -->
+<div class="providers">
+  <div class="wrap">
+    <p>Works with the tools you already use</p>
+    <ul class="ptiles">
+      <li class="pt">Claude Code</li>
+      <li class="pt">Codex</li>
+      <li class="pt planned">Cursor</li>
+      <li class="pt planned">T3 Code</li>
+      <li class="pt planned">OpenCode</li>
+      <li class="pt-note">· planned</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Switching by hand, against relay -->
+<section id="cost">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Switching agents by hand costs you the afternoon.</h2>
+      <p>The limit arrives at the same minute either way. What changes is the next hour.</p>
+    </div>
+    <figure class="cost-fig">
+      <div class="cost">
+        <div class="cost-col">
+          <h3>Switching by hand</h3>
+          <ol class="tl">
+            <li class="ev" data-min="12"><time>14:19</time><i class="rl limit idle" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev" data-min="3"><time>14:31</time><i class="rl" aria-hidden="true"></i><span class="tx">You notice</span></li>
+            <li class="ev" data-min="4"><time>14:34</time><i class="rl" aria-hidden="true"></i><span class="tx">Copy the plan and the notes</span></li>
+            <li class="ev" data-min="14"><time>14:38</time><i class="rl" aria-hidden="true"></i><span class="tx">Open Codex, explain the repository again</span></li>
+            <li class="ev" data-min="13"><time>14:52</time><i class="rl redo" aria-hidden="true"></i><span class="tx">Codex redoes work that was already done</span></li>
+            <li class="ev" data-min="0"><time>15:05</time><i class="rl end" aria-hidden="true"></i><span class="tx">Back up to speed</span></li>
+          </ol>
+          <p class="cost-total lost"><b>46 minutes</b><span>lost</span></p>
+        </div>
+        <div class="cost-col">
+          <h3>With relay</h3>
+          <ol class="tl">
+            <li class="ev" data-min="0"><time>14:19</time><i class="rl limit olive" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev" data-min="0"><time>14:19</time><i class="rl olive" aria-hidden="true"></i><span class="tx">relay saves checkpoint <span class="mono">912ec1</span></span></li>
+            <li class="ev cont" data-min="40.2"><time>14:20</time><i class="rl olive" aria-hidden="true"></i><span class="tx"><span class="olive-word">Codex continues the same plan</span></span></li>
+            <li class="ev" data-min="0"><time>15:05</time><i class="rl baton end" aria-hidden="true"></i><span class="tx"></span></li>
+          </ol>
+          <p class="cost-total kept"><b>1 minute</b></p>
+        </div>
+      </div>
+      <figcaption class="caption">Illustrated. Manual switching comes first in relay.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Bento -->
+<section id="how" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Everything the next agent needs.</h2>
+      <p>relay sits in your menu bar, tells you when an agent stops, and keeps the job in plain files inside your project.</p>
+    </div>
+    <div class="bento">
+      <article class="cell w4">
+        <div class="stage st-menubar" aria-hidden="true">
+          <div class="mbar">
+            <span class="app">Terminal</span><span class="opt">Shell</span><span class="opt">Edit</span><span class="opt">View</span><span class="opt">Window</span><span class="opt">Help</span>
+            <span class="spacer"></span>
+            <span class="mb-extra">
+              <span class="mb-glyph"><svg class="glyph"><use href="#g"/></svg></span>
+              <span class="mb-drop">
+                <span class="rc-tiny">
+                  <span class="rc-tiny-job">Build authentication</span>
+                  <span class="rc-tiny-repo">relay / auth</span>
+                  <span class="rc-tiny-story"><svg viewBox="0 0 20 20"><use href="#rc-right"/></svg>Moved to Codex · Claude limit reached</span>
+                  <span class="rc-tiny-action"><span>Same checkpoint &amp; plan</span><b>Open Codex ↗</b></span>
+                </span>
+              </span>
+            </span>
+            <span class="opt">Tue 7 Oct</span><span>14:36</span>
+          </div>
+          <div class="ghost-win">
+            <div class="gw-bar"><i></i><i></i><i></i></div>
+<pre>$ relay status
+Build authentication · job 184
+codex:personal   running
+claude:personal  limit · 18:00</pre>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Small until you need it</h3>
+          <p>The menu bar view tells the same handoff in one line: the job, where it went, and how to open it.</p>
+        </div>
+      </article>
+
+      <article class="cell w2">
+        <div class="stage st-notify" aria-hidden="true">
+          <div class="notif">
+            <span class="app-tile"><svg class="glyph"><use href="#g"/></svg></span>
+            <div>
+              <div class="n1"><b>relay</b><span>now</span></div>
+              <div class="n2">Claude reached its usage limit.</div>
+              <div class="n3">Auth → Codex. Workspace and decisions saved.</div>
+            </div>
+          </div>
+          <div class="notif-older">
+            <div><span>Checkpoint saved</span><span class="mono">912ec1 · 11:17</span></div>
+            <div><span>Codex started on job 184</span><span class="mono">11:17</span></div>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Told when it happens</h3>
+          <p>A limit is reported the moment relay sees it, together with what was saved.</p>
+        </div>
+      </article>
+
+      <article class="cell w3">
+        <div class="stage st-diff" aria-hidden="true">
+          <div class="diff">
+            <div class="diff-head"><span>3 files changed since <span class="mono">a41f07</span></span><span class="mono"><span class="add">+131</span> <span class="del">−7</span></span></div>
+            <ul>
+              <li><span class="p"><em>src/auth/</em>callback.ts</span><span class="n"><span class="add">+48</span> <span class="del">−3</span></span></li>
+              <li><span class="p"><em>db/migrations/</em>0007_sessions.sql</span><span class="n"><span class="add">+22</span> <span class="del">−0</span></span></li>
+              <li><span class="p"><em>src/auth/</em>session.test.ts</span><span class="n"><span class="add">+61</span> <span class="del">−4</span></span></li>
+            </ul>
+          </div>
+          <div class="connect"></div>
+          <div class="pill"><svg class="chk" viewBox="0 0 14 14"><path d="M2.5 7.5 L5.5 10.2 L11.5 3.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Saved checkpoint <span class="mono">912ec1</span></div>
+        </div>
+        <div class="cell-text">
+          <h3>Every handoff is a checkpoint</h3>
+          <p>relay records the changed files and the commit before the next agent starts.</p>
+        </div>
+      </article>
+
+      <article class="cell w3 tree-cell">
+        <div class="stage st-tree" aria-hidden="true">
+<pre class="ftree">relay-auth/
+├── AGENTS.md
+├── <b>.relay/</b>
+│   ├── task.md
+│   ├── state.json
+│   ├── <span class="on">checkpoint.md</span>
+│   ├── decisions.md
+│   └── events.jsonl
+└── src/</pre>
+          <div class="doc">
+            <div class="doc-head"><span>.relay/checkpoint.md</span><span>912ec1</span></div>
+<pre><span class="h"># Checkpoint 912ec1</span>
+<span class="c">Written by Claude Code · personal
+at 11:17, at its usage limit.</span>
+
+<span class="h">## Next action</span>
+- Move the expiry check above the
+  refresh in src/auth/session.ts.
+
+<span class="h">## Validation</span>
+- 231 passed, 1 failed (11:16).
+- Verify these claims first.</pre>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Plain files in your project</h3>
+          <p>Any agent can read <span class="mono">.relay/</span>. The next agent checks the checkpoint before it continues.</p>
+        </div>
+      </article>
+
+      <article class="cell w6">
+        <div class="stage st-lineage" aria-hidden="true">
+          <div class="lin">
+            <div class="lin-names"><span class="name-claude">Claude Code</span><span class="name-codex">Codex</span></div>
+            <div class="lin-plot">
+              <i class="rail rail-claude"></i>
+              <i class="rail rail-codex"></i>
+              <i class="lseg seg-first"></i>
+              <i class="vstep step-down"></i>
+              <i class="lseg seg-codex"></i>
+              <i class="vstep step-up"></i>
+              <i class="lseg seg-last"></i>
+              <i class="node node-start"></i>
+              <i class="node node-down"></i>
+              <i class="node node-up"></i>
+              <span class="who who-claude">claude:personal</span>
+              <span class="who who-codex">codex:personal</span>
+              <span class="who hide-sm who-startup">claude:startup</span>
+              <span class="hash hash-down">912ec1</span>
+              <span class="hash hash-up">5c3e88</span>
+              <span class="time time-start">10:02</span>
+              <span class="time time-down">11:17</span>
+              <span class="time time-up">13:04</span>
+              <span class="time time-now">now</span>
+              <span class="now-tag">Working · <span class="mono">e07b19</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Same task, different worker</h3>
+          <p>Every job records which agent worked on it, when it stopped, and the checkpoint where the next one started.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- One agent or a hundred -->
+<section id="graph">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">One agent or a hundred.</h2>
+      <p>Split a job into tasks and each one runs on an account with room left. When an account reaches its limit, its tasks stop at a checkpoint and resume when it resets.</p>
+    </div>
+    <figure class="tg-fig">
+      <div class="tg-status" aria-live="off">
+        <span class="stack" id="tg-phase">
+          <span data-ph="0">8 tasks running on Claude Code and Codex</span>
+          <span data-ph="1" class="is-off"><span class="warn">Claude reached its usage limit.</span> 4 tasks paused at checkpoints.</span>
+          <span data-ph="2" class="is-off">Claude available 18:00. 4 tasks resumed.</span>
+        </span>
+        <span class="clock stack" id="tg-clock"><span data-ph="0">17:40</span><span data-ph="1" class="is-off">17:52</span><span data-ph="2" class="is-off">18:00</span></span>
+      </div>
+      <div class="tg-stage">
+        <div class="tg" id="tg">
+          <svg class="tg-edges" id="tg-edges" aria-hidden="true"></svg>
+          <div class="tg-dots" id="tg-dots" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="tg-legend">
+        <span><i class="lg-sq"></i>Claude Code</span>
+        <span><i class="lg-ci"></i>Codex</span>
+        <span><i class="lg-da"></i>Paused at its limit</span>
+      </div>
+      <figcaption class="caption" id="tg-caption">Illustrated. The first release switches one job at a time.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">relay is free. You already paid for the agents.</h2>
+      <p>Paid features will come later, as a one-time payment for a lifetime license: no subscription, and no share of what you spend on agents.</p>
+    </div>
+    <div class="price">
+      <div class="price-col">
+        <h3>The core</h3>
+        <p class="price-big">Free</p>
+        <p>The relay command line tool: checkpoints, handoffs between agents and accounts, and rollback.</p>
+      </div>
+      <div class="price-col">
+        <h3>Paid features</h3>
+        <p class="price-big">One payment</p>
+        <p>A lifetime license, paid once. Not on sale yet. This page will say what it includes and what it costs before it goes on sale.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Closing -->
+<section id="closing" class="closing">
+  <div class="wrap">
+    <div class="panel" id="panel">
+      <div class="map" aria-hidden="true"><svg id="panel-svg" shape-rendering="crispEdges"><g id="panel-static"></g></svg></div>
+      <div class="panel-in">
+        <h2 class="display">Your agents should be disposable. Your work shouldn’t be.</h2>
+        <div class="ctas">
+          <button type="button" class="btn btn-primary" popovertarget="install" data-install-focus="install-macos">Get relay</button>
+          <button type="button" class="btn btn-secondary" popovertarget="install">CLI setup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="install" class="install" popover role="dialog" aria-labelledby="install-title">
+  <div class="install-head">
+    <h2 id="install-title">Install relay</h2>
+    <button type="button" class="btn btn-secondary btn-sm" popovertarget="install" popovertargetaction="hide" autofocus>Close</button>
+  </div>
+  <p>relay is installed from the releases of its GitHub repository, which is private for now. You need the GitHub CLI, <span class="mono">gh</span>, signed in with an account that can read <span class="mono">FrejusGdm/relay</span>. Run <span class="mono">gh auth status</span> to check, or <span class="mono">gh auth login</span> to sign in.</p>
+
+  <div class="install-block">
+    <div class="install-block-head">
+      <h3 id="install-macos" tabindex="-1">Command line on macOS <span class="nowrap">(Apple silicon)</span></h3>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy="install-macos-cmd" aria-label="Copy the macOS commands">Copy</button>
+    </div>
+    <pre id="install-macos-cmd" class="install-cmd" tabindex="0">mkdir -p "$HOME/.local/bin"
+gh release download \
+  --repo FrejusGdm/relay \
+  --pattern relay-darwin-arm64 \
+  --output "$HOME/.local/bin/relay" \
+  --clobber
+chmod +x "$HOME/.local/bin/relay"
+"$HOME/.local/bin/relay" --version</pre>
+  </div>
+
+  <div class="install-block">
+    <div class="install-block-head">
+      <h3 id="install-linux">Command line on Linux (x64)</h3>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy="install-linux-cmd" aria-label="Copy the Linux commands">Copy</button>
+    </div>
+    <pre id="install-linux-cmd" class="install-cmd" tabindex="0">mkdir -p "$HOME/.local/bin"
+gh release download \
+  --repo FrejusGdm/relay \
+  --pattern relay-linux-x64 \
+  --output "$HOME/.local/bin/relay" \
+  --clobber
+chmod +x "$HOME/.local/bin/relay"
+"$HOME/.local/bin/relay" --version</pre>
+  </div>
+
+  <p class="install-note">To run <span class="mono">relay</span> by name, add <span class="mono">~/.local/bin</span> to your PATH, for example with <span class="mono">export PATH="$HOME/.local/bin:$PATH"</span> in <span class="mono">~/.zshrc</span> on macOS or <span class="mono">~/.bashrc</span> on Linux.</p>
+
+  <div class="install-block">
+    <div class="install-block-head">
+      <h3 id="install-mac" tabindex="-1">Mac app</h3>
+    </div>
+    <p class="install-note">The Mac menu-bar app is not released yet. The command line tool above works on its own.</p>
+  </div>
+
+  <p class="sr-only" role="status" id="copy-status"></p>
+</div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <span class="wordmark"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</span>
+        <p>relay keeps your coding work moving when an agent stops. It saves the task, the decisions and the repository state for the next agent.</p>
+      </div>
+      <nav aria-label="Product"><h3>Product</h3><a href="#how">How it works</a><a href="#pricing">Pricing</a><button type="button" class="foot-link" popovertarget="install">CLI setup</button></nav>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 relay</span>
+      <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 license</a>
+      <span>The accounts, times and checkpoints on this page are illustrated.</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

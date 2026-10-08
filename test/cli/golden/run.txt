@@ -1,0 +1,15 @@
+Usage
+  relay run [<provider[:account]>]
+
+Start an agent inside a relay job.
+Without an account, relay uses defaults.account from your settings.
+
+Examples
+  relay run
+  relay run claude:personal
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

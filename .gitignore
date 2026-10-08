@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.jstack/
+site/public/fonts/
+site/e2e/out/
+site/e2e/results/
+playwright-report/

@@ -1,0 +1,15 @@
+Usage
+  relay hooks <install|remove|status> <provider:name>
+
+Add, remove or check relay's hooks for an account.
+Hooks let relay see when an agent stops or reaches a limit.
+
+Examples
+  relay hooks install claude:personal
+  relay hooks status codex:personal
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

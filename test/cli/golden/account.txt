@@ -1,0 +1,17 @@
+Usage
+  relay account <list|add|status|login|remove> [<provider> <name> | <provider:name>]
+
+Add, list, check, sign in to or remove accounts.
+Each account has its own profile folder.
+Signing in runs the provider's own login. relay never sees your password or token.
+
+Examples
+  relay account list
+  relay account add codex work
+  relay account login codex:work
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

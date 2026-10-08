@@ -1,0 +1,17 @@
+Usage
+  relay checkpoint [-m <text>] [--include <path>]... [--json]
+
+Save the job so another agent can continue it.
+relay saves your files as a commit under refs/relay/.
+Your branch and staged changes stay as they are.
+
+Examples
+  relay checkpoint -m "OAuth callback works"
+  relay checkpoint --include .env.local
+
+Options
+  -m, --message <text>     A short summary of what changed
+      --include <path>     Save a file whose name suggests secrets
+      --json               Print the result as JSON
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error

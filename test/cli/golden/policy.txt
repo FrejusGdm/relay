@@ -1,0 +1,13 @@
+Usage
+  relay policy show <provider>
+
+Show relay's notes on a provider's terms.
+
+Examples
+  relay policy show claude
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

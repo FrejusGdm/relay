@@ -1,0 +1,38 @@
+# relay settings: ~/.relay/config.toml, or $RELAY_HOME/config.toml.
+# relay never stores passwords, tokens or API keys in this file.
+
+version = 1
+
+[defaults]
+# The account `relay run` uses when you do not name one.
+account = "claude:personal"
+
+[log]
+# debug, info, warn or error. --log-level and RELAY_LOG_LEVEL win over this.
+level = "info"
+
+[checkpoint]
+# Files larger than this many MB (1 to 1024) are left out of checkpoints.
+max_file_size_mb = 20
+
+# An account is a provider and a name you choose. Each account has its own
+# profile folder, where the provider's own program keeps its sign-in.
+[accounts."claude:personal"]
+profile_dir = "~/.claude"
+kind = "personal"
+
+[accounts."claude:startup"]
+# Without profile_dir, the folder is ~/.relay/profiles/claude-startup.
+kind = "work"
+
+[accounts."codex:personal"]
+profile_dir = "~/.codex"
+# Names of credential variables this account may receive from your shell.
+# relay removes every other credential variable when it starts an agent.
+credential_env = []
+
+# The accounts allowed to see each project. Handing work to an account sends
+# the project's code to that account's company.
+[[projects]]
+path = "~/projects/relay"
+allow = ["claude:personal", "codex:personal"]

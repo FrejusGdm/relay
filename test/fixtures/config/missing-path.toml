@@ -1,0 +1,4 @@
+[accounts."claude:personal"]
+
+[[projects]]
+allow = ["claude:personal"]

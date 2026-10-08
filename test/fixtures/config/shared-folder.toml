@@ -1,0 +1,5 @@
+[accounts."claude:personal"]
+profile_dir = "~/.claude"
+
+[accounts."claude:work"]
+profile_dir = "~/.claude"

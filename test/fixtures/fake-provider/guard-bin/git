@@ -1,0 +1,18 @@
+#!/bin/sh
+# Only src/git/run.ts may start git. It sets RELAY_GIT_RUNNER=1 for its child; test helpers that
+# set up scratch repositories set it themselves, and so does the evaluation harness's own git
+# runner, eval/handoff/src/git.ts. Anything else that starts git stops here.
+if [ "${RELAY_GIT_RUNNER:-}" != "1" ]; then
+  echo "Tests must not start git directly. Use git() from src/git/run.ts, or a test helper that sets RELAY_GIT_RUNNER=1." >&2
+  exit 97
+fi
+# Runs the next git on PATH that is not this file.
+IFS=:
+for dir in $PATH; do
+  if [ -n "$dir" ] && [ -f "$dir/git" ] && [ -x "$dir/git" ] && ! [ "$dir/git" -ef "$0" ]; then
+    unset IFS
+    exec "$dir/git" "$@"
+  fi
+done
+echo "No git program found on PATH after the test guard folder." >&2
+exit 127

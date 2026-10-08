@@ -1,0 +1,15 @@
+Usage
+  relay statusline <provider>
+
+Record usage from Claude Code's status line.
+Claude Code runs this command when you install relay's status line.
+You do not need to run it yourself.
+
+Examples
+  relay statusline claude
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

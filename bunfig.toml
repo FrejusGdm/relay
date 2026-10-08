@@ -1,0 +1,6 @@
+env = false
+
+[test]
+# The whole repository, so that `bun test` also runs the website's file tests in site/test.
+root = "."
+preload = ["./test/setup.ts"]

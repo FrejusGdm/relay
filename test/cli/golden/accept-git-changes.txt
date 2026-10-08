@@ -1,0 +1,14 @@
+Usage
+  relay accept-git-changes
+
+Trust a change to git settings or hooks after you check it.
+Run it yourself in a terminal. It asks for your answer, so agents cannot run it.
+
+Examples
+  relay accept-git-changes
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

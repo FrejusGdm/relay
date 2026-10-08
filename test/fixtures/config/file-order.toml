@@ -1,0 +1,21 @@
+# Problems are reported in the order their keys appear, wherever accounts are defined.
+version = "1"
+
+[[projects]]
+path = "relative/path"
+allow = ["claude:personal", "claude:personal", "codex:work", "Not An Account"]
+
+[[projects]]
+path = "~/projects/relay/"
+allow = ["claude:personal"]
+
+[[projects]]
+path = "/Users/josue/projects/./relay"
+allow = ["claude:personal"]
+
+[accounts."claude:personal"]
+kind = "team"
+credential_env = ["anthropic_api_key"]
+
+[accounts."codex:personal"]
+profile_dir = "/r/profiles/claude-personal"

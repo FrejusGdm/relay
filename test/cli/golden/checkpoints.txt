@@ -1,0 +1,14 @@
+Usage
+  relay checkpoints
+
+List the job's checkpoints.
+Newest first.
+
+Examples
+  relay checkpoints
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

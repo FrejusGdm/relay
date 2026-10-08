@@ -1,0 +1,4 @@
+{
+  "description": "Prints an error and stops with exit code 1.",
+  "steps": [{ "stderr": "fake agent crashed" }, { "exit": 1 }]
+}

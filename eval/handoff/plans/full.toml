@@ -1,0 +1,81 @@
+name = "full"
+repetitions = 3
+max_minutes_per_segment = 120
+baseline_roles = ["claude", "codex"]
+
+[[handoffs]]
+task = "ledger-import"
+from = "claude"
+to = "codex"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "ledger-import"
+from = "codex"
+to = "claude"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "job-queue"
+from = "claude"
+to = "codex"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "job-queue"
+from = "codex"
+to = "claude"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "rate-limiter"
+from = "claude"
+to = "codex"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "rate-limiter"
+from = "codex"
+to = "claude"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "markdown-toc"
+from = "claude"
+to = "codex"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+[[handoffs]]
+task = "markdown-toc"
+from = "codex"
+to = "claude"
+points = ["steps:25", "steps:50", "steps:75", "event:first-test-run", "event:untested-edit"]
+
+# These run only when targets.toml maps claude_second.
+[[handoffs]]
+task = "ledger-import"
+from = "claude"
+to = "claude_second"
+points = ["steps:50"]
+optional = true
+
+[[handoffs]]
+task = "job-queue"
+from = "claude"
+to = "claude_second"
+points = ["steps:50"]
+optional = true
+
+[[handoffs]]
+task = "rate-limiter"
+from = "claude"
+to = "claude_second"
+points = ["steps:50"]
+optional = true
+
+[[handoffs]]
+task = "markdown-toc"
+from = "claude"
+to = "claude_second"
+points = ["steps:50"]
+optional = true

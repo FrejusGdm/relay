@@ -1,0 +1,13 @@
+Usage
+  relay providers
+
+Show which agent programs are installed.
+
+Examples
+  relay providers
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

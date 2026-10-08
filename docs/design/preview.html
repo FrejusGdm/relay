@@ -1,0 +1,1618 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-accent="olive">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>relay Design Preview</title>
+<script>
+try {
+  var t = localStorage.getItem("relay2-theme"), a = localStorage.getItem("relay2-accent");
+  document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
+  document.documentElement.setAttribute("data-accent", a === "ink" ? "ink" : "olive");
+} catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@500,700&display=swap" rel="stylesheet">
+<style>
+/* Tokens. Light is the default theme, olive the default accent. */
+:root {
+  --bg: #F4F2EC;
+  --surface: #FBFAF7;
+  --raised: #FFFFFF;
+  --rule: #D8D5CC;
+  --muted: #6E6B63;
+  --text: #141413;
+  --accent: #141413;
+  --on-accent: #FBFAF7;
+  --warning: #855313;
+  --error: #B3261E;
+  --success: #426044;
+  --focus: #141413;
+  --control: color-mix(in srgb, var(--muted) 45%, var(--rule));
+  --shadow: 0 14px 32px -20px rgba(20, 20, 19, 0.30), 0 1px 2px rgba(20, 20, 19, 0.06);
+  --band: color-mix(in srgb, var(--text) 3.5%, var(--bg));
+  --tint: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  --map: color-mix(in srgb, var(--text) 11%, transparent);
+  --map-strong: color-mix(in srgb, var(--text) 22%, transparent);
+  --map-text: color-mix(in srgb, var(--text) 34%, transparent);
+  --map-fill: var(--bg);
+  --trail: color-mix(in srgb, var(--accent) 50%, transparent);
+
+  --font-display: "Satoshi", system-ui, sans-serif;
+  --display-weight: 500;
+  --display-track: -0.035em;
+  --display-scale: 0.86;
+  --font-text: "Public Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-press: 100ms;
+  --t-text: 120ms;
+  --t-expand: 180ms;
+  --t-story: 8s;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0D0D0C;
+  --surface: #161614;
+  --raised: #1E1E1B;
+  --rule: #2B2A27;
+  --muted: #8A877F;
+  --text: #EDEBE4;
+  --accent: #EDEBE4;
+  --on-accent: #0D0D0C;
+  --warning: #E2BD7C;
+  --error: #E0574F;
+  --success: #AFC79E;
+  --focus: #EDEBE4;
+  --shadow: 0 14px 32px -18px rgba(0, 0, 0, 0.75), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --band: color-mix(in srgb, var(--text) 3%, var(--bg));
+  --map: color-mix(in srgb, var(--text) 12%, transparent);
+  --map-strong: color-mix(in srgb, var(--text) 22%, transparent);
+  --map-text: color-mix(in srgb, var(--text) 32%, transparent);
+  color-scheme: dark;
+}
+:root[data-accent="olive"] { --accent: #52613A; --on-accent: #FBFAF7; --focus: #52613A; }
+:root[data-accent="olive"][data-theme="dark"] { --accent: #BDCDA0; --on-accent: #0D0D0C; --focus: #BDCDA0; }
+
+/* The terminal always uses the dark tokens. */
+.force-dark {
+  --bg: #0D0D0C; --surface: #161614; --raised: #1E1E1B; --rule: #2B2A27;
+  --muted: #8A877F; --text: #EDEBE4; --focus: #EDEBE4; --accent: #EDEBE4;
+  --control: color-mix(in srgb, #8A877F 45%, #2B2A27);
+  color-scheme: dark;
+}
+:root[data-accent="olive"] .force-dark { --accent: #BDCDA0; }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-text);
+  font-size: 16px;
+  line-height: 1.55;
+  font-feature-settings: "tnum" 1;
+  overflow-x: hidden;
+}
+.wrap { max-width: 1248px; margin: 0 auto; padding: 0 24px; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted); }
+.display {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-track);
+  line-height: 1.02;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.spacer { flex: 1; }
+.warn { color: var(--warning); }
+.fail { color: var(--error); }
+.ok { color: var(--success); }
+.stack { display: grid; }
+.stack > * { grid-area: 1 / 1; }
+
+/* Logo placeholder */
+.glyph { width: 16px; height: 12px; display: inline-block; flex: none; }
+.wordmark { display: inline-flex; align-items: center; gap: 8px; font: 600 18px var(--font-text); letter-spacing: -0.01em; text-decoration: none; color: var(--text); }
+
+/* Preview controls */
+.topbar { position: sticky; top: 0; z-index: 30; background: var(--bg); border-bottom: 1px solid var(--rule); }
+.topbar .wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; min-height: 56px; padding-top: 8px; padding-bottom: 8px; }
+.topbar .note { font-size: 13px; color: var(--muted); }
+.ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.pick { font: 500 13px var(--font-text); color: var(--text); background: var(--surface); border: 1px solid var(--control); border-radius: 6px; padding: 6px 8px; max-width: 190px; }
+.seg { display: inline-flex; border: 1px solid var(--control); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 13px var(--font-text); background: transparent; color: var(--muted); border: 0; padding: 6px 11px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--control); }
+.seg button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+@media (max-width: 760px) { .topbar { position: static; } .topbar .note { display: none; } .topbar .spacer { display: none; } }
+
+/* Buttons and links */
+.btn {
+  font: 500 15px var(--font-text); border-radius: 8px; padding: 12px 18px;
+  border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  text-decoration: none; transition: transform var(--t-press) var(--ease);
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-secondary { background: transparent; color: var(--text); border-color: var(--control); }
+.btn-sm { font-size: 13px; padding: 7px 12px; border-radius: 6px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.text-link { color: var(--text); text-decoration: underline; text-decoration-color: var(--control); text-underline-offset: 4px; font-weight: 500; }
+.text-link:hover { text-decoration-color: currentColor; }
+
+/* Sections */
+section { padding: 120px 0; border-top: 1px solid var(--rule); }
+.sec-head { max-width: 680px; margin-bottom: 56px; }
+.sec-head h2 { font-size: calc(clamp(32px, 3.6vw, 48px) * var(--display-scale) / 0.86); margin: 0; }
+.sec-head p { margin: 16px 0 0; color: var(--muted); font-size: 18px; line-height: 1.55; }
+.caption { font-size: 13px; color: var(--muted); margin: 12px 0 0; line-height: 1.5; }
+@media (max-width: 860px) { section { padding: 88px 0; } }
+
+/* Landing navigation */
+.site-nav { display: flex; align-items: center; gap: 28px; height: 72px; position: relative; z-index: 2; }
+.site-nav .links { display: flex; gap: 24px; font-size: 15px; }
+.site-nav .links a { color: var(--muted); text-decoration: none; }
+.site-nav .links a:hover { color: var(--text); }
+@media (max-width: 640px) { .site-nav .links { display: none; } }
+
+/* Hero and its track map */
+.hero { position: relative; padding: 72px 0 120px; overflow: hidden; }
+.hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 374px; gap: 72px; align-items: center; }
+.hero h1 { font-size: calc(clamp(40px, 6vw, 86px) * var(--display-scale)); margin: 0 0 28px; text-wrap: balance; }
+.hero .lede { font-size: 20px; line-height: 1.5; max-width: 540px; color: var(--muted); margin: 0 0 36px; text-wrap: pretty; }
+.hl-swap { transition: opacity var(--t-text) var(--ease); }
+.hl-swap.out { opacity: 0; }
+.ctas { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.hero-demo { width: 374px; max-width: 100%; margin: 0; }
+@media (max-width: 1100px) { .hero-grid { gap: 48px; } }
+@media (max-width: 860px) {
+  .hero { padding: 48px 0 88px; }
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 64px; }
+  .hero h1 { font-size: calc(clamp(38px, 10.4vw, 72px) * var(--display-scale)); }
+  .hero .lede { font-size: 18px; }
+}
+
+.map { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.map svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.trk-line { stroke: var(--map); stroke-width: 1; fill: none; }
+.trk-line.dotted { stroke: var(--map-strong); stroke-dasharray: 1 4; }
+.trk-node { fill: var(--map-fill); stroke: var(--map-strong); stroke-width: 1; }
+.trk-label { fill: var(--map-text); font: 400 11px var(--font-mono); letter-spacing: 0; }
+.trk-hash { fill: var(--map-text); font: 400 10px var(--font-mono); }
+.m-ckpt { opacity: 0; }
+.m-ckpt rect { fill: var(--map-fill); stroke: var(--accent); }
+.m-l1dot { opacity: 0; }
+.m-con path { fill: none; stroke: var(--trail); stroke-width: 1; }
+.m-con rect { fill: var(--map-fill); stroke: var(--accent); stroke-width: 1; }
+.m-con3 { opacity: 0; }
+.m-part { position: absolute; left: 0; top: 0; display: block; }
+.m-baton { width: 36px; height: 3px; background: var(--accent); }
+.m-trail { height: 1px; background: var(--trail); transform-origin: left center; transform: scaleX(0); }
+.m-switch { width: 1px; background: var(--trail); transform-origin: center top; transform: scaleY(0); }
+
+/* ===== relay card start =====
+   The handoff card, adapted from Codex's redesign (codex-card/card.html) to this page's tokens.
+   Everything is scoped under .rc. The card exposes two anchors for the track map:
+   data-lane="0" (the previous worker) and data-lane="2" (the next worker).
+   Swap this block, the template and mountRelayCard() together. */
+.rc { --rc-soft: color-mix(in srgb, var(--accent) 11%, var(--surface)); width: 374px; max-width: 100%; font: 400 14px/1.5 var(--font-text); }
+.rc button { font: inherit; cursor: pointer; transition: transform 160ms var(--ease); }
+.rc button:active:not(:disabled) { transform: translateY(1px); }
+.rc button:disabled { cursor: default; opacity: 0.45; }
+.rc svg { display: block; flex: none; }
+.rc time, .rc .mono { font-family: var(--font-mono); font-size: 0.94em; }
+.rc-card { position: relative; border: 1px solid var(--rule); background: var(--surface); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+.rc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.rc-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.rc-pin { display: flex; gap: 5px; align-items: center; background: none; border: 0; color: var(--muted); font-size: 12px; padding: 4px; }
+.rc-pin[aria-pressed="true"] { color: var(--accent); }
+.rc-title { margin: 0; font: 700 23px/1.2 var(--font-display); letter-spacing: -0.028em; font-synthesis: none; }
+.rc-repo { margin: 7px 0 0; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.rc-line { border-top: 1px solid var(--rule); margin-top: 21px; padding-top: 17px; min-height: 80px; }
+.rc-line-text { margin: 0; font-size: 13px; line-height: 1.6; font-weight: 500; }
+.rc-line-text strong { color: var(--accent); font-weight: 600; }
+.rc-worker { position: relative; border: 1px solid var(--rule); border-radius: 9px; padding: 12px 13px; min-height: 78px; background: var(--surface); transition: background-color 180ms var(--ease), border-color 180ms var(--ease); }
+.rc-worker.active { border-color: var(--accent); background: var(--rc-soft); }
+.rc-worker-top, .rc-worker-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rc-worker-name { font-size: 14px; font-weight: 600; }
+.rc-role { font-size: 11px; color: var(--muted); }
+.rc-worker-bottom { margin-top: 7px; font-size: 11px; color: var(--muted); }
+.rc-state { color: var(--text); font-weight: 500; }
+.rc-state.warning { color: var(--warning); }
+.rc-state.working { color: var(--accent); }
+.rc-capacity { height: 3px; margin-top: 9px; background: var(--rule); overflow: hidden; border-radius: 3px; }
+.rc-capacity-fill { height: 100%; background: var(--accent); transform-origin: left; }
+.rc-conn { position: relative; height: 83px; display: flex; align-items: center; gap: 12px; padding-left: 20px; }
+.rc-arrow { height: 65px; width: 14px; color: var(--accent); }
+.rc-transfer { margin: 0; line-height: 1.55; font-size: 11px; color: var(--muted); }
+.rc-transfer b { display: block; color: var(--text); font-weight: 500; font-size: 12px; }
+.rc-token { position: absolute; left: 19px; top: 12px; width: 16px; height: 18px; border: 1px solid var(--accent); background: var(--surface); color: var(--accent); border-radius: 3px; opacity: 0; display: grid; place-items: center; font-size: 10px; }
+.rc-facts { display: grid; grid-template-columns: 85px 1fr; gap: 8px 9px; margin: 21px 0 0; padding: 17px 0 0; border-top: 1px solid var(--rule); font-size: 12px; }
+.rc-facts dt { color: var(--muted); }
+.rc-facts dd { margin: 0; }
+.rc-error { color: var(--error); }
+.rc-success { color: var(--success); }
+.rc-actions { margin-top: 22px; }
+.rc-primary { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 11px 15px; width: 100%; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.rc-secondary { display: flex; justify-content: space-between; margin-top: 12px; gap: 10px; }
+.rc-text-btn { color: var(--muted); background: none; border: 0; padding: 4px 0; font-size: 12px; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; }
+.rc-text-btn:hover { color: var(--text); }
+.rc-playback { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; gap: 10px; }
+.rc-note { font-size: 12px; color: var(--muted); }
+.rc-controls { display: flex; gap: 6px; }
+.rc-control { background: transparent; border: 1px solid var(--control); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--text); }
+.rc dialog { width: 350px; max-width: calc(100% - 32px); border: 1px solid var(--rule); border-radius: 12px; padding: 24px; background: var(--surface); color: var(--text); }
+.rc dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
+.rc dialog h2 { margin: 0 0 13px; font: 600 18px var(--font-text); }
+.rc dialog p { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.rc dialog .rc-control { margin-top: 12px; }
+/* The menu-bar view of the same card */
+.rc-tiny { position: relative; display: block; width: 280px; background: var(--surface); border: 1px solid var(--rule); border-radius: 11px; padding: 16px; box-shadow: var(--shadow); font: 400 14px/1.5 var(--font-text); }
+.rc-tiny::before { content: ""; position: absolute; right: 42px; top: -6px; width: 10px; height: 10px; transform: rotate(45deg); background: var(--surface); border-left: 1px solid var(--rule); border-top: 1px solid var(--rule); }
+.rc-tiny-job { display: block; font-weight: 600; font-size: 13px; }
+.rc-tiny-repo { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.rc-tiny-story { font-size: 10.5px; white-space: nowrap; color: var(--accent); margin-top: 13px; display: flex; align-items: center; gap: 5px; }
+.rc-tiny-story svg { width: 11px; height: 11px; }
+.rc-tiny-action { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--rule); padding-top: 11px; margin-top: 13px; }
+.rc-tiny-action span { font-size: 10px; color: var(--muted); }
+.rc-tiny-action b { color: var(--accent); font-size: 11px; font-weight: 600; }
+@media (max-width: 360px) { .rc-card { padding: 18px; } .rc-title { font-size: 21px; } .rc-playback { flex-wrap: wrap; } }
+/* ===== relay card end ===== */
+
+/* Track map story, on the card's 7.2 s clock: limit at 36 %, checkpoint at 51 %, switch at 67 %, moved at 83 %.
+   Classes play, paused, offscreen and final sit on .story. */
+.story { --t-map: 7.2s; }
+.story.play .m-baton  { animation: m-baton var(--t-map) var(--ease) forwards; }
+.story.play .m-trail1 { animation: m-trail1 var(--t-map) var(--ease) forwards; }
+.story.play .m-l1solid{ animation: m-out36 var(--t-map) var(--ease) forwards; }
+.story.play .m-l1dot  { animation: m-in36 var(--t-map) var(--ease) forwards; }
+.story.play .m-ckpt   { animation: m-ckpt var(--t-map) var(--ease) forwards; }
+.story.play .m-switch { animation: m-step var(--t-map) var(--ease) forwards; }
+.story.play .m-trail3 { animation: m-trail3 var(--t-map) var(--ease) forwards; }
+.story.play .m-con1   { animation: m-con1 var(--t-map) var(--ease) forwards; }
+.story.play .m-con3   { animation: m-con3 var(--t-map) var(--ease) forwards; }
+.story.paused .map *, .story.offscreen .map * { animation-play-state: paused !important; }
+@keyframes m-baton   {
+  0% { transform: translate(0, 0); }
+  34%, 66.7% { transform: translate(var(--run1), 0); }
+  74% { transform: translate(var(--run1), var(--drop)); }
+  100% { transform: translate(var(--run2), var(--drop)); }
+}
+@keyframes m-trail1  { 0% { transform: scaleX(0); opacity: 1; } 34%, 36% { transform: scaleX(1); opacity: 1; } 40%, 100% { transform: scaleX(1); opacity: 0.45; } }
+@keyframes m-out36   { 0%, 36% { opacity: 1; } 40%, 100% { opacity: 0; } }
+@keyframes m-in36    { 0%, 36% { opacity: 0; } 40%, 100% { opacity: 1; } }
+@keyframes m-ckpt    { 0%, 51.4% { opacity: 0; } 55%, 100% { opacity: 1; } }
+@keyframes m-step    { 0%, 66.7% { transform: scaleY(0); } 74%, 100% { transform: scaleY(1); } }
+@keyframes m-trail3  { 0%, 74% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes m-con1    { 0%, 36% { opacity: 1; } 40%, 66.7% { opacity: 0.4; } 72%, 100% { opacity: 0; } }
+@keyframes m-con3    { 0%, 72% { opacity: 0; } 80%, 100% { opacity: 1; } }
+/* Map final state, used for reduced motion */
+.story.final .m-switch { transform: scaleY(1); }
+.story.final .m-baton { transform: translate(var(--run2), var(--drop)); }
+.story.final .m-trail1 { transform: scaleX(1); opacity: 0.45; }
+.story.final .m-trail3 { transform: scaleX(1); }
+.story.final .m-l1solid, .story.final .m-con1 { opacity: 0; }
+.story.final .m-l1dot, .story.final .m-ckpt, .story.final .m-con3 { opacity: 1; }
+
+/* Provider row */
+.providers { border-top: 1px solid var(--rule); padding: 28px 0; }
+.providers .wrap { display: flex; align-items: center; gap: 16px 32px; flex-wrap: wrap; }
+.providers p { margin: 0; font-size: 15px; color: var(--muted); }
+.ptiles { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; align-items: center; }
+.pt { font: 500 13px var(--font-mono); padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); white-space: nowrap; }
+.pt.planned { color: var(--muted); background: transparent; border-style: dashed; border-color: var(--control); font-weight: 400; }
+.pt-note { font: 400 13px var(--font-mono); color: var(--muted); padding-left: 4px; }
+
+/* Switching by hand, against relay */
+.cost { --m: 9px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.cost-col { padding: 32px 36px 30px; min-width: 0; display: flex; flex-direction: column; }
+.cost-col + .cost-col { border-left: 1px solid var(--rule); }
+.cost-col h3 { margin: 0 0 26px; font: 600 17px var(--font-text); letter-spacing: -0.005em; }
+.tl { list-style: none; margin: 0; padding: 0; flex: 1; }
+.ev { position: relative; display: grid; grid-template-columns: 50px 9px minmax(0, 1fr); column-gap: 16px; min-height: max(26px, calc(var(--d) * var(--m))); font-size: 15px; line-height: 1.5; }
+.ev time { font: 13px/1.75 var(--font-mono); color: var(--muted); }
+.ev .tx { padding-bottom: 6px; }
+.ev .rl { position: relative; }
+.ev .rl::before { content: ""; position: absolute; left: 1px; top: 8px; width: 7px; height: 7px; border: 1px solid var(--control); background: var(--surface); z-index: 1; }
+.ev .rl::after { content: ""; position: absolute; left: 4px; top: 15px; bottom: -8px; width: 0; border-left: 1px solid var(--control); }
+.ev .rl.idle::after { border-left-style: dotted; border-left-color: var(--muted); }
+.ev .rl.redo::after { border-left-style: dashed; border-left-color: var(--warning); }
+.ev .rl.limit::before { border-color: var(--warning); }
+.ev .rl.olive::before { border-color: var(--accent); }
+.ev .rl.olive::after { left: 3.5px; border-left: 2px solid var(--accent); }
+.ev .rl.end::after { display: none; }
+.ev .rl.baton::before { left: -10px; top: 10px; width: 29px; height: 3px; border: 0; background: var(--accent); }
+.ev .warn-word { color: var(--warning); }
+.ev .olive-word { color: var(--accent); font-weight: 600; }
+.ev .gap-note { display: block; font: 12px var(--font-mono); color: var(--muted); margin-top: 2px; }
+.cost-total { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--rule); display: flex; align-items: baseline; gap: 10px; }
+.cost-total b { font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(44px * var(--display-scale) / 0.86); line-height: 1; }
+.cost-total.lost b { color: var(--text); }
+.cost-total.kept b { color: var(--accent); }
+.cost-total span { color: var(--muted); font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: var(--display-track); font-size: calc(44px * var(--display-scale) / 0.86); line-height: 1; }
+@media (max-width: 860px) {
+  .cost { grid-template-columns: minmax(0, 1fr); --m: 6px; }
+  .cost-col { padding: 26px 20px 24px; }
+  .cost-col + .cost-col { border-left: 0; border-top: 1px solid var(--rule); }
+}
+
+/* Bento band, with angled edges */
+.band {
+  background: var(--band); border-top: 0;
+  clip-path: polygon(0 48px, 48px 0, calc(100% - 48px) 0, 100% 48px, 100% calc(100% - 48px), calc(100% - 48px) 100%, 48px 100%, 0 calc(100% - 48px));
+}
+.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+.cell { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.cell.w4 { grid-column: span 4; }
+.cell.w3 { grid-column: span 3; }
+.cell.w2 { grid-column: span 2; }
+.cell.w6 { grid-column: span 6; }
+.stage { position: relative; height: 270px; overflow: hidden; border-bottom: 1px solid var(--rule); background: var(--bg); padding: 24px; }
+.cell-text { padding: 18px 22px 22px; }
+.cell-text h3 { margin: 0; font: 600 16px var(--font-text); letter-spacing: -0.005em; }
+.cell-text p { margin: 4px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+@media (max-width: 1024px) {
+  .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cell.w4, .cell.w6 { grid-column: span 2; }
+  .cell.w3, .cell.w2 { grid-column: span 1; }
+  .cell.tree-cell { grid-column: span 2; }
+}
+@media (max-width: 700px) {
+  .bento { grid-template-columns: minmax(0, 1fr); }
+  .cell.w4, .cell.w6, .cell.w3, .cell.w2, .cell.tree-cell { grid-column: auto; }
+  .stage { padding: 18px; }
+  .band { clip-path: polygon(0 24px, 24px 0, calc(100% - 24px) 0, 100% 24px, 100% calc(100% - 24px), calc(100% - 24px) 100%, 24px 100%, 0 calc(100% - 24px)); }
+}
+
+/* Vignette: menu bar */
+.st-menubar { padding: 0; }
+.mbar {
+  position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; height: 30px; padding: 0 14px;
+  background: var(--raised); border-bottom: 1px solid var(--rule); font-size: 13px; white-space: nowrap;
+}
+.mbar .app { font-weight: 600; }
+.mb-extra { position: relative; display: inline-flex; }
+.mb-glyph { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 22px; border-radius: 5px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.mb-drop { position: absolute; right: -32px; top: 36px; white-space: normal; }
+.ghost-win { position: absolute; left: 24px; top: 58px; width: 340px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.ghost-win .gw-bar { height: 24px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 5px; padding: 0 9px; }
+.ghost-win .gw-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--rule); display: block; }
+.ghost-win pre { margin: 0; padding: 10px 12px 14px; font: 11.5px/1.7 var(--font-mono); color: var(--muted); }
+@media (max-width: 640px) { .mbar .opt { display: none; } .ghost-win { width: 260px; left: 16px; } }
+
+/* Vignette: notification */
+.st-notify { display: flex; justify-content: flex-end; align-items: flex-start; }
+.notif {
+  width: 100%; max-width: 340px; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px;
+  background: var(--raised); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--shadow); padding: 13px 14px; font-size: 13px; line-height: 1.4;
+}
+.app-tile { width: 36px; height: 36px; border-radius: 9px; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; }
+.app-tile .glyph { width: 18px; height: 14px; }
+.notif .n1 { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.notif .n1 b { color: var(--text); font-weight: 600; }
+.notif .n2 { font-weight: 600; margin-top: 2px; }
+.notif .n3 { color: var(--muted); margin-top: 1px; }
+.notif .n3 .mono { color: var(--text); font-size: 12px; }
+.notif-older {
+  position: absolute; left: 24px; right: 24px; bottom: 24px; border-top: 1px solid var(--rule); padding-top: 14px;
+  display: grid; gap: 8px; font-size: 12.5px; color: var(--muted);
+}
+.notif-older div { display: flex; justify-content: space-between; gap: 10px; }
+.notif-older .mono { font-size: 12px; }
+
+/* Vignette: checkpoint diff */
+.st-diff { display: flex; flex-direction: column; align-items: center; }
+.diff { width: 100%; max-width: 460px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); font-size: 12.5px; }
+.diff-head { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--rule); color: var(--muted); }
+.diff ul { list-style: none; margin: 0; padding: 4px 0; }
+.diff li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; font-family: var(--font-mono); font-size: 12px; }
+.diff li .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.diff li .p em { font-style: normal; color: var(--muted); }
+.diff .n { white-space: nowrap; }
+.add { color: var(--success); }
+.del { color: var(--error); }
+.connect { position: relative; width: 1px; height: 34px; background: var(--control); }
+.connect::before, .connect::after { content: ""; position: absolute; left: -3px; width: 7px; height: 7px; border: 1px solid var(--control); background: var(--bg); }
+.connect::before { top: -4px; }
+.connect::after { bottom: -4px; border-color: var(--accent); }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--raised); border: 1px solid var(--rule); box-shadow: var(--shadow); font-size: 13px; font-weight: 500; white-space: nowrap; margin-top: 4px; }
+.pill .chk { width: 14px; height: 14px; color: var(--accent); }
+
+/* Vignette: file tree */
+.st-tree { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 18px; padding-right: 0; }
+.ftree { margin: 0; font: 12.5px/1.95 var(--font-mono); color: var(--muted); white-space: pre; }
+.ftree b { color: var(--text); font-weight: 500; }
+.ftree .on { display: inline-block; color: var(--text); font-weight: 600; background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 3px; padding: 0 4px; margin-left: -4px; }
+.doc { background: var(--raised); border: 1px solid var(--rule); border-right: 0; border-radius: 10px 0 0 10px; box-shadow: var(--shadow); overflow: hidden; }
+.doc-head { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--rule); font: 12px var(--font-mono); color: var(--muted); }
+.doc pre { margin: 0; padding: 12px 14px; font: 12px/1.75 var(--font-mono); white-space: pre-wrap; }
+.doc .h { font-weight: 600; }
+.doc .c { color: var(--muted); }
+@media (max-width: 520px) { .st-tree { grid-template-columns: 1fr; } .ftree { display: none; } }
+
+/* Vignette: lineage */
+.st-lineage { height: 250px; padding: 28px 32px; }
+.lin { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 20px; }
+.lin-names { position: relative; font-size: 13px; color: var(--muted); }
+.lin-names span { position: absolute; left: 0; white-space: nowrap; }
+.lin-plot { position: relative; height: 170px; }
+.lin-plot i { position: absolute; display: block; }
+.lin-plot .rail { left: 0; right: 0; height: 1px; background: var(--rule); }
+.lin-plot .lseg { height: 2px; background: var(--accent); }
+.lin-plot .vstep { width: 2px; background: var(--accent); }
+.lin-plot .node { width: 9px; height: 9px; margin: -4px 0 0 -4px; border: 1px solid var(--accent); background: var(--bg); }
+.lin-plot .who, .lin-plot .hash, .lin-plot .time { position: absolute; white-space: nowrap; font: 12px var(--font-mono); color: var(--muted); }
+.lin-plot .who { color: var(--text); }
+.lin-plot .hash { color: var(--accent); }
+.now-tag { position: absolute; right: 0; top: 4px; transform: translateY(-100%); display: inline-flex; gap: 6px; align-items: center; padding: 4px 9px; border: 1px solid var(--rule); border-radius: 6px; background: var(--raised); box-shadow: var(--shadow); font-size: 12px; white-space: nowrap; }
+@media (max-width: 700px) {
+  .st-lineage { padding: 24px 16px; }
+  .lin { grid-template-columns: 1fr; gap: 0; }
+  .lin-names { display: none; }
+  .lin-plot .who.hide-sm { display: none; }
+}
+
+/* Terminal */
+.term { max-width: 1000px; border: 1px solid var(--rule); border-radius: 12px; background: var(--bg); color: var(--text); overflow: hidden; box-shadow: var(--shadow); }
+.term-bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--rule); background: var(--surface); }
+.dots { display: inline-flex; gap: 6px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); display: block; }
+.term-bar .path { font: 12.5px var(--font-mono); color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-bar .btn-sm { color: var(--text); }
+.term-bar .btn-sm svg { width: 13px; height: 13px; }
+.term pre { margin: 0; padding: 28px 32px 32px; font: 15px/1.75 var(--font-mono); overflow-x: auto; }
+.term .pr { color: var(--muted); }
+.term .dim { color: var(--muted); }
+.term .k { color: var(--muted); }
+.term b { font-weight: 600; }
+.term .acc { color: var(--accent); }
+.term .ln { display: inline-block; position: relative; width: 18ch; height: 1.75em; vertical-align: top; }
+.term .ln::before { content: ""; position: absolute; left: 0; right: 0; top: 0.875em; height: 1px; background: currentColor; }
+.term .ln-active { color: var(--accent); }
+.term .ln-active::before { height: 2px; top: calc(0.875em - 0.5px); }
+.term .ln-active::after { content: ""; position: absolute; right: 0; top: calc(0.875em - 1.5px); width: 3ch; height: 4px; background: currentColor; }
+.term .ln-step::before { right: 4.5ch; }
+.term .ln-step::after { content: ""; position: absolute; left: 13.5ch; top: 0.875em; width: 1px; height: 3.5em; background: var(--accent); }
+.term .ln-dot::before { height: 0; background: none; border-top: 1px dotted currentColor; }
+@media (max-width: 640px) { .term pre { font-size: 12px; padding: 18px 16px; } }
+
+/* Task graph */
+.tg-fig { margin: 0; }
+.tg-status { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 18px; border: 1px solid var(--rule); border-bottom: 0; border-radius: 12px 12px 0 0; background: var(--surface); font-size: 14px; min-height: 48px; }
+.tg-status .stack > span { transition: opacity var(--t-expand) var(--ease); }
+.tg-status .clock { flex: none; font: 500 13px var(--font-mono); color: var(--muted); }
+.tg-stage { border: 1px solid var(--rule); border-radius: 0 0 12px 12px; padding: 44px 36px; background: var(--bg); }
+.tg { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 48px; row-gap: 18px; align-items: center; }
+.tg.vertical { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 44px; }
+.tg-edges { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
+.tg-edges path { fill: none; stroke: var(--control); stroke-width: 1; }
+.tg-dots { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.dw { position: absolute; left: 0; top: 0; transition: opacity var(--t-expand) var(--ease); }
+.dw.off { opacity: 0; }
+.dot { display: block; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; opacity: 0; }
+.dot.claude { background: var(--accent); }
+.dot.codex { border: 1.5px solid var(--text); border-radius: 50%; background: var(--bg); }
+.tg-node { position: relative; z-index: 1; grid-column: var(--dc); grid-row: var(--dr); background: var(--raised); border: 1px solid var(--rule); border-radius: 9px; padding: 10px 12px 9px; font-size: 13.5px; line-height: 1.3; min-width: 0; }
+.tg.vertical .tg-node { grid-column: var(--mc); grid-row: var(--mr); padding: 8px 9px; font-size: 12.5px; }
+.tg.vertical .tg-node .nm2 { flex-wrap: wrap; gap: 2px 6px; }
+.tg.vertical .tg-node .sw2 > span { text-align: left; }
+.tg-node::after { content: ""; position: absolute; inset: -5px; border: 1px dashed var(--warning); border-radius: 12px; opacity: 0; transition: opacity var(--t-expand) var(--ease); }
+.tg-node.is-paused::after { opacity: 1; }
+.tg-node .nt { font-weight: 600; transition: opacity var(--t-expand) var(--ease); }
+.tg-node.is-paused .nt { opacity: 0.55; }
+.tg-node .nm2 { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 6px; font: 11.5px var(--font-mono); color: var(--muted); }
+.tg-node .pv { display: inline-flex; align-items: center; gap: 6px; }
+.tg-node .pv::before { content: ""; width: 7px; height: 7px; flex: none; }
+.tg-node.claude .pv::before { background: var(--accent); }
+.tg-node.codex .pv::before { border: 1.5px solid var(--text); border-radius: 50%; width: 7px; height: 7px; box-sizing: border-box; }
+.tg-node .sw2 > span { transition: opacity var(--t-expand) var(--ease); text-align: right; }
+.tg-node .sw2 .p { opacity: 0; color: var(--warning); }
+.tg-node.is-paused .sw2 .p { opacity: 1; }
+.tg-node.is-paused .sw2 .w { opacity: 0; }
+.tg-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 16px; font-size: 13px; color: var(--muted); }
+.tg-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.lg-sq { width: 7px; height: 7px; background: var(--accent); }
+.lg-ci { width: 8px; height: 8px; border: 1.5px solid var(--text); border-radius: 50%; }
+.lg-da { width: 18px; height: 10px; border: 1px dashed var(--warning); border-radius: 3px; }
+@media (max-width: 760px) { .tg-stage { padding: 28px 14px; } .tg-status { padding: 10px 14px; font-size: 13px; } }
+
+/* Closing panel */
+.closing { padding: 120px 0; }
+.panel {
+  position: relative; overflow: hidden; background: var(--tint); padding: 120px 64px;
+  --map-fill: var(--tint);
+  --map: color-mix(in srgb, var(--accent) 22%, transparent);
+  --map-strong: color-mix(in srgb, var(--accent) 34%, transparent);
+  --map-text: color-mix(in srgb, var(--accent) 48%, transparent);
+  clip-path: polygon(32px 0, calc(100% - 32px) 0, 100% 32px, 100% calc(100% - 32px), calc(100% - 32px) 100%, 32px 100%, 0 calc(100% - 32px), 0 32px);
+}
+.panel .map svg { overflow: hidden; }
+.panel-in { position: relative; z-index: 1; }
+.panel h2 { font-size: calc(clamp(38px, 5.2vw, 76px) * var(--display-scale)); margin: 0 0 40px; max-width: 15ch; text-wrap: balance; }
+@media (max-width: 700px) { .panel { padding: 72px 24px; } .closing { padding: 88px 0; } }
+
+/* Token reference strip */
+.tokens { padding: 72px 0; background: var(--surface); }
+.tokens h2 { font: 600 16px var(--font-text); margin: 0; }
+.tokens .intro { margin: 6px 0 28px; color: var(--muted); font-size: 14px; }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 20px; }
+.sw { display: flex; gap: 10px; align-items: center; font-size: 13px; min-width: 0; }
+.sw .chip { width: 36px; height: 36px; border-radius: 6px; border: 1px solid var(--rule); flex: none; }
+.sw b { display: block; font-weight: 500; }
+.sw span { font: 12px var(--font-mono); color: var(--muted); }
+.type-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.type-row .sample { font-size: 30px; line-height: 1.15; margin-top: 6px; overflow-wrap: anywhere; }
+.type-row .sample.t { font-family: var(--font-text); font-size: 20px; line-height: 1.45; }
+.type-row .sample.m { font-family: var(--font-mono); font-size: 16px; line-height: 1.6; }
+.type-row .name { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.motion-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.motion-row .t { font: 500 20px var(--font-mono); }
+.motion-row .d { font-size: 13px; color: var(--muted); margin: 2px 0 12px; }
+.demo-text { display: inline-grid; }
+.demo-text > span { grid-area: 1 / 1; transition: opacity var(--t-text) var(--ease); }
+.expand-box { margin-top: 10px; height: 34px; border: 1px solid var(--rule); border-radius: 6px; background: var(--raised); transform-origin: top; transform: scaleY(0.4); opacity: 0.4; transition: transform var(--t-expand) var(--ease), opacity var(--t-expand) var(--ease); }
+.expand-box.open { transform: none; opacity: 1; }
+@media (max-width: 860px) { .type-row, .motion-row { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .type-row, .motion-row { grid-template-columns: 1fr; } }
+
+/* Footer */
+.site-footer { border-top: 1px solid var(--rule); padding: 64px 0 32px; font-size: 14px; }
+.foot-grid { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 32px; }
+.foot-brand p { color: var(--muted); max-width: 320px; margin: 14px 0 0; }
+.site-footer h3 { font: 600 13px var(--font-text); margin: 4px 0 12px; }
+.site-footer nav a { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; }
+.site-footer nav a:hover { color: var(--text); }
+.foot-base { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
+@media (max-width: 760px) { .foot-grid { grid-template-columns: 1fr 1fr; } .foot-brand { grid-column: 1 / -1; } }
+
+@media (max-width: 640px) { .wrap { padding: 0 16px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="rc-right" viewBox="0 0 20 20"><path d="M3 10h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g" viewBox="0 0 16 12"><path d="M0 3.2 H8.2 V8.8 H16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="miter"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="wrap">
+    <span class="wordmark" style="font-size:16px"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</span>
+    <span class="note">Design preview, second version</span>
+    <span class="spacer"></span>
+    <label class="ctl" for="head-pick">Headline
+      <select id="head-pick" class="pick">
+        <option value="0">Never run out of limits</option>
+        <option value="1">Never wait for a reset</option>
+        <option value="2">Limits, combined</option>
+      </select>
+    </label>
+    <label class="ctl" for="font-pick">Font
+      <select id="font-pick" class="pick">
+        <option value="Satoshi">Satoshi</option>
+        <option value="Manrope">Manrope</option>
+        <option value="Newsreader">Newsreader</option>
+        <option value="Geist">Geist</option>
+      </select>
+    </label>
+    <div class="seg" role="group" aria-label="Accent">
+      <button type="button" data-accent-btn="olive" aria-pressed="true">Olive</button>
+      <button type="button" data-accent-btn="ink" aria-pressed="false">Ink</button>
+    </div>
+    <div class="seg" role="group" aria-label="Theme">
+      <button type="button" data-theme-btn="light" aria-pressed="true">Light</button>
+      <button type="button" data-theme-btn="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+</header>
+
+<!-- ===== relay card start ===== -->
+<template id="card-tpl">
+<div class="rc">
+  <article class="rc-card" aria-label="Illustrated coding job handoff">
+    <div class="rc-head">
+      <div class="rc-brand"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</div>
+      <button type="button" class="rc-pin" data-rc="pin" aria-pressed="false"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 2 5 0-1 4 3 3H4l3-3-1-4ZM8 9v5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg><span>Pin</span></button>
+    </div>
+    <p class="rc-title">Build authentication</p>
+    <p class="rc-repo"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h5l2 2h5v8H2Z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>relay / auth</p>
+    <div class="rc-line"><p class="rc-line-text" data-rc="line"><strong>Claude Code is working</strong> · building authentication</p></div>
+    <div class="rc-flow" aria-label="Claude Code hands the job to Codex">
+      <div class="rc-worker active" data-rc="claude" data-lane="0">
+        <div class="rc-worker-top"><span class="rc-worker-name">Claude Code</span><span class="rc-role" data-rc="claude-role">Current worker</span></div>
+        <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state working" data-rc="claude-state">Working</span></div>
+        <div class="rc-capacity"><div class="rc-capacity-fill" data-rc="fill"></div></div>
+      </div>
+      <div class="rc-conn">
+        <svg class="rc-arrow" viewBox="0 0 14 65" aria-hidden="true"><path d="M7 1v59m-5-5 5 6 5-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="rc-token" data-rc="token" aria-hidden="true">↓</span>
+        <p class="rc-transfer" data-rc="transfer"><b>Next worker: Codex</b>Same repository &amp; plan</p>
+      </div>
+      <div class="rc-worker" data-rc="codex" data-lane="2">
+        <div class="rc-worker-top"><span class="rc-worker-name">Codex</span><span class="rc-role" data-rc="codex-role">Next worker</span></div>
+        <div class="rc-worker-bottom"><span>Personal account</span><span class="rc-state" data-rc="codex-state">Ready</span></div>
+      </div>
+    </div>
+    <dl class="rc-facts">
+      <dt>Checkpoint</dt><dd><span class="mono" data-rc="hash">8f4a20</span> <span style="color:var(--muted)" data-rc="saved">· previous</span></dd>
+      <dt>Last tests</dt><dd><span class="rc-success">231 passed</span> · <span class="rc-error">1 failed</span></dd>
+      <dt>Carried over</dt><dd>Repository, checkpoint &amp; plan</dd>
+    </dl>
+    <div class="rc-actions">
+      <button type="button" class="rc-primary" data-rc="open" data-dialog="worker"><span data-rc="open-label">Open Claude Code</span><svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><use href="#rc-right"/></svg></button>
+      <div class="rc-secondary"><button type="button" class="rc-text-btn" data-dialog="checkpoint">View checkpoint</button><button type="button" class="rc-text-btn" data-dialog="switch">Switch worker…</button></div>
+    </div>
+  </article>
+  <div class="rc-playback"><span class="rc-note" data-rc="note">Illustrated manual handoff · 7.2 seconds</span><div class="rc-controls"><button type="button" class="rc-control" data-rc="pause" aria-pressed="false">Pause</button><button type="button" class="rc-control" data-rc="replay">Replay</button></div></div>
+  <dialog data-rc-dialog="worker"><h2 data-rc="worker-title">Codex worker</h2><p data-rc="worker-detail"></p><p>This preview does not launch a coding agent.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <dialog data-rc-dialog="checkpoint"><h2>Checkpoint <span class="mono">912ec1</span></h2><p>Saved <time>14:19</time> · relay / auth</p><p>Authentication routes and session handling saved. Continue by reproducing the one failing test. Repository state and plan travel with this checkpoint.</p><p>Illustrated test result: <span class="rc-success">231 passed</span> · <span class="rc-error">1 failed</span>.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <dialog data-rc-dialog="switch"><h2>Switch worker manually</h2><p>Codex is the current worker. Claude Code reached its limit and resets at <time>18:00</time>.</p><p>In the first release, you choose the next worker. This illustration shows that choice carrying the saved checkpoint and plan to Codex.</p><form method="dialog"><button class="rc-control">Close</button></form></dialog>
+  <p class="sr-only" role="status" aria-live="polite" data-rc="announce"></p>
+</div>
+</template>
+<!-- ===== relay card end ===== -->
+
+<main>
+<!-- Hero -->
+<div class="hero-wrap">
+  <div class="wrap">
+    <nav class="site-nav" aria-label="Site">
+      <a class="wordmark" href="#top" id="top"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</a>
+      <div class="links"><a href="#how">How it works</a><a href="#terminal">Docs</a><a href="#closing">GitHub</a></div>
+      <span class="spacer"></span>
+      <a class="btn btn-secondary btn-sm" href="#closing">Get relay</a>
+    </nav>
+  </div>
+  <div class="hero story" id="story">
+    <div class="map" id="hero-map" aria-hidden="true">
+      <svg id="hero-svg" shape-rendering="crispEdges">
+        <g id="hero-static"></g>
+        <line class="trk-line m-l1solid" id="m-l1solid"/>
+        <line class="trk-line dotted m-l1dot" id="m-l1dot"/>
+        <g class="m-ckpt" id="m-ckpt"><rect width="7" height="7"/></g>
+        <g class="m-con m-con1" id="m-con1"><path/><rect width="7" height="7"/></g>
+        <g class="m-con m-con3" id="m-con3"><path/><rect width="7" height="7"/></g>
+      </svg>
+      <i class="m-part m-trail m-trail1" id="m-trail1"></i>
+      <i class="m-part m-switch" id="m-switch"></i>
+      <i class="m-part m-trail m-trail3" id="m-trail3"></i>
+      <i class="m-part m-baton" id="m-baton"></i>
+    </div>
+    <div class="wrap hero-grid">
+      <div>
+        <h1 class="display hl-swap" id="hl">Never run out of limits again.</h1>
+        <p class="lede hl-swap" id="lede">When one coding agent hits its limit, relay moves the work to another you already pay for, with the same code, plan and decisions.</p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="#closing">Get relay for Mac</a>
+          <a class="text-link" href="#terminal">CLI setup</a>
+        </div>
+      </div>
+      <figure class="hero-demo">
+        <div id="hero-card"></div>
+        <figcaption class="sr-only">An illustrated handoff on a map of four account lanes. Claude Code on the personal account reaches its limit, relay saves checkpoint 912ec1, and the job Build authentication moves to Codex.</figcaption>
+      </figure>
+    </div>
+  </div>
+</div>
+
+<!-- Provider row -->
+<div class="providers">
+  <div class="wrap">
+    <p>Works with the tools you already use</p>
+    <ul class="ptiles">
+      <li class="pt">Claude Code</li>
+      <li class="pt">Codex</li>
+      <li class="pt planned">Cursor</li>
+      <li class="pt planned">T3 Code</li>
+      <li class="pt planned">OpenCode</li>
+      <li class="pt-note">· planned</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Switching by hand, against relay -->
+<section id="cost">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Switching agents by hand costs you the afternoon.</h2>
+      <p>The limit arrives at the same minute either way. What changes is the next hour.</p>
+    </div>
+    <figure style="margin:0">
+      <div class="cost">
+        <div class="cost-col">
+          <h3>Switching by hand</h3>
+          <ol class="tl">
+            <li class="ev" style="--d:12"><time>14:19</time><i class="rl limit idle" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev" style="--d:3"><time>14:31</time><i class="rl" aria-hidden="true"></i><span class="tx">You notice</span></li>
+            <li class="ev" style="--d:4"><time>14:34</time><i class="rl" aria-hidden="true"></i><span class="tx">Copy the plan and the notes</span></li>
+            <li class="ev" style="--d:14"><time>14:38</time><i class="rl" aria-hidden="true"></i><span class="tx">Open Codex, explain the repository again</span></li>
+            <li class="ev" style="--d:13"><time>14:52</time><i class="rl redo" aria-hidden="true"></i><span class="tx">Codex redoes work that was already done</span></li>
+            <li class="ev" style="--d:0"><time>15:05</time><i class="rl end" aria-hidden="true"></i><span class="tx">Back up to speed</span></li>
+          </ol>
+          <p class="cost-total lost"><b>46 minutes</b><span>lost</span></p>
+        </div>
+        <div class="cost-col">
+          <h3>With relay</h3>
+          <ol class="tl">
+            <li class="ev" style="--d:0"><time>14:19</time><i class="rl limit olive" aria-hidden="true"></i><span class="tx"><span class="warn-word">Claude reaches its usage limit</span></span></li>
+            <li class="ev" style="--d:0"><time>14:19</time><i class="rl olive" aria-hidden="true"></i><span class="tx">relay saves checkpoint <span class="mono">912ec1</span></span></li>
+            <li class="ev cont" style="--d:40.2"><time>14:20</time><i class="rl olive" aria-hidden="true"></i><span class="tx"><span class="olive-word">Codex continues the same plan</span></span></li>
+            <li class="ev" style="--d:0"><time>15:05</time><i class="rl baton end" aria-hidden="true"></i><span class="tx"></span></li>
+          </ol>
+          <p class="cost-total kept"><b>1 minute</b></p>
+        </div>
+      </div>
+      <figcaption class="caption">Illustrated. Manual switching comes first in relay.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Bento -->
+<section id="how" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Everything the next agent needs.</h2>
+      <p>relay sits in your menu bar, tells you when an agent stops, and keeps the job in plain files inside your project.</p>
+    </div>
+    <div class="bento">
+      <article class="cell w4">
+        <div class="stage st-menubar" aria-hidden="true">
+          <div class="mbar">
+            <span class="app">Terminal</span><span class="opt">Shell</span><span class="opt">Edit</span><span class="opt">View</span><span class="opt">Window</span><span class="opt">Help</span>
+            <span class="spacer"></span>
+            <span class="mb-extra">
+              <span class="mb-glyph"><svg class="glyph"><use href="#g"/></svg></span>
+              <span class="mb-drop">
+                <span class="rc-tiny">
+                  <span class="rc-tiny-job">Build authentication</span>
+                  <span class="rc-tiny-repo">relay / auth</span>
+                  <span class="rc-tiny-story"><svg viewBox="0 0 20 20"><use href="#rc-right"/></svg>Moved to Codex · Claude limit reached</span>
+                  <span class="rc-tiny-action"><span>Same checkpoint &amp; plan</span><b>Open Codex ↗</b></span>
+                </span>
+              </span>
+            </span>
+            <span class="opt">Tue 7 Oct</span><span>14:36</span>
+          </div>
+          <div class="ghost-win">
+            <div class="gw-bar"><i></i><i></i><i></i></div>
+<pre>$ relay status
+Build authentication · job 184
+codex:personal   running
+claude:personal  limit · 18:00</pre>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Small until you need it</h3>
+          <p>The menu bar view tells the same handoff in one line: the job, where it went, and how to open it.</p>
+        </div>
+      </article>
+
+      <article class="cell w2">
+        <div class="stage st-notify" aria-hidden="true">
+          <div class="notif">
+            <span class="app-tile"><svg class="glyph"><use href="#g"/></svg></span>
+            <div>
+              <div class="n1"><b>relay</b><span>now</span></div>
+              <div class="n2">Claude reached its usage limit.</div>
+              <div class="n3">Auth → Codex. Workspace and decisions saved.</div>
+            </div>
+          </div>
+          <div class="notif-older">
+            <div><span>Checkpoint saved</span><span class="mono">912ec1 · 11:17</span></div>
+            <div><span>Codex started on job 184</span><span class="mono">11:17</span></div>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Told when it happens</h3>
+          <p>A limit is reported the moment relay sees it, together with what was saved.</p>
+        </div>
+      </article>
+
+      <article class="cell w3">
+        <div class="stage st-diff" aria-hidden="true">
+          <div class="diff">
+            <div class="diff-head"><span>3 files changed since <span class="mono">a41f07</span></span><span class="mono"><span class="add">+131</span> <span class="del">−7</span></span></div>
+            <ul>
+              <li><span class="p"><em>src/auth/</em>callback.ts</span><span class="n"><span class="add">+48</span> <span class="del">−3</span></span></li>
+              <li><span class="p"><em>db/migrations/</em>0007_sessions.sql</span><span class="n"><span class="add">+22</span> <span class="del">−0</span></span></li>
+              <li><span class="p"><em>src/auth/</em>session.test.ts</span><span class="n"><span class="add">+61</span> <span class="del">−4</span></span></li>
+            </ul>
+          </div>
+          <div class="connect"></div>
+          <div class="pill"><svg class="chk" viewBox="0 0 14 14"><path d="M2.5 7.5 L5.5 10.2 L11.5 3.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Saved checkpoint <span class="mono">912ec1</span></div>
+        </div>
+        <div class="cell-text">
+          <h3>Every handoff is a checkpoint</h3>
+          <p>relay records the changed files and the commit before the next agent starts.</p>
+        </div>
+      </article>
+
+      <article class="cell w3 tree-cell">
+        <div class="stage st-tree" aria-hidden="true">
+<pre class="ftree">relay-auth/
+├── AGENTS.md
+├── <b>.relay/</b>
+│   ├── task.md
+│   ├── state.json
+│   ├── <span class="on">checkpoint.md</span>
+│   ├── decisions.md
+│   └── events.jsonl
+└── src/</pre>
+          <div class="doc">
+            <div class="doc-head"><span>.relay/checkpoint.md</span><span>912ec1</span></div>
+<pre><span class="h"># Checkpoint 912ec1</span>
+<span class="c">Written by Claude Code · personal
+at 11:17, at its usage limit.</span>
+
+<span class="h">## Next action</span>
+- Move the expiry check above the
+  refresh in src/auth/session.ts.
+
+<span class="h">## Validation</span>
+- 231 passed, 1 failed (11:16).
+- Verify these claims first.</pre>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Plain files in your project</h3>
+          <p>Any agent can read <span class="mono">.relay/</span>. The next agent checks the checkpoint before it continues.</p>
+        </div>
+      </article>
+
+      <article class="cell w6">
+        <div class="stage st-lineage" aria-hidden="true">
+          <div class="lin">
+            <div class="lin-names"><span style="top:43px">Claude Code</span><span style="top:113px">Codex</span></div>
+            <div class="lin-plot">
+              <i class="rail" style="top:52px"></i>
+              <i class="rail" style="top:122px"></i>
+              <i class="lseg" style="top:51px;left:0;width:27.4%"></i>
+              <i class="vstep" style="top:52px;height:71px;left:27.4%"></i>
+              <i class="lseg" style="top:121px;left:27.4%;width:39%"></i>
+              <i class="vstep" style="top:52px;height:71px;left:66.4%"></i>
+              <i class="lseg" style="top:51px;left:66.4%;width:33.6%"></i>
+              <i class="node" style="top:52px;left:0"></i>
+              <i class="node" style="top:52px;left:27.4%"></i>
+              <i class="node" style="top:122px;left:66.4%"></i>
+              <span class="who" style="top:24px;left:0">claude:personal</span>
+              <span class="who" style="top:94px;left:calc(27.4% + 12px)">codex:personal</span>
+              <span class="who hide-sm" style="top:24px;left:calc(66.4% + 12px)">claude:startup</span>
+              <span class="hash" style="top:60px;left:calc(27.4% + 10px)">912ec1</span>
+              <span class="hash" style="top:130px;left:calc(66.4% + 10px)">5c3e88</span>
+              <span class="time" style="top:148px;left:0">10:02</span>
+              <span class="time" style="top:148px;left:27.4%;transform:translateX(-50%)">11:17</span>
+              <span class="time" style="top:148px;left:66.4%;transform:translateX(-50%)">13:04</span>
+              <span class="time" style="top:148px;right:0">now</span>
+              <span class="now-tag" style="top:46px">Working · <span class="mono">e07b19</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="cell-text">
+          <h3>Same task, different worker</h3>
+          <p>Every job records which agent worked on it, when it stopped, and the checkpoint where the next one started.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- Terminal -->
+<section id="terminal">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">Switch from the terminal.</h2>
+      <p>One command stops the current agent, saves a checkpoint and starts the next one. Then <span class="mono">relay status</span> shows where the work went.</p>
+    </div>
+    <div class="term force-dark">
+      <div class="term-bar">
+        <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="path">~/projects/relay-auth</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="copy-btn" aria-label="Copy the command relay switch codex:personal"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="4.5" y="4.5" width="7" height="7" rx="1.2" fill="none" stroke="currentColor"/><path d="M2.5 9.5 V3.7 Q2.5 2.5 3.7 2.5 H9.5" fill="none" stroke="currentColor"/></svg><span id="copy-label">Copy command</span></button>
+      </div>
+<pre><span class="pr">$</span> relay switch codex:personal
+
+<span class="k">Stopping </span> Claude Code · claude:personal
+<span class="k">Saved    </span> checkpoint <span class="acc">912ec1</span> · 3 files · 231 passed, 1 failed
+<span class="k">Wrote    </span> .relay/checkpoint.md
+<span class="k">Starting </span> Codex · codex:personal
+Codex is working on job 184.
+
+<span class="pr">$</span> relay status
+
+<b>Build authentication</b>   job 184 · checkpoint <span class="acc">912ec1</span> · 2 min ago
+
+<span class="dim">claude:personal  <span class="ln ln-step" aria-hidden="true"></span>   limit reached · resets 18:00</span>
+
+<b>codex:personal   <span class="ln ln-active" aria-hidden="true"></span>   running</b>
+claude:startup   <span class="ln" aria-hidden="true"></span>   idle · 64% left
+<span class="dim">cursor:work      <span class="ln ln-dot" aria-hidden="true"></span>   planned</span>
+
+Continuing on Codex.</pre>
+    </div>
+    <p class="caption">Bold marks the active account, dim marks the limited one and a dotted line marks an unknown one, so the output reads the same without color.</p>
+  </div>
+</section>
+
+<!-- One agent or a hundred -->
+<section id="graph">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="display">One agent or a hundred.</h2>
+      <p>Split a job into tasks and each one runs on an account with room left. When an account reaches its limit, its tasks stop at a checkpoint and resume when it resets.</p>
+    </div>
+    <figure class="tg-fig">
+      <div class="tg-status" aria-live="off">
+        <span class="stack" id="tg-phase">
+          <span data-ph="0">8 tasks running on Claude Code and Codex</span>
+          <span data-ph="1" style="opacity:0"><span class="warn">Claude reached its usage limit.</span> 4 tasks paused at checkpoints.</span>
+          <span data-ph="2" style="opacity:0">Claude available 18:00. 4 tasks resumed.</span>
+        </span>
+        <span class="clock stack" id="tg-clock"><span data-ph="0">17:40</span><span data-ph="1" style="opacity:0">17:52</span><span data-ph="2" style="opacity:0">18:00</span></span>
+      </div>
+      <div class="tg-stage">
+        <div class="tg" id="tg">
+          <svg class="tg-edges" id="tg-edges" aria-hidden="true"></svg>
+          <div class="tg-dots" id="tg-dots" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="tg-legend">
+        <span><i class="lg-sq"></i>Claude Code</span>
+        <span><i class="lg-ci"></i>Codex</span>
+        <span><i class="lg-da"></i>Paused at its limit</span>
+      </div>
+      <figcaption class="caption" id="tg-caption">Illustrated. The first release switches one job at a time.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Closing -->
+<section id="closing" class="closing">
+  <div class="wrap">
+    <div class="panel" id="panel">
+      <div class="map" aria-hidden="true"><svg id="panel-svg" shape-rendering="crispEdges"><g id="panel-static"></g></svg></div>
+      <div class="panel-in">
+        <h2 class="display">Your agents should be disposable. Your work shouldn’t be.</h2>
+        <div class="ctas">
+          <a class="btn btn-primary" href="#top">Get relay for Mac</a>
+          <a class="btn btn-secondary" href="#top">View source</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Token reference, for this preview only -->
+<section class="tokens" aria-labelledby="tokens-title">
+  <div class="wrap">
+    <h2 id="tokens-title">Tokens for this preview</h2>
+    <p class="intro">Swatches show the live values for the current theme and accent.</p>
+    <div class="swatches" id="swatches"></div>
+    <div class="type-row">
+      <div><div class="sample display" id="type-display-sample">Same task. Different worker.</div><div class="name" id="type-display-name">Headlines · Satoshi 500</div></div>
+      <div><div class="sample t">relay saves the task, the decisions and the repository state.</div><div class="name">Text · Public Sans 400 and 600</div></div>
+      <div><div class="sample m">relay switch codex:personal<br>912ec1 · 14:36</div><div class="name">Data and commands · IBM Plex Mono 400</div></div>
+    </div>
+    <div class="motion-row">
+      <div><div class="t">100 ms</div><div class="d">Press feedback</div><button type="button" class="btn btn-secondary btn-sm">Press and hold</button></div>
+      <div><div class="t">120 ms</div><div class="d">Text changes</div><button type="button" class="btn btn-secondary btn-sm" id="demo-text-btn"><span class="demo-text"><span>Starting</span><span style="opacity:0">Working</span></span></button></div>
+      <div><div class="t">180 ms</div><div class="d">Card expands</div><button type="button" class="btn btn-secondary btn-sm" id="demo-expand-btn" aria-pressed="false">Expand</button><div class="expand-box" id="expand-box"></div></div>
+      <div><div class="t">7.2 s</div><div class="d">The hero handoff, card and map together</div><button type="button" class="btn btn-secondary btn-sm" id="demo-story-btn">Replay in the hero</button></div>
+    </div>
+    <p class="caption" style="margin-top:24px">All motion uses <span class="mono">cubic-bezier(0.22, 1, 0.36, 1)</span>, moves only transform and opacity, pauses off screen and stops when you reduce motion.</p>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <span class="wordmark"><svg class="glyph" aria-hidden="true"><use href="#g"/></svg>relay</span>
+        <p>relay keeps your coding work moving when an agent stops. It saves the task, the decisions and the repository state for the next agent.</p>
+      </div>
+      <nav aria-label="Product"><h3>Product</h3><a href="#how">How it works</a><a href="#terminal">Docs</a><a href="#top">Changelog</a></nav>
+      <nav aria-label="Project"><h3>Project</h3><a href="#top">GitHub</a><a href="#top">License</a><a href="#top">Security</a></nav>
+      <nav aria-label="Contact"><h3>Contact</h3><a href="#top">Email</a><a href="#top">Report a problem</a></nav>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 relay</span>
+      <span>The accounts, times and checkpoints on this page are illustrated.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var NS = "http://www.w3.org/2000/svg";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  function setPressed(sel, attr, value) {
+    document.querySelectorAll(sel).forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute(attr) === value)); });
+  }
+  function svgEl(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function half(v) { return Math.round(v) + 0.5; }
+
+  /* Swatches with live values */
+  var swatchList = [
+    ["Background", "bg"], ["Surface", "surface"], ["Raised", "raised"], ["Rule and idle lane", "rule"],
+    ["Muted", "muted"], ["Text and active lane", "text"], ["Accent", "accent"],
+    ["Limit or warning", "warning"], ["Error", "error"], ["Success", "success"]
+  ];
+  var swWrap = document.getElementById("swatches");
+  swatchList.forEach(function (s) {
+    var d = document.createElement("div");
+    d.className = "sw";
+    d.innerHTML = '<div class="chip" style="background:var(--' + s[1] + ')"></div><div><b></b><span data-hex="' + s[1] + '"></span></div>';
+    d.querySelector("b").textContent = s[0];
+    swWrap.appendChild(d);
+  });
+  function showHex() {
+    var cs = getComputedStyle(root);
+    document.querySelectorAll("[data-hex]").forEach(function (el) {
+      el.textContent = cs.getPropertyValue("--" + el.dataset.hex).trim().toUpperCase();
+    });
+  }
+
+  /* Theme and accent */
+  function applyTheme(t) { root.setAttribute("data-theme", t); setPressed("[data-theme-btn]", "data-theme-btn", t); store.set("relay2-theme", t); showHex(); }
+  function applyAccent(a) { root.setAttribute("data-accent", a); setPressed("[data-accent-btn]", "data-accent-btn", a); store.set("relay2-accent", a); showHex(); }
+  applyTheme(store.get("relay2-theme") === "dark" ? "dark" : "light");
+  applyAccent(store.get("relay2-accent") === "ink" ? "ink" : "olive");
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { applyTheme(b.dataset.themeBtn); }); });
+  document.querySelectorAll("[data-accent-btn]").forEach(function (b) { b.addEventListener("click", function () { applyAccent(b.dataset.accentBtn); }); });
+
+  /* Headline font */
+  var fonts = {
+    "Satoshi": { family: '"Satoshi", system-ui, sans-serif', weight: 500, track: "-0.035em", scale: 0.86 },
+    "Manrope": { family: '"Manrope", system-ui, sans-serif', weight: 600, track: "-0.035em", scale: 0.84 },
+    "Newsreader": { family: '"Newsreader", Georgia, serif', weight: 500, track: "-0.02em", scale: 1 },
+    "Geist": { family: '"Geist", system-ui, sans-serif', weight: 600, track: "-0.04em", scale: 0.84 }
+  };
+  var fontPick = document.getElementById("font-pick");
+  function applyFont(name) {
+    if (!fonts[name]) name = "Satoshi";
+    var f = fonts[name];
+    root.style.setProperty("--font-display", f.family);
+    root.style.setProperty("--display-weight", f.weight);
+    root.style.setProperty("--display-track", f.track);
+    root.style.setProperty("--display-scale", f.scale);
+    fontPick.value = name;
+    document.getElementById("type-display-name").textContent = "Headlines · " + name + " " + f.weight;
+    store.set("relay2-font", name);
+  }
+  applyFont(store.get("relay2-font") || "Satoshi");
+  fontPick.addEventListener("change", function () { applyFont(fontPick.value); });
+
+  /* Headline copy */
+  var heads = [
+    ["Never run out of limits again.", "When one coding agent hits its limit, relay moves the work to another you already pay for, with the same code, plan and decisions."],
+    ["Never wait for a reset again.", "Claude out until 6 PM? relay hands the job to Codex or another account, and nothing starts over."],
+    ["Your usage limits, combined.", "relay turns Claude, Codex and every coding account you have into one pool, and keeps your work on whichever one can go on."]
+  ];
+  var headPick = document.getElementById("head-pick");
+  var hl = document.getElementById("hl"), lede = document.getElementById("lede");
+  function setHead(i, animate) {
+    i = heads[i] ? i : 0;
+    headPick.value = String(i);
+    store.set("relay2-head", String(i));
+    var write = function () { hl.textContent = heads[i][0]; lede.textContent = heads[i][1]; hl.classList.remove("out"); lede.classList.remove("out"); };
+    if (!animate || reduce) { write(); return; }
+    hl.classList.add("out"); lede.classList.add("out");
+    setTimeout(write, 120);
+  }
+  setHead(Number(store.get("relay2-head") || 0), false);
+  headPick.addEventListener("change", function () { setHead(Number(headPick.value), true); });
+
+  /* Static track drawing, shared by the hero and the closing panel */
+  var HASHES = ["77c2d0", "3be914", "c90a5e", "19fd42", "b6a031", "4e7c2b", "d2580f", "8a1e6c", "f3049d", "60ad1b", "2c7f90", "e5b347"];
+  function drawTrack(g, W, H, ys, o) {
+    while (g.firstChild) g.removeChild(g.firstChild);
+    var hi = 0;
+    function blocked(x, y1, y2) {
+      if (o.avoidX) for (var i = 0; i < o.avoidX.length; i++) if (Math.abs(x - o.avoidX[i]) < 46) return true;
+      var boxes = o.boxes || [];
+      for (var j = 0; j < boxes.length; j++) {
+        var b = boxes[j];
+        if (x > b.l - 20 && x < b.r + 20 && Math.max(y1, y2) > b.t - 24 && Math.min(y1, y2) < b.b + 24) return true;
+      }
+      return false;
+    }
+    ys.forEach(function (y, i) {
+      var x2 = (o.cut && o.cut.lane === i) ? o.cut.x : W;
+      svgEl("line", { "class": "trk-line" + (o.dotted && o.dotted.indexOf(i) > -1 ? " dotted" : ""), x1: o.lineStart, y1: y, x2: x2, y2: y }, g);
+      if (o.labels && !blocked(o.labelX + 60, y - 14, y - 4)) {
+        var t = svgEl("text", { "class": "trk-label", x: o.labelX, y: y - 9 }, g);
+        t.textContent = o.labels[i];
+      }
+    });
+    (o.switches || []).forEach(function (s) {
+      var x = half(o.x0 + s.f * (W - o.x0));
+      var ya = ys[s.a], yb = ys[s.b];
+      if (x > W - 12 || blocked(x, ya, yb)) return;
+      svgEl("line", { "class": "trk-line", x1: x, y1: ya, x2: x, y2: yb }, g);
+      svgEl("rect", { "class": "trk-node", x: x - 2.5, y: ya - 2.5, width: 5, height: 5 }, g);
+      svgEl("rect", { "class": "trk-node", x: x - 2.5, y: yb - 2.5, width: 5, height: 5 }, g);
+    });
+    ys.forEach(function (y, i) {
+      if (o.dotted && o.dotted.indexOf(i) > -1) return;
+      (o.stations[i] || []).forEach(function (f) {
+        var x = half(o.x0 + f * (W - o.x0));
+        if (x < o.x0 + 24 || x > W - 24 || blocked(x, y, y)) return;
+        svgEl("rect", { "class": "trk-node", x: x - 3.5, y: y - 3.5, width: 7, height: 7 }, g);
+        if (o.hashes) {
+          var t = svgEl("text", { "class": "trk-hash", x: x, y: y + 17, "text-anchor": "middle" }, g);
+          t.textContent = HASHES[hi++ % HASHES.length];
+        }
+      });
+    });
+    (o.extra || []).forEach(function (e) {
+      var y = ys[e.lane];
+      svgEl("rect", { "class": "trk-node", x: e.x - 3.5, y: y - 3.5, width: 7, height: 7 }, g);
+      if (e.hash) {
+        var t = svgEl("text", { "class": "trk-hash", x: e.x, y: y + 17, "text-anchor": "middle" }, g);
+        t.textContent = e.hash;
+      }
+    });
+  }
+
+  /* ===== relay card start =====
+     Mounts the handoff card and runs its 7.2-second story (adapted from Codex's card.html).
+     hooks.onPlay() fires when the story starts, hooks.onPause(paused) when the viewer pauses,
+     hooks.onFinal() when motion is reduced. The returned setInView(bool) pauses it off screen. */
+  function mountRelayCard(host, hooks) {
+    hooks = hooks || {};
+    host.appendChild(document.getElementById("card-tpl").content.cloneNode(true));
+    var root = host.querySelector(".rc");
+    var $ = function (n) { return root.querySelector('[data-rc="' + n + '"]'); };
+    var reducedQ = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var DURATION = 7200;
+    var stages = [
+      { at: 0, line: "<strong>Claude Code is working</strong> · building authentication", claude: "Working", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan", active: "claude" },
+      { at: 1300, line: "<strong>Claude Code is working</strong> · usage running out", claude: "Usage running out", codex: "Ready", caption: "<b>Next worker: Codex</b>Same repository &amp; plan", active: "claude" },
+      { at: 2600, line: "<strong>Limit reached</strong> · resets <time>18:00</time>", claude: "Limit reached", codex: "Ready", caption: "<b>Waiting for your manual switch</b>Next worker: Codex", active: "" },
+      { at: 3700, line: "<strong>Saving checkpoint</strong> · keeping the repository &amp; plan", claude: "Limit · resets <time>18:00</time>", codex: "Ready", caption: "<b>Saving the work before switching</b>Checkpoint + plan", active: "" },
+      { at: 4800, line: "<strong>Moving the job to Codex</strong> · manual switch", claude: "Limit · resets <time>18:00</time>", codex: "Receiving work", caption: '<b>Manual switch · <time>14:19</time></b>Moving checkpoint <span class="mono">912ec1</span> + plan', active: "codex" },
+      { at: 6000, line: "<strong>Moved to Codex</strong> · Claude Code reached its limit", claude: "Limit · resets <time>18:00</time>", codex: "Working", caption: '<b>Handed off manually · <time>14:19</time></b>at checkpoint <span class="mono">912ec1</span>', active: "codex" }
+    ];
+    var elapsed = 0, lastTime = 0, raf = 0, index = -1, paused = false, inView = false, running = false, animations = [];
+    var ease = "cubic-bezier(0.22, 1, 0.36, 1)";
+    var pauseBtn = $("pause");
+    function entrance(el) {
+      if (reducedQ.matches) return;
+      animations.push(el.animate([{ opacity: 0, transform: "translateY(3px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 220, easing: ease }));
+    }
+    function render(i, animate) {
+      index = i;
+      var s = stages[i];
+      $("line").innerHTML = s.line;
+      $("claude-state").innerHTML = s.claude;
+      $("codex-state").textContent = s.codex;
+      $("transfer").innerHTML = s.caption;
+      $("claude").classList.toggle("active", s.active === "claude");
+      $("codex").classList.toggle("active", s.active === "codex");
+      $("claude-role").textContent = i < 2 ? "Current worker" : "Previous worker";
+      $("codex-role").textContent = i < 4 ? "Next worker" : "Current worker";
+      $("claude-state").className = "rc-state " + (i < 2 ? "working" : "warning");
+      $("codex-state").className = "rc-state" + (i >= 4 ? " working" : "");
+      $("hash").textContent = i < 3 ? "8f4a20" : i === 3 ? "Saving…" : "912ec1";
+      $("saved").innerHTML = i < 3 ? "· previous" : i === 3 ? "" : "· saved <time>14:19</time>";
+      $("open-label").textContent = i < 4 ? "Open Claude Code" : "Open Codex";
+      if (animate) entrance($("line"));
+      if (i === 1 && animate && !reducedQ.matches) animations.push($("fill").animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 1300, easing: ease, fill: "forwards" }));
+      $("fill").style.transform = i >= 2 ? "scaleX(0)" : (i === 0 ? "scaleX(1)" : $("fill").style.transform);
+      if (i === 4 && animate && !reducedQ.matches) {
+        animations.push($("token").animate([
+          { opacity: 0, transform: "translateY(0)" }, { opacity: 1, transform: "translateY(6px)", offset: 0.15 },
+          { opacity: 1, transform: "translateY(44px)", offset: 0.8 }, { opacity: 0, transform: "translateY(49px)" }
+        ], { duration: 1100, easing: ease }));
+      }
+      if (i === 5) $("announce").textContent = "Moved to Codex. Claude Code reached its limit. Checkpoint and plan carried over.";
+    }
+    function finish() {
+      running = false; elapsed = DURATION;
+      pauseBtn.disabled = true; pauseBtn.textContent = "Pause"; pauseBtn.setAttribute("aria-pressed", "false");
+    }
+    function frame(t) {
+      if (paused || !inView || document.hidden) { lastTime = 0; return; }
+      if (lastTime) elapsed += t - lastTime;
+      lastTime = t;
+      var i = stages.length - 1;
+      while (i > 0 && elapsed < stages[i].at) i--;
+      if (i !== index) render(i, true);
+      if (elapsed >= DURATION) { finish(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    function play() {
+      cancelAnimationFrame(raf);
+      animations.forEach(function (a) { a.cancel(); });
+      animations = [];
+      elapsed = 0; lastTime = 0; paused = false;
+      $("announce").textContent = "";
+      pauseBtn.textContent = "Pause"; pauseBtn.setAttribute("aria-pressed", "false");
+      if (reducedQ.matches) { render(5, false); finish(); if (hooks.onFinal) hooks.onFinal(); return; }
+      running = true;
+      pauseBtn.disabled = false;
+      index = -1; render(0, true);
+      if (hooks.onPlay) hooks.onPlay();
+      raf = requestAnimationFrame(frame);
+    }
+    function resumeClock() {
+      if (paused || !inView || document.hidden) return;
+      animations.forEach(function (a) { if (a.playState === "paused") a.play(); });
+      if (running) { lastTime = 0; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
+    }
+    function suspendClock() {
+      cancelAnimationFrame(raf); lastTime = 0;
+      animations.forEach(function (a) { if (a.playState === "running") a.pause(); });
+    }
+    pauseBtn.addEventListener("click", function () {
+      if (!running) return;
+      paused = !paused;
+      pauseBtn.textContent = paused ? "Resume" : "Pause";
+      pauseBtn.setAttribute("aria-pressed", String(paused));
+      if (hooks.onPause) hooks.onPause(paused);
+      if (paused) suspendClock(); else resumeClock();
+    });
+    $("replay").addEventListener("click", play);
+    $("pin").addEventListener("click", function () {
+      var pinned = $("pin").getAttribute("aria-pressed") !== "true";
+      $("pin").setAttribute("aria-pressed", String(pinned));
+      $("pin").querySelector("span").textContent = pinned ? "Pinned" : "Pin";
+    });
+    root.querySelectorAll("[data-dialog]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (button.dataset.dialog === "worker") {
+          var who = index < 4 ? "Claude Code" : "Codex";
+          $("worker-title").textContent = who + " worker";
+          $("worker-detail").innerHTML = who === "Claude Code"
+            ? "This illustrated worker is building authentication in relay / auth. The next worker will receive the saved checkpoint and plan."
+            : 'This illustrated worker continues “Build authentication” in relay / auth with checkpoint <span class="mono">912ec1</span> and the saved plan.';
+        }
+        var d = root.querySelector('[data-rc-dialog="' + button.dataset.dialog + '"]');
+        if (d && d.showModal) d.showModal();
+      });
+    });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) suspendClock(); else resumeClock(); });
+    if (reducedQ.matches) { $("note").textContent = "Illustrated manual handoff · reduced motion"; render(5, false); pauseBtn.disabled = true; }
+    else render(0, false);
+    return {
+      root: root,
+      play: play,
+      setInView: function (v) { inView = v; if (v) resumeClock(); else suspendClock(); }
+    };
+  }
+  /* ===== relay card end ===== */
+
+  /* Hero: the card on top of the track map */
+  var story = document.getElementById("story");
+  var relayCard = mountRelayCard(document.getElementById("hero-card"), {
+    onPlay: function () { startMap(); },
+    onPause: function (p) { story.classList.toggle("paused", p); },
+    onFinal: function () { story.classList.remove("play", "paused"); story.classList.add("final"); }
+  });
+  var card = relayCard.root;
+  var heroSvg = document.getElementById("hero-svg");
+  var heroStatic = document.getElementById("hero-static");
+  function setAttrs(el, a) { for (var k in a) el.setAttribute(k, a[k]); }
+  function place(el, x, y, w, h) {
+    el.style.left = x + "px"; el.style.top = y + "px";
+    if (w != null) el.style.width = Math.max(0, w) + "px";
+    if (h != null) el.style.height = Math.max(0, h) + "px";
+  }
+
+  /* An element's box in the local pixels of a container, safe under CSS zoom */
+  function rel(el, base) {
+    var b = base.getBoundingClientRect(), r = el.getBoundingClientRect(), k = base.offsetWidth / (b.width || 1);
+    return { left: (r.left - b.left) * k, top: (r.top - b.top) * k, right: (r.right - b.left) * k, bottom: (r.bottom - b.top) * k, width: r.width * k, height: r.height * k };
+  }
+
+  function layoutHero() {
+    var W = story.clientWidth, H = story.clientHeight;
+    if (!W || !H) return;
+    var cr = rel(card.querySelector(".rc-card"), story);
+    var cardL = cr.left, cardT = cr.top, cardR = cr.right, cardB = cr.bottom;
+    var side = cardL > W * 0.45;
+    var tr = rel(document.querySelector(".hero-grid > div"), story);
+    var rg = document.createRange(); rg.selectNodeContents(hl);
+    var hr = rg.getBoundingClientRect(), sb = story.getBoundingClientRect(), kz = story.offsetWidth / (sb.width || 1);
+    var tw = Math.max((hr.right - sb.left) * kz - tr.left, rel(lede, story).width);
+    var textBox = { l: tr.left, r: tr.left + Math.min(tr.width, tw), t: tr.top, b: tr.bottom };
+    var top = side ? 44 : 30;
+    var bottom = side ? H - 60 : Math.max(top + 180, cardT - 40);
+    var ys = [0, 1, 2, 3].map(function (i) { return half(top + i * (bottom - top) / 3); });
+    var x0 = side ? Math.round(Math.max(120, Math.min(W * 0.12, 200))) : Math.round(Math.max(110, W * 0.3));
+    var textR = textBox.r;
+    var P, xEnd;
+    if (side) {
+      P = Math.round(cardL - 150);
+      if (P < textR + 28) P = Math.round(Math.min(textR + 28, cardL - 46));
+      xEnd = Math.round(Math.max(cardL - 30, P + 12));
+      if (xEnd > cardL - 10) xEnd = Math.round(cardL - 10);
+    } else {
+      P = Math.round(W - 96);
+      xEnd = Math.round(W - 22);
+    }
+    if (P < x0 + 90) P = x0 + 90;
+    var run1 = P - 18 - x0;
+    var run2 = Math.max(run1, xEnd - 10 - 36 - x0);
+    var drop = ys[2] - ys[0];
+
+    heroSvg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    drawTrack(heroStatic, W, H, ys, {
+      lineStart: 0, x0: x0,
+      cut: { lane: 0, x: P + 18 }, dotted: [3],
+      stations: [[0.22, 0.86, 0.97], [0.12, 0.34, 0.61, 0.9], [0.18, 0.44, 0.93], []],
+      hashes: false,
+      switches: [{ a: 1, b: 2, f: 0.06 }, { a: 1, b: 2, f: 0.5 }, { a: 2, b: 3, f: 0.3 }, { a: 0, b: 1, f: 0.4 }, { a: 2, b: 3, f: 0.95 }, { a: 0, b: 1, f: 0.98 }],
+      avoidX: [P, xEnd, x0],
+      boxes: [{ l: cardL, r: cardR, t: cardT, b: cardB }, textBox],
+      extra: [{ lane: 0, x: half(x0 - 16) }]
+    });
+
+    var y1 = ys[0], y3 = ys[2];
+    setAttrs(document.getElementById("m-l1solid"), { x1: P + 18, y1: y1, x2: W, y2: y1 });
+    setAttrs(document.getElementById("m-l1dot"), { x1: P + 18, y1: y1, x2: W, y2: y1 });
+    var ck = document.getElementById("m-ckpt");
+    setAttrs(ck.querySelector("rect"), { x: P - 3.5, y: y1 - 3.5 });
+
+    var con1 = document.getElementById("m-con1"), con3 = document.getElementById("m-con3");
+    if (side) {
+      var a1 = card.querySelector('[data-lane="0"]'), a3 = card.querySelector('[data-lane="2"]');
+      var mid = cardT + (cardB - cardT) / 2;
+      var b1 = a1 && rel(a1, story), b3 = a3 && rel(a3, story);
+      var r1 = half(b1 ? b1.top + b1.height / 2 : mid - 22);
+      var r3 = half(b3 ? b3.top + b3.height / 2 : mid + 22);
+      var xc = half(xEnd);
+      con1.querySelector("path").setAttribute("d", "M" + xc + " " + y1 + " V" + r1 + " H" + Math.round(cardL));
+      con3.querySelector("path").setAttribute("d", "M" + xc + " " + y3 + " V" + r3 + " H" + Math.round(cardL));
+      setAttrs(con1.querySelector("rect"), { x: xc - 3.5, y: y1 - 3.5 });
+      setAttrs(con3.querySelector("rect"), { x: xc - 3.5, y: y3 - 3.5 });
+      con1.style.display = ""; con3.style.display = "";
+    } else {
+      con1.style.display = "none"; con3.style.display = "none";
+    }
+
+    place(document.getElementById("m-baton"), x0, y1 - 1.5);
+    place(document.getElementById("m-trail1"), x0, y1 - 0.5, run1, 1);
+    place(document.getElementById("m-switch"), P - 0.5, y1, 1, drop);
+    place(document.getElementById("m-trail3"), P - 18, y3 - 0.5, run2 - run1, 1);
+    story.style.setProperty("--run1", run1 + "px");
+    story.style.setProperty("--run2", run2 + "px");
+    story.style.setProperty("--drop", drop + "px");
+  }
+
+  /* Closing panel map */
+  var panel = document.getElementById("panel");
+  function layoutPanel() {
+    var W = panel.clientWidth, H = panel.clientHeight;
+    if (!W || !H) return;
+    var ys = [0, 1, 2, 3].map(function (i) { return half(36 + i * (H - 72) / 3); });
+    document.getElementById("panel-svg").setAttribute("viewBox", "0 0 " + W + " " + H);
+    var ir = rel(panel.querySelector(".panel-in"), panel), ph = rel(panel.querySelector("h2"), panel);
+    var textBox = { l: ir.left, r: Math.max(ph.right, ir.left + 320), t: ir.top, b: ir.bottom };
+    drawTrack(document.getElementById("panel-static"), W, H, ys, {
+      lineStart: 0, x0: 0, hashes: false, boxes: [textBox],
+      stations: [[0.58, 0.8, 0.94], [0.66, 0.88], [0.52, 0.74, 0.9], [0.7, 0.96]],
+      switches: [{ a: 0, b: 1, f: 0.72 }, { a: 1, b: 2, f: 0.84 }, { a: 2, b: 3, f: 0.62 }, { a: 1, b: 2, f: 0.28 }]
+    });
+  }
+
+  var rafId = 0;
+  function relayout() {
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(function () { layoutHero(); layoutPanel(); layoutGraph(); });
+  }
+
+  /* Hero story: the card runs the clock, the track map follows it */
+  var started = false;
+  function startMap() {
+    story.classList.remove("play", "paused", "final");
+    void story.offsetWidth;
+    story.classList.add("play");
+  }
+  if (reduce) story.classList.add("final");
+  if (!reduce && "IntersectionObserver" in window) {
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        story.classList.toggle("offscreen", !e.isIntersecting);
+        relayCard.setInView(e.isIntersecting);
+        if (e.isIntersecting && !started) { started = true; relayCard.play(); }
+      });
+    }, { threshold: 0.2 }).observe(story);
+  } else if (!reduce) {
+    relayCard.setInView(true); relayCard.play();
+  }
+  document.getElementById("demo-story-btn").addEventListener("click", function () {
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    relayCard.play();
+  });
+
+  /* Task graph */
+  var tg = document.getElementById("tg");
+  var tgEdges = document.getElementById("tg-edges");
+  var tgDots = document.getElementById("tg-dots");
+  var NODES = [
+    { id: "plan", t: "Plan the job", p: "claude", dc: 1, dr: 2, mc: 2, mr: 1, s: "Done" },
+    { id: "cb", t: "Callback route", p: "claude", dc: 2, dr: 1, mc: 1, mr: 2, s: "Working" },
+    { id: "tbl", t: "Sessions table", p: "codex", dc: 2, dr: 2, mc: 2, mr: 2, s: "Working" },
+    { id: "ui", t: "Sign-in page", p: "codex", dc: 2, dr: 3, mc: 3, mr: 2, s: "Working" },
+    { id: "tst", t: "Callback tests", p: "codex", dc: 3, dr: 1, mc: 1, mr: 3, s: "Working" },
+    { id: "ref", t: "Token refresh", p: "claude", dc: 3, dr: 2, mc: 2, mr: 3, s: "Working" },
+    { id: "sto", t: "Session store", p: "codex", dc: 3, dr: 3, mc: 3, mr: 3, s: "Working" },
+    { id: "out", t: "Sign-out everywhere", p: "claude", dc: 4, dr: 2, mc: 2, mr: 4, s: "Working" },
+    { id: "rev", t: "Review", p: "claude", dc: 5, dr: 2, mc: 2, mr: 5, s: "Waiting" }
+  ];
+  var EDGES = [["plan", "cb"], ["plan", "tbl"], ["plan", "ui"], ["cb", "tst"], ["cb", "ref"], ["tbl", "ref"], ["ui", "sto"], ["tst", "out"], ["ref", "out"], ["sto", "out"], ["out", "rev"]];
+  var PAUSABLE = ["cb", "ref", "out", "rev"];
+  var nodeEl = {};
+  NODES.forEach(function (n) {
+    var d = document.createElement("div");
+    d.className = "tg-node " + n.p;
+    d.style.setProperty("--dc", n.dc); d.style.setProperty("--dr", n.dr);
+    d.style.setProperty("--mc", n.mc); d.style.setProperty("--mr", n.mr);
+    var paus = PAUSABLE.indexOf(n.id) > -1;
+    d.innerHTML = '<div class="nt"></div><div class="nm2"><span class="pv">' + (n.p === "claude" ? "Claude" : "Codex") + '</span><span class="stack sw2"><span class="w"></span>' + (paus ? '<span class="p">Paused</span>' : "") + '</span></div>';
+    d.querySelector(".nt").textContent = n.t;
+    d.querySelector(".w").textContent = n.s;
+    tg.appendChild(d);
+    nodeEl[n.id] = d;
+  });
+  var provOf = {};
+  NODES.forEach(function (n) { provOf[n.id] = n.p; });
+  var dotList = [];
+  var tgVisible = false, phase = 0, tClock = 0;
+
+  function edgePaused(e) { return phase === 1 && (PAUSABLE.indexOf(e[0]) > -1 || PAUSABLE.indexOf(e[1]) > -1); }
+
+  function layoutGraph() {
+    var vertical = tg.clientWidth < 700;
+    tg.classList.toggle("vertical", vertical);
+    var W = tg.clientWidth, H = tg.clientHeight;
+    tgEdges.setAttribute("viewBox", "0 0 " + W + " " + H);
+    while (tgEdges.firstChild) tgEdges.removeChild(tgEdges.firstChild);
+    dotList.forEach(function (d) { d.a1.cancel(); d.a2.cancel(); d.wrap.remove(); });
+    dotList = [];
+    EDGES.forEach(function (e, idx) {
+      var a = rel(nodeEl[e[0]], tg), b = rel(nodeEl[e[1]], tg);
+      var x1, y1, x2, y2, pts;
+      if (!vertical) {
+        x1 = Math.round(a.right); y1 = half(a.top + a.height / 2);
+        x2 = Math.round(b.left); y2 = half(b.top + b.height / 2);
+        var xm = half((x1 + x2) / 2);
+        pts = [[x1, y1], [xm, y1], [xm, y2], [x2, y2]];
+      } else {
+        x1 = half(a.left + a.width / 2); y1 = Math.round(a.bottom);
+        x2 = half(b.left + b.width / 2); y2 = Math.round(b.top);
+        var ym = half((y1 + y2) / 2);
+        pts = [[x1, y1], [x1, ym], [x2, ym], [x2, y2]];
+      }
+      svgEl("path", { d: "M" + pts.map(function (p) { return p[0] + " " + p[1]; }).join(" L"), "shape-rendering": "crispEdges" }, tgEdges);
+      if (reduce) return;
+      var lens = [0], total = 0;
+      for (var i = 1; i < pts.length; i++) { total += Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]); lens.push(total); }
+      var span = 0.72;
+      var frames = pts.map(function (p, i) {
+        return { transform: "translate(" + (p[0] - x1) + "px," + (p[1] - y1) + "px)", offset: total ? (lens[i] / total) * span : 0 };
+      });
+      frames.push({ transform: frames[frames.length - 1].transform, offset: 1 });
+      for (var k = 1; k < frames.length; k++) if (frames[k].offset < frames[k - 1].offset) frames[k].offset = frames[k - 1].offset;
+      var wrap = document.createElement("span");
+      wrap.className = "dw";
+      wrap.style.left = x1 + "px"; wrap.style.top = y1 + "px";
+      var mover = document.createElement("span");
+      mover.style.display = "block";
+      var dot = document.createElement("i");
+      dot.className = "dot " + provOf[e[0]];
+      mover.appendChild(dot); wrap.appendChild(mover); tgDots.appendChild(wrap);
+      var opts = { duration: 2800, iterations: Infinity, delay: (idx % 4) * 450 + Math.floor(idx / 4) * 260, easing: "linear" };
+      var a1 = mover.animate(frames, opts);
+      var a2 = dot.animate([
+        { opacity: 0, offset: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1, offset: span - 0.06 }, { opacity: 0, offset: span }, { opacity: 0, offset: 1 }
+      ], opts);
+      var rec = { e: e, wrap: wrap, a1: a1, a2: a2 };
+      dotList.push(rec);
+      syncDot(rec);
+    });
+  }
+  function syncDot(d) {
+    var stop = edgePaused(d.e) || !tgVisible;
+    d.wrap.classList.toggle("off", edgePaused(d.e));
+    if (stop) { d.a1.pause(); d.a2.pause(); } else { d.a1.play(); d.a2.play(); }
+  }
+  function setPhase(p) {
+    phase = p;
+    document.querySelectorAll("#tg-phase > span, #tg-clock > span").forEach(function (s) { s.style.opacity = Number(s.dataset.ph) === p ? "1" : "0"; });
+    PAUSABLE.forEach(function (id) { nodeEl[id].classList.toggle("is-paused", p === 1); });
+    dotList.forEach(syncDot);
+  }
+  var tgFig = document.querySelector(".tg-fig");
+  if (reduce) {
+    document.getElementById("tg-caption").textContent = "Illustrated. The first release switches one job at a time. Motion is reduced, so the graph is still.";
+  } else {
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { tgVisible = e.isIntersecting; dotList.forEach(syncDot); });
+      }, { threshold: 0.15 }).observe(tgFig);
+    } else { tgVisible = true; }
+    setInterval(function () {
+      if (!tgVisible || document.hidden) return;
+      tClock = (tClock + 0.25) % 15;
+      var p = tClock < 7 ? 0 : (tClock < 11.5 ? 1 : 2);
+      if (p !== phase) setPhase(p);
+    }, 250);
+  }
+
+  layoutHero(); layoutPanel(); layoutGraph();
+  if ("ResizeObserver" in window) {
+    var ro = new ResizeObserver(relayout);
+    ro.observe(story); ro.observe(card); ro.observe(panel); ro.observe(tg);
+  }
+  window.addEventListener("resize", relayout);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+
+  /* Copy command */
+  var copyBtn = document.getElementById("copy-btn");
+  var copyLabel = document.getElementById("copy-label");
+  copyBtn.addEventListener("click", function () {
+    var done = function (ok) {
+      copyLabel.textContent = ok ? "Copied" : "Copy failed";
+      setTimeout(function () { copyLabel.textContent = "Copy command"; }, 1600);
+    };
+    var cmd = "relay switch codex:personal";
+    var fallback = function () {
+      var ok = false;
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = cmd; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        ok = document.execCommand("copy");
+        ta.remove();
+      } catch (e) {}
+      copyBtn.focus();
+      done(ok);
+    };
+    try {
+      navigator.clipboard.writeText(cmd).then(function () { done(true); }, fallback);
+    } catch (e) { fallback(); }
+  });
+
+  /* Motion demos */
+  var tb = document.getElementById("demo-text-btn");
+  tb.addEventListener("click", function () {
+    var spans = tb.querySelectorAll(".demo-text > span");
+    var showSecond = spans[0].style.opacity !== "0";
+    spans[0].style.opacity = showSecond ? "0" : "1";
+    spans[1].style.opacity = showSecond ? "1" : "0";
+  });
+  var eb = document.getElementById("demo-expand-btn");
+  eb.addEventListener("click", function () {
+    var open = document.getElementById("expand-box").classList.toggle("open");
+    eb.setAttribute("aria-pressed", String(open));
+    eb.textContent = open ? "Collapse" : "Expand";
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+Usage
+  relay hook <provider> <event>
+
+Pass an event from an agent's hooks to relay.
+Claude Code and Codex call this command from their hooks.
+You do not need to run it yourself.
+
+Examples
+  relay hook claude Stop
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

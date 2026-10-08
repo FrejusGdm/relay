@@ -1,0 +1,4 @@
+Plan standard: 60 runs on claude:personal and codex:personal.
+24 baselines and 36 handoffs, 3 repetitions each.
+Expected agent time: about 25 hours, split between both accounts.
+This uses your real subscription limits. Nothing has run.

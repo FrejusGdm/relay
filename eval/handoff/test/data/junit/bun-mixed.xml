@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="5" assertions="2" failures="1" skipped="2" time="0.010566486">
+  <testsuite name="test/a.test.ts" file="test/a.test.ts" tests="5" assertions="2" failures="1" skipped="2" time="0.005810577" hostname="test-host">
+    <testsuite name="grp" file="test/a.test.ts" line="2" tests="2" assertions="2" failures="1" skipped="0" time="0" hostname="test-host">
+      <testcase name="ok one" classname="grp" time="0.000023" file="test/a.test.ts" line="3" assertions="1" />
+      <testcase name="bad &lt;one&gt; &amp; &quot;q&quot;" classname="grp" time="0.000944" file="test/a.test.ts" line="4" assertions="1">
+        <failure type="AssertionError" message="expect(received).toBe(expected)&#10;&#10;Expected: 2&#10;Received: 1&#10;">AssertionError: expect(received).toBe(expected)&#10;&#10;Expected: 2&#10;Received: 1&#10;&#10;</failure>
+      </testcase>
+    </testsuite>
+    <testcase name="top" classname="" time="0.000013" file="test/a.test.ts" line="6" assertions="0" />
+    <testcase name="skipped" classname="" time="0" file="test/a.test.ts" line="7" assertions="0">
+      <skipped />
+    </testcase>
+    <testcase name="later" classname="" time="0" file="test/a.test.ts" line="8" assertions="0">
+      <skipped message="TODO" />
+    </testcase>
+  </testsuite>
+</testsuites>

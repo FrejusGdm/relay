@@ -1,0 +1,9 @@
+{
+  // The Playwright tests run code inside the page, so they need the DOM types.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["*.pw.ts"],
+  "exclude": []
+}

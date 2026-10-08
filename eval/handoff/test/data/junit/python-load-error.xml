@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites name="unittest" tests="3" failures="0" errors="1" skipped="0" time="0.000366"><testsuite name="tests" tests="3" failures="0" errors="1" skipped="0" time="0.000366"><testcase classname="unittest.loader._FailedTest" name="test_broken" time="0.000283"><error message="Failed to import test module: test_broken&#10;Traceback (most recent call last):&#10;  File &quot;/usr/lib/python3.14/unittest/loader.py&quot;, line 433, in _find_test_path&#10;    module = self._get_module_from_name(name)&#10;  File &quot;/usr/lib/python3.14/unittest/loader.py&quot;, line 374, in _get_module_from_name&#10;    __import__(name)&#10;    ~~~~~~~~~~^^^^^^&#10;  File &quot;/home/josue/.cache/tmp-bp/eval-skeleton-probe/pyloaderr/tests/test_broken.py&quot;, line 3, in &lt;module&gt;&#10;    import module_that_does_not_exist&#10;ModuleNotFoundError: No module named 'module_that_does_not_exist'&#10;" type="ImportError">ImportError: Failed to import test module: test_broken
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/unittest/loader.py", line 433, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "/usr/lib/python3.14/unittest/loader.py", line 374, in _get_module_from_name
+    __import__(name)
+    ~~~~~~~~~~^^^^^^
+  File "/home/josue/.cache/tmp-bp/eval-skeleton-probe/pyloaderr/tests/test_broken.py", line 3, in &lt;module&gt;
+    import module_that_does_not_exist
+ModuleNotFoundError: No module named 'module_that_does_not_exist'
+
+</error></testcase><testcase classname="test_ok.Ok" name="test_one" time="0.000054" /><testcase classname="test_ok.Ok" name="test_two" time="0.000030" /></testsuite></testsuites>

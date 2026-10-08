@@ -1,0 +1,9 @@
+id = "tiny-ready"
+title = "Fix subtraction"
+language = "typescript"
+expected_agent_minutes = 1
+visible_test_command = ["bun", "test", "--reporter=junit", "--reporter-outfile={junit}"]
+visible_test_match = "bun test"
+acceptance_test_command = ["bun", "test", "--reporter=junit", "--reporter-outfile={junit}", "./__acceptance__"]
+acceptance_total = 3
+acceptance_fail_at_start_min = 2

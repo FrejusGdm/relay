@@ -1,0 +1,9 @@
+id = "job-queue"
+title = "Add retries, a dead-letter list and crash-safe persistence to the job queue"
+language = "typescript"
+expected_agent_minutes = 30
+visible_test_command = ["bun", "test", "--reporter=junit", "--reporter-outfile={junit}"]
+visible_test_match = "bun test"
+acceptance_test_command = ["bun", "test", "--reporter=junit", "--reporter-outfile={junit}", "./__acceptance__"]
+acceptance_total = 12
+acceptance_fail_at_start_min = 10

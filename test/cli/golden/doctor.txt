@@ -1,0 +1,15 @@
+Usage
+  relay doctor --reindex
+
+Rebuild relay's index of jobs.
+relay rebuilds the index from the .relay/ files and git, so nothing about your jobs is lost.
+
+Examples
+  relay doctor --reindex
+
+Options
+      --reindex            Rebuild the index from the job files
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

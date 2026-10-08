@@ -1,0 +1,10 @@
+name = "smoke"
+repetitions = 1
+max_minutes_per_segment = 120
+baseline_roles = ["claude"]
+
+[[handoffs]]
+task = "rate-limiter"
+from = "claude"
+to = "codex"
+points = ["steps:50"]

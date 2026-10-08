@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Tests must not start the real claude. Use test/fixtures/fake-provider instead." >&2
+exit 97

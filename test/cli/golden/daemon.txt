@@ -1,0 +1,15 @@
+Usage
+  relay daemon <start|stop|restart|status|run>
+
+Start, stop or check relay's background service.
+The service keeps live job state and listens only on a private socket in your relay folder.
+relay starts it by itself when a command needs it.
+
+Examples
+  relay daemon status
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

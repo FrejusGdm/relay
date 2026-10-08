@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites name="unittest" tests="5" failures="1" errors="1" skipped="1" time="0.002148"><testsuite name="tests" tests="5" failures="1" errors="1" skipped="1" time="0.002148"><testcase classname="test_mixed.Mixed" name="test_also_passes" time="0.000065" /><testcase classname="test_mixed.Mixed" name="test_errors" time="0.001485"><error message="boom" type="RuntimeError">Traceback (most recent call last):
+  File "/home/josue/.cache/tmp-bp/eval-skeleton-probe/pymixed/tests/test_mixed.py", line 15, in test_errors
+    raise RuntimeError("boom")
+RuntimeError: boom
+</error></testcase><testcase classname="test_mixed.Mixed" name="test_fails" time="0.000544"><failure message="2 != 3" type="AssertionError">Traceback (most recent call last):
+  File "/home/josue/.cache/tmp-bp/eval-skeleton-probe/pymixed/tests/test_mixed.py", line 12, in test_fails
+    self.assertEqual(1 + 1, 3)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^
+AssertionError: 2 != 3
+</failure></testcase><testcase classname="test_mixed.Mixed" name="test_passes" time="0.000035" /><testcase classname="test_mixed.Mixed" name="test_skipped" time="0.000018"><skipped message="not ready" /></testcase></testsuite></testsuites>

@@ -1,0 +1,16 @@
+Usage
+  relay rollback [<checkpoint>]
+
+Return the files to an earlier checkpoint.
+relay saves the current state first, so you can undo the rollback.
+Without a checkpoint, relay uses the latest one.
+
+Examples
+  relay rollback
+  relay rollback 3
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

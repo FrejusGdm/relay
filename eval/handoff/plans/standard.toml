@@ -1,0 +1,28 @@
+name = "standard"
+repetitions = 3
+max_minutes_per_segment = 120
+baseline_roles = ["claude", "codex"]
+
+[[handoffs]]
+task = "ledger-import"
+from = "claude"
+to = "codex"
+points = ["steps:25", "steps:50", "steps:75"]
+
+[[handoffs]]
+task = "job-queue"
+from = "claude"
+to = "codex"
+points = ["steps:25", "steps:50", "steps:75"]
+
+[[handoffs]]
+task = "rate-limiter"
+from = "codex"
+to = "claude"
+points = ["steps:25", "steps:50", "steps:75"]
+
+[[handoffs]]
+task = "markdown-toc"
+from = "codex"
+to = "claude"
+points = ["steps:25", "steps:50", "steps:75"]

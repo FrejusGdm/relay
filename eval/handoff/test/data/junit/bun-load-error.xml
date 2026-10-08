@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="2" assertions="2" failures="0" skipped="0" time="0.008204501">
+  <testsuite name="test/ok.test.ts" file="test/ok.test.ts" tests="2" assertions="2" failures="0" skipped="0" time="0.000516814" hostname="test-host">
+    <testcase name="adds" classname="" time="0.000088" file="test/ok.test.ts" line="2" assertions="1" />
+    <testcase name="subtracts" classname="" time="0.000028" file="test/ok.test.ts" line="3" assertions="1" />
+  </testsuite>
+</testsuites>

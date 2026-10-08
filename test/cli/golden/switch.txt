@@ -1,0 +1,15 @@
+Usage
+  relay switch <provider[:account]>
+
+Hand the job to another agent or account.
+relay saves a checkpoint, writes the handoff and starts the next agent.
+
+Examples
+  relay switch codex:personal
+  relay switch claude:startup
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error
+
+Not built yet. This version only reads your settings.

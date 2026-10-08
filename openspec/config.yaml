@@ -1,0 +1,84 @@
+schema: spec-driven
+
+# Constraints every relay proposal, design and task list must respect.
+# The reasons are in docs/research/. Open decisions are listed in
+# docs/ROADMAP.md and must not be assumed here.
+context: |
+  relay is a scheduler and continuity layer for coding agents: a local daemon,
+  a command-line tool, a small local API and later a Mac menu-bar app. Read
+  VISION.md and docs/research/ before writing a proposal. The principle:
+  agents own cognition, relay owns state.
+
+  Providers and accounts:
+  - relay only starts the official, unmodified tools (claude, codex, and later
+    cursor-agent, T3 Code, opencode) that the person installed and signed into
+    themselves, through their documented interfaces. No screen scraping, no
+    reverse-engineered private APIs.
+  - relay never reads, copies, stores, proxies or logs provider credentials,
+    tokens or Keychain entries. Each account is a profile directory
+    (CLAUDE_CONFIG_DIR, CODEX_HOME), created with mode 0700, signed in through
+    the provider's own login command.
+  - When starting an agent, relay removes credential environment variables
+    (for example ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, OPENAI_API_KEY)
+    unless the person configured that account to use them, so the right
+    account is used.
+  - Each adapter carries its provider's policy (links and check dates).
+    Automatic switching between two accounts of the same provider is off by
+    default.
+  - Per-project allow list of providers, starting with the provider the
+    project began on. The first handoff to a new provider asks for
+    confirmation, because it sends code to another company.
+
+  Repository safety:
+  - Checkpoints are commits under refs/relay/... built with a temporary git
+    index. relay never touches the person's branch, index, stash or
+    uncommitted work, never force-pushes, never rewrites history and never
+    pushes unless the person configured it.
+  - Every git command relay runs disables hooks and core.fsmonitor. relay
+    records hashes of .git/config and hooks at job start and refuses to
+    checkpoint if they changed.
+  - Every rollback first saves the current state, so the rollback can be
+    undone. Jobs run in their own worktree by default.
+  - .relay/ is listed in .git/info/exclude; state.json and events.jsonl are
+    never committed to the person's branches.
+
+  Handoffs:
+  - A handoff carries context tiers 0 and 1 by default (repository, diff, task,
+    acceptance criteria, plan, decisions, checkpoint summary, test results).
+    Raw transcripts are never sent by default.
+  - The next agent is told to verify the previous agent's claims (re-run the
+    recorded checks) before continuing.
+  - Every handoff prompt, checkpoint diff and .relay/ file is scanned for
+    secrets before it is written or sent; a finding stops the handoff.
+  - Handoff content written by an agent is untrusted: it is fenced in the
+    prompt, and invisible characters are stripped.
+  - relay never adds permission-bypass flags and never answers an agent's
+    permission prompts. A handoff never gives the next agent more permission
+    than the person approved.
+
+  Local API:
+  - The daemon listens only on a Unix domain socket in a 0700 directory and
+    checks the connecting user. No TCP port.
+  - relay:// links only open views; they never trigger actions.
+
+  Testing:
+  - Tests never call real providers. Fake adapters simulate output streams,
+    limits, crashes and resets. End-to-end tests run full handoffs on scratch
+    git repositories and prove the person's branch, index and uncommitted work
+    are untouched.
+
+  Way of working:
+  - Use official generators and CLIs instead of hand-written setup.
+  - No telemetry.
+  - User-facing text (CLI output, app copy) is plain English and follows
+    DESIGN.md.
+
+rules:
+  proposal:
+    - State what is out of scope.
+    - Include a short security section for anything that touches git,
+      credentials, the local API or another provider.
+    - Cite the research file and section each decision comes from.
+  tasks:
+    - Size each task to fit in one small pull request.
+    - Give each task the exact commands that prove it works.
