@@ -1,0 +1,5 @@
+{"dir":"client","msg":{"method":"initialize","id":1,"params":{"clientInfo":{"name":"relay","title":"relay","version":"0.1.0"},"capabilities":{"experimentalApi":false,"requestAttestation":false}}}}
+{"dir":"server","msg":{"id":1,"result":{"userAgent":"codex_cli_rs/0.160.0"}}}
+{"dir":"client","msg":{"method":"initialized"}}
+{"dir":"client","msg":{"method":"account/rateLimits/read","id":2}}
+{"dir":"server","msg":{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":62,"windowDurationMins":300,"resetsAt":1791474300},"secondary":{"usedPercent":20,"windowDurationMins":10080,"resetsAt":1791820800},"credits":null,"planType":"plus","rateLimitReachedType":null},"rateLimitsByLimitId":null,"ordinaryUsageAllowed":true}}}

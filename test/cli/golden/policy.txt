@@ -9,5 +9,3 @@ Examples
 Options
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.
