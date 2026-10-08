@@ -4,7 +4,7 @@ import { appendFileSync, readFileSync, renameSync, rmSync, writeFileSync } from 
 import { join } from "node:path";
 import { appendEvent, type JobRef } from "../../src/job/events";
 import { runRelay } from "../helpers/cli";
-import { jobId, setUpJob } from "../helpers/job";
+import { FAKE_SCANNER, jobId, setUpJob } from "../helpers/job";
 import { removeTempRelayHomes, spawnDaemon, stopDaemon, testSocket, waitForDaemon } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
@@ -16,7 +16,7 @@ afterEach(async () => {
 
 // A scratch project with a job and a daemon following it.
 async function project(): Promise<{ scratch: ScratchRepo; job: JobRef; events: string }> {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   cleanups.push(() => scratch.cleanup());
   const daemon = spawnDaemon(scratch.relayHome);
   cleanups.push(() => stopDaemon(daemon));
@@ -120,7 +120,7 @@ test("a project deleted while the daemon runs is marked missing, and its checkpo
 
 test("a project set up after the daemon started is picked up from projects.list", async () => {
   const { scratch } = await project();
-  const other = await setUpJob();
+  const other = await setUpJob("full", undefined, FAKE_SCANNER);
   cleanups.push(() => other.cleanup());
   // The second project registered itself in its own relay folder; list it in the daemon's.
   appendFileSync(join(scratch.relayHome, "projects.list"), `${other.repo}\n`);

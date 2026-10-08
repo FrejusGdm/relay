@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildView } from "../../src/status/model";
 import { renderJson } from "../../src/status/render-json";
-import { jobId, relay, setUpJob } from "../helpers/job";
+import { FAKE_SCANNER, jobId, relay, setUpJob } from "../helpers/job";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 import { NOW, SCENARIOS } from "./scenarios";
 
@@ -50,7 +50,7 @@ test("every field is present, with null for what relay does not know, and no tot
 });
 
 test("in a project, standard output is exactly one JSON object and the exit code is 0; --job works from anywhere", async () => {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(scratch);
   const result = await relay(scratch, ["status", "--json"], { quiet: true });
   expect(result.code).toBe(0);
@@ -65,7 +65,7 @@ test("in a project, standard output is exactly one JSON object and the exit code
 }, 30_000);
 
 test("outside a project, or with an unknown --job, the exit code is 3; a wrong command line gives 2", async () => {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(scratch);
   const outside = mkdtempSync(join(realpathSync(tmpdir()), "relay-test-"));
   try {

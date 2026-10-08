@@ -37,7 +37,7 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
           ./gitleaks version
           echo "$RUNNER_TEMP/gitleaks" >> "$GITHUB_PATH"
-      - run: bun test
+      - run: bun test --parallel
   build:
     needs: check
     strategy:

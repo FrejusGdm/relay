@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runRelay } from "../helpers/cli";
-import { jobId, setUpJob, sha } from "../helpers/job";
+import { FAKE_SCANNER, jobId, setUpJob, sha } from "../helpers/job";
 import { removeTempRelayHomes, spawnDaemon, stopDaemon, waitForDaemon } from "../helpers/relay-home";
 import type { ScratchRepo } from "../helpers/scratch-repo";
 
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 async function project(): Promise<ScratchRepo> {
-  const scratch = await setUpJob();
+  const scratch = await setUpJob("full", undefined, FAKE_SCANNER);
   scratches.push(scratch);
   writeFileSync(join(scratch.relayHome, "config.toml"), '[accounts."claude:work"]\n[accounts."codex:personal"]\n', { mode: 0o600 });
   return scratch;
