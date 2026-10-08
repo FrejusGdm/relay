@@ -701,14 +701,16 @@ on:
     paths: ["mac/**", ".github/workflows/mac-app.yml"]
   push:
     branches: [main]
+    # A release tag builds the app with the tag's version; GitHub does not apply the paths
+    # filter to tags.
+    tags: ["v*"]
     paths: ["mac/**", ".github/workflows/mac-app.yml"]
   workflow_dispatch:
-  workflow_call:
     inputs:
       version:
-        description: The release version without the leading v, for example 0.8.0
+        description: The version to build, without the leading v, for example 0.8.0
         type: string
-        required: true
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -742,8 +744,8 @@ jobs:
       - name: Build Relay.app
         working-directory: mac
         env:
-          VERSION: ${{ inputs.version || '0.0.0' }}
-        run: sh scripts/make-app.sh "$VERSION" "$GITHUB_RUN_NUMBER"
+          VERSION: ${{ inputs.version || (github.ref_type == 'tag' && github.ref_name) || '0.0.0' }}
+        run: sh scripts/make-app.sh "${VERSION#v}" "$GITHUB_RUN_NUMBER"
       - name: Launch smoke test
         working-directory: mac
         run: sh scripts/smoke-test.sh build/Relay.app
@@ -797,19 +799,24 @@ else
 fi
 ```
 
-The release workflow (queue item 10) adds one job and one dependency:
+Releases are made by hand (decided 2026-10-08, when task 5.1 was built): Josué publishes each
+release with `gh release create`, as he did for v0.1.0, and the repository has no release
+workflow. So `mac-app.yml` builds the app for a release itself, and a script attaches it:
 
-```yaml
-  mac-app:
-    uses: ./.github/workflows/mac-app.yml
-    with:
-      version: <the version the release workflow already computes, without the leading v>
-```
+- Pushing a tag `v*` starts `mac-app.yml` on that tag. GitHub does not apply the `paths` filter to
+  tags, and the build step takes the version from the tag name without its `v`. A run started by
+  hand (`gh workflow run mac-app.yml --ref <tag> -f version=<number>`) does the same.
+- `mac/scripts/attach-to-release.sh <tag>` finds the successful `mac-app.yml` run for the tag's
+  commit and tag (`gh run list --workflow mac-app.yml --commit <sha> --status success`), downloads
+  its `Relay-macOS` artifact with `gh run download`, refuses to upload when the bundle's
+  `CFBundleShortVersionString` is not the tag's number, and uploads the zip with
+  `gh release upload`. It runs with the person's own `gh` sign-in, so `mac-app.yml` keeps
+  `contents: read` and no workflow holds write permission.
+- The artifact is kept for 7 days, so the zip is attached within a week of pushing the tag; after
+  that, the run is started again by hand.
 
-Its job that publishes the release adds `mac-app` to `needs`, downloads the `Relay-macOS` artifact
-with `actions/download-artifact` (pinned to a full commit SHA, as the scaffold's pin check
-requires), and attaches `Relay-macOS.zip` the same way it attaches the CLI binaries. Write
-permission stays in the release workflow; `mac-app.yml` keeps `contents: read`.
+A release therefore goes: `gh release create v0.8.0 …` (which pushes the tag), wait for the Mac app
+run on `v0.8.0`, then `sh mac/scripts/attach-to-release.sh v0.8.0`.
 
 Reading results without a Mac (every task's verification uses these):
 
@@ -931,5 +938,8 @@ New feature; nothing to migrate. To remove it: quit the app from its card and de
   are, the app uses the instance check, the forward-only rules and the snapshot refresh of decision 7.
 - **Several jobs at once.** The card shows one job (decision 8). How to show more is for Josué to
   decide after using it.
-- **Whether `gh release download` marks the file as downloaded.** It changes only the first-launch
-  section of `docs/mac-app.md`; task 5.2 records what Josué sees.
+- **Whether `gh release download` marks the file as downloaded.** Answered on 2026-10-08 (task
+  5.2): it does not. The zip carries only `com.apple.provenance`, and `xattr -p
+  com.apple.quarantine` on the unzipped app prints "No such xattr", so macOS should open it without
+  asking. Whether `com.apple.provenance` alone makes macOS 15 ask is still to be seen on Josué's
+  Mac.

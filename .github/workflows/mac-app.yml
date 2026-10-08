@@ -4,14 +4,16 @@ on:
     paths: ["mac/**", ".github/workflows/mac-app.yml"]
   push:
     branches: [main]
+    # A release tag builds the app with the tag's version; GitHub does not apply the paths
+    # filter to tags.
+    tags: ["v*"]
     paths: ["mac/**", ".github/workflows/mac-app.yml"]
   workflow_dispatch:
-  workflow_call:
     inputs:
       version:
-        description: The release version without the leading v, for example 0.8.0
+        description: The version to build, without the leading v, for example 0.8.0
         type: string
-        required: true
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -45,8 +47,8 @@ jobs:
       - name: Build Relay.app
         working-directory: mac
         env:
-          VERSION: ${{ inputs.version || '0.0.0' }}
-        run: sh scripts/make-app.sh "$VERSION" "$GITHUB_RUN_NUMBER"
+          VERSION: ${{ inputs.version || (github.ref_type == 'tag' && github.ref_name) || '0.0.0' }}
+        run: sh scripts/make-app.sh "${VERSION#v}" "$GITHUB_RUN_NUMBER"
       - name: Launch smoke test
         working-directory: mac
         run: sh scripts/smoke-test.sh build/Relay.app

@@ -3,7 +3,7 @@
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 to 10 of `add-provider-adapters`, `add-relay-switch`
 (see `docs/handoff.md`), task groups 1 to 7 of `add-handoff-evaluation`, task groups 1 to 7 of
-`add-website`, task groups 1 to 6 and 8 to 10 of `add-daemon-api-and-status`, and task groups 1 to 4
+`add-website`, task groups 1 to 6 and 8 to 10 of `add-daemon-api-and-status`, and task groups 1 to 5
 of `add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
@@ -565,7 +565,7 @@ flowchart TD
   support["Tests/Support/<br/>FakeDaemon, FixedClock, Fixtures, Sample"]
   fixtures["Tests/Fixtures/api/<br/>JSON answers in the daemon's shapes"]
   tests["Tests/RelayKitTests/, Tests/RelayUITests/"]
-  scripts["scripts/fetch-fonts.sh, make-app.sh, smoke-test.sh<br/>Support/Info.plist, Resources/Fonts/SOURCES.md"]
+  scripts["scripts/fetch-fonts.sh, make-app.sh, smoke-test.sh,<br/>attach-to-release.sh<br/>Support/Info.plist, Resources/Fonts/SOURCES.md"]
   ci[".github/workflows/mac-app.yml"]
   daemon["relay daemon<br/>~/.relay/run/relay.sock"]
 
@@ -590,4 +590,7 @@ walking up its parent processes, `SwitchFlow` sends the one action the app has, 
 the app itself. The tests run against `FakeDaemon`, a small
 Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
 downloads the fonts, runs the tests (which also render the cards to PNG files), builds and signs
-`Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots.
+`Relay.app` ad hoc, starts it for five seconds, and uploads the zipped app and the screenshots. A
+release tag runs the same workflow with the tag's version, and `attach-to-release.sh` uploads that
+run's zip to the release, which is published by hand. `docs/mac-app.md` describes the app for
+the people who use it.
