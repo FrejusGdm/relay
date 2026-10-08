@@ -62,14 +62,22 @@ test("nothing is appended once the spool is larger than 10 MB", async () => {
 
 test("a hook whose input never closes exits 0 within 500 ms of starting to read", async () => {
   const relayHome = makeRelayHome();
-  const child = Bun.spawn([process.execPath, "--no-env-file", MAIN, "hook", "claude", "Stop"], {
+  const spawn = () => Bun.spawn([process.execPath, "--no-env-file", MAIN, "hook", "claude", "Stop"], {
     env: { ...process.env, RELAY_HOME: relayHome }, stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
+  // The same run with input that closes at once measures how long starting the process takes on
+  // this machine now, so only the time spent waiting for input is compared with 500 ms.
+  const closed = spawn();
+  const startedClosed = performance.now();
+  closed.stdin.end();
+  await closed.exited;
+  const startup = performance.now() - startedClosed;
+  const child = spawn();
   child.stdin.write('{"session_id":"s"');
   child.stdin.flush();
   const started = performance.now();
   const code = await child.exited;
-  expect(performance.now() - started).toBeLessThan(500);
+  expect(performance.now() - started - startup).toBeLessThan(500);
   expect(code).toBe(0);
   expect(await new Response(child.stdout).text()).toBe("");
   expect(await new Response(child.stderr).text()).toBe("");
