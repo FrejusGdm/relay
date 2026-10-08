@@ -77,6 +77,15 @@ struct CardWords {
         return date.formatted(style.month(.abbreviated).day()) + ", " + date.formatted(style.hour().minute())
     }
 
+    /// "just now", "4 min ago", "3 h ago", then the time as `time(_:)` writes it.
+    func age(_ date: Date) -> String {
+        let seconds = now.timeIntervalSince(date)
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { return "\(Int(seconds / 60)) min ago" }
+        if seconds < 86400 { return "\(Int(seconds / 3600)) h ago" }
+        return time(date)
+    }
+
     func availability(_ availability: Availability) -> AvailabilityWords {
         let limited = availability.status == .rateLimited || availability.status == .quotaExhausted
         if limited, let retryAt = availability.retryAt, retryAt < now {

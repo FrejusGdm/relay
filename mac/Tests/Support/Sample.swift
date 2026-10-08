@@ -135,9 +135,12 @@ public enum Sample {
             workersByJob: Dictionary(grouping: decodedWorkers, by: \.jobId),
             accounts: try accounts.map { try decode(Account.self, $0) },
             capabilities: capabilities,
-            host: host
+            host: host.map { AgentHost(pid: hostPID, name: $0, agentPID: 5120) }
         )
     }
+
+    /// The process ID of the app that `input(host:)` names.
+    public static let hostPID: Int32 = 400
 
     /// en_GB, UTC, as every test uses (design.md decision 14).
     public static var calendar: Calendar {

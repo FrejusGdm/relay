@@ -164,7 +164,7 @@ struct CardModelTests {
         #expect(card.facts[0].value.plain == "912ec1 · saved 14:35")
         #expect(card.facts[1].value.plain == "Repository, checkpoint & plan")
         #expect(card.tinyNote == "Same checkpoint & plan")
-        #expect(card.primaryAction == .openHost(provider: "Codex", app: "Terminal"))
+        #expect(card.primaryAction == .openHost(provider: "Codex", app: "Terminal", pid: Sample.hostPID))
         #expect(card.primaryAction?.label == "Open Codex in Terminal")
         #expect(card.primaryAction?.tinyLabel == "Open Codex ↗")
         #expect(card.showsViewCheckpoint)
@@ -175,6 +175,13 @@ struct CardModelTests {
     @Test func withoutAHostTheActionShowsTheProject() throws {
         let card = try jobCard(Sample.handoff(host: nil))
         #expect(card.primaryAction == .showInFinder(path: "/Users/dev/projects/auth"))
+        #expect(card.primaryAction?.label == "Show project in Finder")
+    }
+
+    @Test func hostOfAnotherAgentIsNotUsed() throws {
+        var input = try Sample.handoff(host: nil)
+        input.host = AgentHost(pid: 400, name: "Terminal", agentPID: 4890)
+        let card = try jobCard(input)
         #expect(card.primaryAction?.label == "Show project in Finder")
     }
 

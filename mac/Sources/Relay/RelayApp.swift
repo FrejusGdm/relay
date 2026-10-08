@@ -9,7 +9,9 @@ struct RelayApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(store: delegate.store)
+            StoreCard(store: delegate.store, actions: delegate.actions)
+                .onAppear { delegate.store.windowOpened() }
+                .onDisappear { delegate.store.windowClosed() }
         } label: {
             MenuBarLabel(store: delegate.store)
         }
@@ -17,10 +19,13 @@ struct RelayApp: App {
     }
 }
 
-/// Creates the store at launch and follows the daemon for the app's whole life.
+/// Creates the store at launch, follows the daemon for the app's whole life, and opens
+/// `relay://` links.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = RelayStore(client: DaemonClient(location: .resolve()))
+    private(set) lazy var actions = makeActions()
+    private lazy var links = LinkWindows(store: store, actions: actions)
     private var following: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -30,11 +35,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = store
         following = Task { await store.run() }
     }
-}
 
-@MainActor
-private func cardModel(_ store: RelayStore) -> CardModel {
-    CardModel.make(store.cardInput(), now: store.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            links.open(url)
+        }
+    }
+
+    private func makeActions() -> CardActions {
+        let workspace = SystemWorkspace()
+        let store = store
+        var actions = CardActions()
+        actions.primary = { store.perform($0, in: workspace) }
+        actions.copy = { workspace.copy($0) }
+        actions.quit = { NSApp.terminate(nil) }
+        actions.findHost = { HostFinder(workspace: workspace).host(of: $0) }
+        actions.makeSwitchFlow = { store.switchFlow(jobID: $0) }
+        return actions
+    }
 }
 
 /// The template glyph; its accessibility label carries the status line.
@@ -42,32 +60,8 @@ struct MenuBarLabel: View {
     let store: RelayStore
 
     var body: some View {
+        let model = CardModel.make(store.cardInput(), now: store.now, calendar: .autoupdatingCurrent, locale: .autoupdatingCurrent)
         Image(nsImage: RelayGlyph.menuBarImage())
-            .accessibilityLabel(cardModel(store).accessibilityLabel)
-    }
-}
-
-struct MenuContent: View {
-    let store: RelayStore
-
-    var body: some View {
-        MenuCard(model: cardModel(store), actions: actions)
-            .onAppear { store.windowOpened() }
-            .onDisappear { store.windowClosed() }
-    }
-
-    private var actions: CardActions {
-        var actions = CardActions()
-        actions.primary = { action in
-            if case .showInFinder(let path) = action {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-            }
-        }
-        actions.copy = { text in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        }
-        actions.quit = { NSApp.terminate(nil) }
-        return actions
+            .accessibilityLabel(model.accessibilityLabel)
     }
 }

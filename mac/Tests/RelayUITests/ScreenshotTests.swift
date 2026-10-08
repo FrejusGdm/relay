@@ -23,8 +23,7 @@ struct ScreenshotTests {
 
     static var everyAction: CardActions {
         var actions = CardActions()
-        actions.viewCheckpoint = {}
-        actions.switchWorker = {}
+        actions.makeSwitchFlow = { _ in nil }
         return actions
     }
 
@@ -69,14 +68,42 @@ struct ScreenshotTests {
         try render("expanded-no-jobs", .expanded, Sample.card(Sample.input(jobs: [])))
     }
 
+    @Test func switchConfirmation() async throws {
+        let fake = try FakeDaemon()
+        defer { fake.stop() }
+        let message = "This sends the repository and the job notes to OpenAI through the account codex:personal. Continue?"
+        fake.reply("POST", "/v1/jobs/3f9a2c1d/switch", with: .json(
+            Sample.text(["error": ["code": "confirmation_required", "message": message]]), status: 409
+        ))
+        let current = Sample.workerJSON(id: "a17c9e42", target: "claude:work", fromHandoff: false)
+        let flow = SwitchFlow(
+            job: try Sample.decode(Job.self, Sample.jobJSON(current: current)),
+            accounts: [
+                try Sample.decode(Account.self, Sample.accountJSON(target: "claude:work", status: "rate_limited")),
+                try Sample.decode(Account.self, Sample.accountJSON(target: "codex:personal")),
+            ],
+            client: DaemonClient(location: fake.location),
+            now: FixedClock().now,
+            onSwitched: { _ in }
+        )
+        flow.selectedTarget = "codex:personal"
+        await flow.send()
+        #expect(flow.phase == .confirming(message: message))
+        try render("switch-confirmation", .expanded) { SwitchSheet(flow: flow, copy: { _ in }, close: {}) }
+    }
+
     private func render(_ name: String, _ size: Size, _ model: CardModel) throws {
-        for scheme in [ColorScheme.light, .dark] {
-            let card = Group {
-                switch size {
-                case .tiny: TinyCard(model: model, actions: Self.everyAction)
-                case .expanded: ExpandedCard(model: model, actions: Self.everyAction)
-                }
+        try render(name, size) {
+            switch size {
+            case .tiny: TinyCard(model: model, actions: Self.everyAction)
+            case .expanded: ExpandedCard(model: model, actions: Self.everyAction, showLess: {})
             }
+        }
+    }
+
+    private func render(_ name: String, _ size: Size, @ViewBuilder _ content: () -> some View) throws {
+        for scheme in [ColorScheme.light, .dark] {
+            let card = content()
             let palette = Theme.color(.rule, scheme)
             let framed = card
                 .clipShape(RoundedRectangle(cornerRadius: size.radius))

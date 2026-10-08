@@ -4,6 +4,8 @@ public enum HTTPError: Error, Equatable, Sendable {
     case malformedResponse(String)
     case responseTooLarge
     case timedOut
+    /// The daemon closed the connection before its answer was complete.
+    case closedEarly
 }
 
 /// An error answer of the API: `{"error": {"code": "...", "message": "..."}}` with a status that is

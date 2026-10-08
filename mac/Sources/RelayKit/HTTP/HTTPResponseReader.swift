@@ -70,10 +70,10 @@ public struct HTTPResponseReader: Sendable {
     public mutating func finish() throws {
         if isComplete { return }
         guard head != nil else {
-            throw HTTPError.malformedResponse("The connection closed before the response head ended.")
+            throw HTTPError.closedEarly
         }
         if !streamsBody, let contentLength, body.count < contentLength {
-            throw HTTPError.malformedResponse("The connection closed before the body ended.")
+            throw HTTPError.closedEarly
         }
         isComplete = true
     }
