@@ -6,7 +6,8 @@ import { closeSync, constants, openSync } from "node:fs";
 import { join } from "node:path";
 import { VERSION } from "../core/version";
 import { runtimeDir } from "../daemon/paths";
-import { getVersion } from "./api-client";
+import { printable } from "../core/quote";
+import { getVersion, UntrustedRuntime } from "./api-client";
 
 const FIRST_ANSWER_MS = 300;
 const START_WAIT_MS = 3000;
@@ -66,6 +67,25 @@ export async function startDaemon(opts: StartOptions): Promise<StartResult> {
     await Bun.sleep(POLL_MS);
   }
   return { state: exitCode === 0 ? "not_responding" : "failed" };
+}
+
+// For the commands that start agents (relay run and relay switch, design.md decision 6): makes
+// sure a daemon answers, so the agent's hooks have a receiver. When none can be started, it says
+// so once and returns false; the command goes on without the daemon.
+export async function ensureDaemon(opts: StartOptions): Promise<boolean> {
+  try {
+    const result = await startDaemon(opts);
+    if (result.state === "running" || result.state === "started") return true;
+  } catch (error) {
+    if (!(error instanceof UntrustedRuntime)) throw error;
+    opts.err(`${error.message}\n`);
+  }
+  opts.err(couldNotStartMessage(opts.relayHome));
+  return false;
+}
+
+export function couldNotStartMessage(relayHome: string): string {
+  return `relay could not start its background service. Details are in ${printable(join(relayHome, "logs", "daemon.log"))}.\n`;
 }
 
 // The daemon's crash traces go to logs/daemon.stderr.log. When it cannot be opened, they are lost,

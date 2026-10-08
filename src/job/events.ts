@@ -54,11 +54,16 @@ export async function appendEvent(job: JobRef, type: string, data: Record<string
 }
 
 // Every event, in file order, also a last one whose newline was never written. A line that is not
-// an event is what remains of an interrupted write, and is skipped.
+// an event is what remains of an interrupted write, and is skipped. Agents can write to the file,
+// so an event is kept only when its time is a valid time, its type is text and its data is an
+// object; readers still treat the values inside data as untrusted.
 export function readEvents(job: JobRef): RelayEvent[] {
   const fd = openLog(job, constants.O_RDONLY);
   try {
-    return readRange(fd, 0, fstatSync(fd).size).split("\n").flatMap((line) => toEvent(line) ?? []);
+    return readRange(fd, 0, fstatSync(fd).size).split("\n").flatMap((line) => {
+      const event = toEvent(line);
+      return event !== undefined && isWellFormed(event) ? [event] : [];
+    });
   } finally {
     closeSync(fd);
   }
@@ -113,6 +118,12 @@ function readRange(fd: number, start: number, end: number): string {
     length += read;
   }
   return buffer.toString("utf8", 0, length);
+}
+
+function isWellFormed(event: RelayEvent): boolean {
+  const data = event.data as unknown;
+  return typeof event.ts === "string" && !Number.isNaN(Date.parse(event.ts)) && typeof event.type === "string"
+    && typeof data === "object" && data !== null && !Array.isArray(data);
 }
 
 function toEvent(line: string): RelayEvent | undefined {

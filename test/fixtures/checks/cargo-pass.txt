@@ -1,0 +1,9 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (target/debug/deps/relay-8f32a4)
+
+running 12 tests
+test text::removes_invisible_characters ... ok
+test text::keeps_ordinary_text ... ok
+test notes::reads_structured_notes ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s

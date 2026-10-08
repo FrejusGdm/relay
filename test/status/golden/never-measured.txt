@@ -1,0 +1,6 @@
+Build authentication   job 3f9a2c1d · checkpoint 912ec1 · 2 min ago
+
+claude:work      ━━━━━━━━━━━━━━━━   running · usage unknown
+claude:home      ────────────────   unknown · not measured
+
+Claude Code is working on this job.

@@ -16,7 +16,9 @@ const record = (relayHome: string, folder: string) =>
 test("a new Claude account: folder 0700, table appended, login in the profile, summary", async () => {
   const relayHome = relayFolder();
   const program = loggingProgram("claude");
-  const result = await runRelayInProcess(["account", "add", "claude", "work"], { relayHome, env: program.env, answers: ["y"] });
+  const result = await runRelayInProcess(["account", "add", "claude", "work"], {
+    relayHome, env: { ...program.env, RELAY_BIN: "/usr/local/bin/relay" }, answers: ["y", "n"],
+  });
   const profile = join(relayHome, "profiles", "claude-work");
   expect(result.stderr).toBe("");
   expect(result.code).toBe(0);
@@ -29,7 +31,9 @@ test("a new Claude account: folder 0700, table appended, login in the profile, s
   expect(result.stdout).toContain("Claude Code policy notes, checked 2026-10-07:\n");
   expect(result.stdout).toContain("Add claude:work? [y/N] ");
   expect(result.stdout.endsWith(
-    `Added claude:work.\n  Profile    ${displayPath(profile, HOME)}\n  Signed in  yes (claude.ai)\n`,
+    `Added claude:work.\n  Profile    ${displayPath(profile, HOME)}\n  Signed in  yes (claude.ai)\n` +
+      "Install relay's hooks, so relay can see sessions you start yourself? [y/N] " +
+      "To let relay see sessions you start yourself, run relay hooks install claude:work.\n",
   )).toBe(true);
   const saved = record(relayHome, "claude-work");
   expect(saved.policy_checked_on_seen).toBe("2026-10-07");
@@ -159,6 +163,7 @@ test("the provider's own folder with an existing login: no login runs", async ()
   });
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("  Signed in  yes (claude.ai)\n");
+  expect(result.stdout).toContain("To let relay see sessions you start yourself, run relay hooks install claude:personal.\n");
   expect(program.calls().map((call) => call.args)).toEqual(["--version", "auth status --json"]);
   expect(program.calls()[1]!.profile).toBe("unset");
   expect(config(relayHome)).toContain(`profile_dir = "${join(HOME, ".claude")}"`);

@@ -1,6 +1,7 @@
 // Reading the index in the shapes of the local API (design.md decision 14). Every field is always
 // present; unknown values are null. A worker's state is computed when it is read.
 import type { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
 import { reportedAvailability, type Availability, type AvailabilityStatus } from "./availability";
 
 export const PROVIDER_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
@@ -219,11 +220,24 @@ function workerView(row: WorkerRow): WorkerView {
   };
 }
 
+// Whether the process still runs. A process that has exited but that its parent has not reaped yet
+// (a zombie) still answers process.kill(pid, 0); on Linux /proc says so, and it counts as gone.
 export function processExists(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
     return (error as { code?: string }).code !== "ESRCH";
+  }
+  return !isZombie(pid);
+}
+
+function isZombie(pid: number): boolean {
+  if (process.platform !== "linux") return false;
+  try {
+    // The state follows the command name, which is in parentheses and may itself hold ") ".
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) === "Z";
+  } catch {
+    return false;
   }
 }

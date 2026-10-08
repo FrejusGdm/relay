@@ -1,13 +1,16 @@
 Usage
-  relay status
+  relay status [--job <id>] [--json]
 
 Show the job, its workers, accounts and checkpoints.
+relay status works without the background service; it then shows the saved state.
 
 Examples
   relay status
+  relay status --json
+  relay status --job 3f9a2c1d
 
 Options
+      --job <id>           Show this job instead of the one in this folder
+      --json               Print the status as JSON
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.

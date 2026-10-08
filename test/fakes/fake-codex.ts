@@ -18,7 +18,7 @@ function fatal(message: string, code = 2): never {
   process.exit(code);
 }
 let scenario: Scenario;
-try { scenario = loadScenario(); }
+try { scenario = loadScenario(process.env.RELAY_FAKE_SCENARIO, "codex"); }
 catch (error) {
   if (error instanceof ScenarioError) fatal(`fake-codex: ${error.message}`);
   throw error;
@@ -67,6 +67,14 @@ function parseOptions(args: string[], mode: "interactive" | "exec" | "exec-resum
   const options: Options = { json: false };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
+    // As in clap, every argument after "--" is a positional argument.
+    if (arg === "--") {
+      for (const rest of args.slice(i + 1)) {
+        if (options.prompt !== undefined) unexpected(rest);
+        options.prompt = rest;
+      }
+      break;
+    }
     const cd = arg === "-C" || arg === "--cd";
     const sandbox = arg === "-s" || arg === "--sandbox";
     const config = arg === "-c" || arg === "--config";

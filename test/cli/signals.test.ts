@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { MAIN } from "../helpers/cli";
 import { makeRelayHome } from "../helpers/home";
 
-// relay installs its signal handlers before it starts reading standard input. A 1 MB write does
-// not fit in the pipe, so it only finishes once relay is reading, which proves the handlers are
-// in place. Standard input stays open, so relay is still running when the signal arrives.
+// relay installs its signal handlers before it starts reading standard input. A write of almost
+// 1 MiB does not fit in the pipe, so it only finishes once relay is reading, which proves the
+// handlers are in place. It stays below relay hook's 1 MiB limit and standard input stays open,
+// so relay is still waiting out its 200 ms read when the signal arrives.
 test.each([
   ["SIGINT", 130],
   ["SIGTERM", 143],
@@ -22,7 +23,7 @@ test.each([
     child.on("exit", (exitCode, exitSignal) => resolve([exitCode, exitSignal])),
   );
   await new Promise<void>((resolve, reject) =>
-    child.stdin.write(Buffer.alloc(1024 * 1024, 0x61), (error) => (error ? reject(error) : resolve())),
+    child.stdin.write(Buffer.alloc(1024 * 1024 - 1, 0x61), (error) => (error ? reject(error) : resolve())),
   );
   child.kill(signal);
   expect(await exited).toEqual([code, null]);

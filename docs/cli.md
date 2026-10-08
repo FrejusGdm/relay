@@ -4,7 +4,8 @@ This page describes the `relay` command: its commands, where its output goes, an
 The source is in `src/cli/`. In this version every command shows its help and checks its
 arguments. `relay init`, `relay checkpoint`, `relay checkpoints` and `relay rollback` do their
 real work, which `docs/checkpoints.md` describes, and so do `relay account`, `relay providers` and
-`relay policy show`, which `docs/accounts.md` describes, and `relay daemon` and
+`relay policy show`, which `docs/accounts.md` describes, `relay hooks`, `relay hook` and
+`relay statusline`, which `docs/hooks.md` describes, and `relay daemon` and
 `relay doctor --reindex`, which `docs/daemon.md` describes; the other commands do not yet. The
 change named in the "Built by" column builds each one.
 
@@ -19,7 +20,7 @@ change named in the "Built by" column builds each one.
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
 | `accept-git-changes` | `relay accept-git-changes` | none | `add-checkpoint-engine` |
 | `switch` | `relay switch <provider[:account]>` | 1 | `add-relay-switch` |
-| `status` | `relay status` | none | `add-daemon-api-and-status` |
+| `status` | `relay status [--job <id>] [--json]` | none | `add-daemon-api-and-status` |
 | `account` | `relay account <list\|add\|status\|login\|remove> [<provider> <name> \| <provider:name>]` | 1 to 3 | `add-provider-adapters` |
 | `providers` | `relay providers [--json]` | none | `add-provider-adapters` |
 | `policy` | `relay policy show <provider>` | 2 | `add-provider-adapters` |
@@ -36,10 +37,12 @@ the command name. `relay`, `relay --help`, `relay -h` and `relay help` show the 
 of the command line is wrong. `relay --version` prints `relay <version>`.
 
 A command that is not built yet prints `relay: <command> is not built yet. This version only
-reads your settings and shows help.` and exits with code 69. `relay hook` is the exception: agents
-call it from their hooks, so it never prints anything and exits with code 0, except when it is
-stopped by a signal (130 for SIGINT, 143 for SIGTERM or SIGHUP). When its standard input is not a
-terminal, it reads it to the end and discards it, also when its arguments are wrong.
+reads your settings and shows help.` and exits with code 69. `relay hook` and `relay statusline`
+are quiet: Claude Code and Codex run them, so they never print anything of their own and exit with
+code 0 (`relay statusline` passes on the output and exit code of your own status line), except
+when they are stopped by a signal (130 for SIGINT, 143 for SIGTERM or SIGHUP). `relay hook` reads
+at most 1 MiB of its standard input for at most 200 ms; with wrong arguments it reads its input to
+the end and discards it.
 
 ## How a run works
 
@@ -64,7 +67,8 @@ creates it if it is missing, checks that it is private, and loads and checks `co
 `docs/config.md` describes these checks with their own diagram. Any problem there prints a
 settings error and exits with code 78. When the settings load, the command's handler runs, which
 in this version is the "not built yet" handler for every command except `hook`, `init`,
-`checkpoint`, `checkpoints`, `rollback`, `accept-git-changes`, `account`, `providers` and `policy`. When a handler
+`checkpoint`, `checkpoints`, `rollback`, `accept-git-changes`, `account`, `providers`, `policy`,
+`hooks` and `statusline`. When a handler
 throws an error that it does not handle, relay prints the error and exits with code 70. Once the
 relay folder has passed its checks, relay records each of these steps in a log file, as the next
 section describes.
@@ -213,7 +217,9 @@ the log has stopped, an unexpected error prints only its first line, `relay: une
 - Errors and the "not built yet" message go to standard error. Every line there starts with
   `relay: `, except hint lines, which start with `Run "relay`, and the messages of
   `add-checkpoint-engine` commands, which relay prints exactly as that change's specs give them.
-- relay prints no colour codes.
+- relay prints no colour codes. `relay status` is the one command that styles text: on a terminal,
+  when `NO_COLOR` is unset and `TERM` is not `dumb`, it shows the current account's row in bold and
+  limited accounts' rows dim. Its words carry the same information without the styling.
 - Values that relay repeats in a message, such as an unknown command or option, are quoted as JSON
   strings, so a newline or a terminal escape sequence appears as `\n` or `\u001b`.
 - When the reader of standard output goes away, for example in `relay --help | head -1`, relay
@@ -239,7 +245,8 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 20 | `ProviderMissing` | The provider's program is not installed, or older than the oldest version relay was tested with. |
 | 21 | `NoSuchAccount` | The account is not in `config.toml`. |
 | 22 | `NotSignedIn` | The account is not signed in, or its sign-in did not finish. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 23 to 25 by `add-provider-adapters`, 31 to 33 by `add-relay-switch`. The other numbers are free. |
+| 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes: 23 to 25 by `add-provider-adapters`, 31 and 33 by `add-relay-switch`. The other numbers are free. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |

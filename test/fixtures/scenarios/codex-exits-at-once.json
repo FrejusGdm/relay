@@ -1,0 +1,14 @@
+{
+  "codex": {
+    "version": 1,
+    "turns": [
+      {
+        "steps": [
+          {
+            "exit": 1
+          }
+        ]
+      }
+    ]
+  }
+}

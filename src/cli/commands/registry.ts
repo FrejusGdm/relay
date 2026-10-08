@@ -1,6 +1,8 @@
 import type { LogLevel, RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
+import { buildAgentEnv } from "../../accounts/environment";
+import { readCodexHookTrust } from "../../adapters/codex/hooks";
 import { acceptGitChanges } from "./accept-git-changes";
 import { account } from "./account";
 import { checkpoint } from "./checkpoint";
@@ -8,11 +10,14 @@ import { checkpoints } from "./checkpoints";
 import { daemon } from "./daemon";
 import { doctor } from "./doctor";
 import { hook } from "./hook";
+import { hooksCommand } from "./hooks";
 import { init } from "./init";
 import { notBuilt } from "./not-built";
 import { policy } from "./policy";
 import { providers } from "./providers";
 import { rollback } from "./rollback";
+import { status } from "./status";
+import { statusline, statuslineWithoutSettings } from "./statusline";
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
@@ -51,9 +56,11 @@ export interface CommandDef {
   options: OptionDef[];  // the command's own options
   minArgs: number;
   maxArgs: number;
-  quiet: boolean;        // true only for hook: no output, always exit 0
+  quiet: boolean;        // true for hook and statusline: no output of relay's own, always exit 0
   built: boolean;        // false until a change builds the command
   handler: (ctx: CommandContext) => Promise<number>;
+  // Runs in place of the settings error when config.toml is invalid.
+  withoutSettings?: (ctx: Omit<CommandContext, "config">) => Promise<number>;
 }
 
 // Each later change that builds a command replaces its handler, sets `built`, adds its options,
@@ -173,17 +180,20 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "status",
-    usage: "relay status",
+    usage: "relay status [--job <id>] [--json]",
     argsUsage: "",
     summary: "Show the job, its workers, accounts and checkpoints",
-    details: [],
-    examples: ["relay status"],
-    options: [],
+    details: ["relay status works without the background service; it then shows the saved state."],
+    examples: ["relay status", "relay status --json", "relay status --job 3f9a2c1d"],
+    options: [
+      { name: "job", value: "<id>", description: "Show this job instead of the one in this folder" },
+      { name: "json", description: "Print the status as JSON" },
+    ],
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: status,
   },
   {
     name: "account",
@@ -251,13 +261,21 @@ export const COMMANDS: CommandDef[] = [
     argsUsage: "<install|remove|status> <provider:name>",
     summary: "Add, remove or check relay's hooks for an account",
     details: ["Hooks let relay see when an agent stops or reaches a limit."],
-    examples: ["relay hooks install claude:personal", "relay hooks status codex:personal"],
-    options: [],
+    examples: [
+      "relay hooks install claude:personal",
+      "relay hooks install claude:personal --status-line",
+      "relay hooks status codex:personal",
+      "relay hooks remove claude:personal",
+    ],
+    options: [
+      { name: "status-line", description: "install: also record usage from Claude Code's status line" },
+      { name: "yes", description: "install, remove: do not ask" },
+    ],
     minArgs: 2,
     maxArgs: 2,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: hooksCommand((account, ctx) => readCodexHookTrust(account, buildAgentEnv(account, ctx.env), ctx.homedir)),
   },
   {
     name: "hook",
@@ -273,7 +291,7 @@ export const COMMANDS: CommandDef[] = [
     minArgs: 2,
     maxArgs: 2,
     quiet: true,
-    built: false,
+    built: true,
     handler: hook,
   },
   {
@@ -289,9 +307,10 @@ export const COMMANDS: CommandDef[] = [
     options: [],
     minArgs: 1,
     maxArgs: 1,
-    quiet: false,
-    built: false,
-    handler: notBuilt,
+    quiet: true,
+    built: true,
+    handler: statusline,
+    withoutSettings: statuslineWithoutSettings,
   },
   {
     name: "daemon",

@@ -35,6 +35,7 @@ export function emptyConfig(relayHome: string): RelayConfig {
     projects: [],
     t3: { url: "http://127.0.0.1:3773/mcp", projects: [], instances: [] },
     limits: [],
+    handoff: { askForSummary: true, summaryTimeoutSeconds: 120, stopTimeoutSeconds: 30, checkTimeoutSeconds: 600, startCheckSeconds: 5 },
   };
 }
 
@@ -367,6 +368,24 @@ export function validateConfig(
         if (isTable(value)) for (const [id, child] of Object.entries(value)) checkLimits(id, child);
         else add("limits", TABLE);
         break;
+      case "handoff": {
+        const seconds = (field: Exclude<keyof RelayConfig["handoff"], "askForSummary">, low: number, high: number) =>
+          (key: string, child: unknown) => {
+            if (Number.isInteger(child) && (child as number) >= low && (child as number) <= high) config.handoff[field] = child as number;
+            else add(key, `must be a whole number from ${low} to ${high}.`);
+          };
+        walkTable("handoff", value, {
+          ask_for_summary: (key, child) => {
+            if (typeof child === "boolean") config.handoff.askForSummary = child;
+            else add(key, "must be true or false.");
+          },
+          summary_timeout_seconds: seconds("summaryTimeoutSeconds", 10, 900),
+          stop_timeout_seconds: seconds("stopTimeoutSeconds", 5, 300),
+          check_timeout_seconds: seconds("checkTimeoutSeconds", 10, 7200),
+          start_check_seconds: seconds("startCheckSeconds", 1, 60),
+        });
+        break;
+      }
       default:
         unknownKey(quoteKey(name), name, value);
     }

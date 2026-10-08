@@ -118,3 +118,18 @@ function fromWindowFile(window: WindowFile): LimitWindow {
     ...(window.resets_at == null ? {} : { resetsAt: new Date(window.resets_at) }),
   };
 }
+
+// The time of the newest spool line already folded into this account's file.
+export function spoolSeenUntil(relayHome: string, account: AccountRef): Date | null {
+  const until = readFile(relayHome, account)?.spool_seen_until;
+  return until ? new Date(until) : null;
+}
+
+export function markSpoolSeen(relayHome: string, account: AccountRef, until: Date): void {
+  const old = readFile(relayHome, account);
+  const base: AvailabilityFile = old ?? {
+    v: 1, account: account.id, state: "unknown", retry_at: null, windows: [], observed_at: until.toISOString(),
+    source: "none", detail: null, spool_seen_until: null,
+  };
+  writeJsonFile(availabilityPath(relayHome, account), { ...base, spool_seen_until: until.toISOString() });
+}
