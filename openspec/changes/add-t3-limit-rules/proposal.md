@@ -18,6 +18,8 @@ policy switches"), applied to T3 threads before relay's own jobs.
   stores the token T3 issues. `relay t3 status` shows the connection, the days until the token
   expires (T3 tokens last 30 days and cannot be refreshed), and what relay did. `relay t3
   disconnect` deletes the token. Source: `docs/research/t3-outside-access.md` sections 1 and 2.
+  The official MCP v2 packages are `@modelcontextprotocol/client` at runtime and
+  `@modelcontextprotocol/server` for tests only.
 - **Choosing which projects relay manages.** `relay t3 enable <folder>` turns relay on for every
   thread of that T3 project, and asks the existing first-handoff question for every account a
   rule could move work to, so that nothing waits for an answer at night. `relay t3 disable
@@ -144,8 +146,8 @@ None. No specs exist yet in `openspec/specs/`. The new settings tables (`[t3]`, 
   connected to T3); `relay-config` accepts `[t3]` and `[limits]`; the daemon starts
   the usage timer and the T3 watcher; `relay status` shows each rule and reading; new event
   types `usage_reading`, `limit_crossed`, `t3_thread_switched`, `t3_thread_continued`.
-- **New dependency:** the official MCP TypeScript SDK (`@modelcontextprotocol/sdk`) for the
-  Streamable HTTP client and OAuth.
+- **New dependencies:** the official MCP v2 package `@modelcontextprotocol/client` at runtime
+  for the Streamable HTTP client and OAuth, and `@modelcontextprotocol/server` for tests only.
 - **New documentation:** `docs/t3.md`, the `[t3]` and `[limits]` sections of `docs/config.md`,
   and the new command, exit codes and events in `docs/first-version-index.md` and `docs/cli.md`.
 - **Roadmap:** after approval, `docs/ROADMAP.md` records the T3 decision and places this change
