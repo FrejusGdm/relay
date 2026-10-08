@@ -2,7 +2,8 @@
 
 Last updated 2026-10-08, after task groups 1 to 7 of `add-cli-scaffold`, task groups 1 to 9 of
 `add-checkpoint-engine`, task groups 1 and 2 of `add-provider-adapters`, task groups 1 to 4 of
-`add-handoff-evaluation`, and task groups 1 to 7 of `add-website`.
+`add-handoff-evaluation`, task groups 1 to 7 of `add-website`, and task groups 1 and 2 of
+`add-mac-menu-bar-app`.
 
 This page shows the folders of relay's source code and tests, and what each one holds today.
 `docs/first-version-index.md` lists every file that the six first-version changes will add, and
@@ -315,3 +316,41 @@ checks that Playwright runs. `site/scripts/` holds the font download script, the
 of a running copy of the site, and the deployment script. `bunfig.toml` sets the test root to the whole repository so that
 `bun test` finds `site/test/`. `docs/website.md` describes the files with a diagram and says how to
 get the fonts and run the checks.
+
+## The Mac app
+
+`mac/` holds the menu-bar app of the OpenSpec change `add-mac-menu-bar-app`. It is a Swift package
+that is built and tested only by the `.github/workflows/mac-app.yml` workflow on GitHub's macOS
+runner, never on a developer's Mac.
+
+```mermaid
+flowchart TD
+  pkg["mac/Package.swift<br/>no package dependencies"]
+  kit["Sources/RelayKit/<br/>Socket/: finding and checking relay.sock, the peer check<br/>HTTP/: requests and the response reader<br/>API/: models, decoding, DaemonClient<br/>Events/: the server-sent events parser and stream"]
+  ui["Sources/RelayUI/<br/>FontLoader.swift, Theme.swift"]
+  app["Sources/Relay/<br/>RelayApp.swift: the menu-bar app"]
+  support["Tests/Support/<br/>FakeDaemon, FixedClock, Fixtures"]
+  fixtures["Tests/Fixtures/api/<br/>JSON answers in the daemon's shapes"]
+  tests["Tests/RelayKitTests/, Tests/RelayUITests/"]
+  scripts["scripts/fetch-fonts.sh, make-app.sh, smoke-test.sh<br/>Support/Info.plist, Resources/Fonts/SOURCES.md"]
+  ci[".github/workflows/mac-app.yml"]
+  daemon["relay daemon<br/>~/.relay/run/relay.sock"]
+
+  pkg --> kit
+  pkg --> ui
+  pkg --> app
+  ui --> kit
+  app --> ui
+  kit -->|"HTTP/1.1 over the Unix socket only"| daemon
+  tests --> support
+  support -->|"serves"| fixtures
+  ci -->|"downloads fonts, runs swift test, builds Relay.app"| scripts
+```
+
+The diagram shows the folders of the Mac app and how they depend on each other. `RelayKit` has no
+SwiftUI and holds everything that talks to the daemon: it checks that the socket folder is private
+and that the daemon runs as the same user before it sends a byte. `RelayUI` holds the views and
+the design tokens, and `Relay` is the app itself. The tests run against `FakeDaemon`, a small
+Unix-socket server that answers with the JSON files in `Tests/Fixtures/api/`. The workflow
+downloads the fonts, runs the tests, builds and signs `Relay.app` ad hoc, starts it for five
+seconds, and uploads the zipped app and the screenshots.

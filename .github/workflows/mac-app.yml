@@ -1,0 +1,65 @@
+name: Mac app
+on:
+  pull_request:
+    paths: ["mac/**", ".github/workflows/mac-app.yml"]
+  push:
+    branches: [main, "mac/**"]
+    paths: ["mac/**", ".github/workflows/mac-app.yml"]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: The release version without the leading v, for example 0.8.0
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: mac-app-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mac-app:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tool versions
+        run: sw_vers && xcodebuild -version && swift --version
+      - name: Package has no dependencies
+        working-directory: mac
+        run: |
+          swift package describe --type json > "$RUNNER_TEMP/package.json"
+          jq -e '(.dependencies | length) == 0 and ([.platforms[] | select(.name == "macos") | .version] == ["14.0"])' "$RUNNER_TEMP/package.json"
+      - name: Fonts
+        working-directory: mac
+        run: sh scripts/fetch-fonts.sh
+      - name: Unit tests and screenshots
+        working-directory: mac
+        env:
+          RELAY_SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
+        run: swift test
+      - name: Build Relay.app
+        working-directory: mac
+        env:
+          VERSION: ${{ inputs.version || '0.0.0' }}
+        run: sh scripts/make-app.sh "$VERSION" "$GITHUB_RUN_NUMBER"
+      - name: Launch smoke test
+        working-directory: mac
+        run: sh scripts/smoke-test.sh build/Relay.app
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-app-screenshots
+          path: ${{ runner.temp }}/screenshots
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Relay-macOS
+          path: mac/build/Relay-macOS.zip
+          retention-days: 7
+          if-no-files-found: error
