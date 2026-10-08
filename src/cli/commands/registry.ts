@@ -2,10 +2,12 @@ import type { LogLevel, RelayConfig } from "../../core/config/types";
 import type { Logger } from "../../core/log";
 import type { Io } from "../io";
 import { checkpoint } from "./checkpoint";
+import { checkpoints } from "./checkpoints";
 import { daemon } from "./daemon";
 import { hook } from "./hook";
 import { init } from "./init";
 import { notBuilt } from "./not-built";
+import { rollback } from "./rollback";
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
@@ -103,34 +105,38 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "checkpoints",
-    usage: "relay checkpoints",
+    usage: "relay checkpoints [--json]",
     argsUsage: "",
     summary: "List the job's checkpoints",
     details: ["Newest first."],
-    examples: ["relay checkpoints"],
-    options: [],
+    examples: ["relay checkpoints", "relay checkpoints --json"],
+    options: [{ name: "json", description: "Print the list as JSON" }],
     minArgs: 0,
     maxArgs: 0,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: checkpoints,
   },
   {
     name: "rollback",
-    usage: "relay rollback [<checkpoint>]",
+    usage: "relay rollback [<checkpoint>] [--yes] [--dry-run]",
     argsUsage: "[<checkpoint>]",
     summary: "Return the files to an earlier checkpoint",
     details: [
-      "relay saves the current state first, so you can undo the rollback.",
-      "Without a checkpoint, relay uses the latest one.",
+      "relay shows which files will change and saves your current files first, so you can undo it.",
+      "Your branch, commits and staged changes stay as they are.",
+      "Without a checkpoint, relay uses the newest one not saved before a rollback.",
     ],
-    examples: ["relay rollback", "relay rollback 3"],
-    options: [],
+    examples: ["relay rollback", "relay rollback 3 --dry-run", "relay rollback 3 --yes"],
+    options: [
+      { name: "yes", description: "Roll back without asking" },
+      { name: "dry-run", description: "Show what would change, and change nothing" },
+    ],
     minArgs: 0,
     maxArgs: 1,
     quiet: false,
-    built: false,
-    handler: notBuilt,
+    built: true,
+    handler: rollback,
   },
   {
     name: "accept-git-changes",

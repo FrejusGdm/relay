@@ -1,16 +1,18 @@
 Usage
-  relay rollback [<checkpoint>]
+  relay rollback [<checkpoint>] [--yes] [--dry-run]
 
 Return the files to an earlier checkpoint.
-relay saves the current state first, so you can undo the rollback.
-Without a checkpoint, relay uses the latest one.
+relay shows which files will change and saves your current files first, so you can undo it.
+Your branch, commits and staged changes stay as they are.
+Without a checkpoint, relay uses the newest one not saved before a rollback.
 
 Examples
   relay rollback
-  relay rollback 3
+  relay rollback 3 --dry-run
+  relay rollback 3 --yes
 
 Options
+      --yes                Roll back without asking
+      --dry-run            Show what would change, and change nothing
   -h, --help               Show this help
       --log-level <level>  How much to log: debug, info, warn or error
-
-Not built yet. This version only reads your settings.
