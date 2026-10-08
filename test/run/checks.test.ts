@@ -3,8 +3,11 @@ import { describe, expect, test, setDefaultTimeout } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readAccountRecord, startAccountRecord } from "../../src/accounts/record";
+import type { CommandContext } from "../../src/cli/commands/registry";
+import { loadConfig } from "../../src/core/config/load";
 import { policyOf } from "../../src/policies/load";
-import { relayRun, runFixture, steps, workers } from "./helpers";
+import { allowOnProject } from "../../src/run/run";
+import { ACCOUNTS, relayRun, runFixture, steps, workers } from "./helpers";
 
 // add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
 setDefaultTimeout(30_000);
@@ -37,6 +40,25 @@ describe("exit 2", () => {
       expect((await relayRun(fixture, ["claude:work", "--json"])).stderr).toBe("relay: --json works only with --headless.\n");
       expect((await relayRun(fixture, ["claude:work", "--headless", "--prompt", "x".repeat(101 * 1024)])).stderr)
         .toBe("The prompt is too long to pass on the command line; put it in a file under .relay/ and refer to it.\n");
+      expect(workers(fixture)).toEqual([]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  test("--model and --permission are refused for an agent in the terminal, and --resume needs a UUID", async () => {
+    const fixture = await runFixture();
+    try {
+      expect(await relayRun(fixture, ["claude:work", "--model", "opus"], finish)).toMatchObject({
+        code: 2, stderr: "relay: --model works only with --headless.\n",
+      });
+      expect(await relayRun(fixture, ["codex:personal", "--permission", "read-only"], finish)).toMatchObject({
+        code: 2, stderr: "relay: --permission works only with --headless. An agent in your terminal asks you itself.\n",
+      });
+      expect(await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go.", "--resume", "--help-me"], finish)).toMatchObject({ code: 2 });
+      expect(await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Go.", "--resume=abc"], finish)).toMatchObject({
+        code: 2, stderr: "relay: --resume needs a session ID, which is a UUID, or last.\n",
+      });
       expect(workers(fixture)).toEqual([]);
     } finally {
       fixture.cleanup();
@@ -143,6 +165,28 @@ test("a provider alone means its only account, and a changed policy is announced
     expect(readAccountRecord(fixture.relayHome, { id: "claude:work", provider: "claude", name: "work" }).policy_checked_on_seen)
       .toBe(policyOf("claude").checkedOn);
     expect((await relayRun(fixture, ["claude", "--headless", "--prompt", "Hi."], finish)).stdout).not.toContain(notice);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("a project entry added by another relay run after the settings were read is not added twice", async () => {
+  const fixture = await runFixture();
+  try {
+    const entry = (allow: string) => `\n[[projects]]\npath = ${JSON.stringify(fixture.scratch.repo)}\nallow = ["${allow}"]\n`;
+    const loaded = loadConfig({ relayHome: fixture.relayHome, homedir: fixture.scratch.home, uid: process.getuid!() });
+    const ctx = { config: loaded, relayHome: fixture.relayHome, homedir: fixture.scratch.home } as unknown as CommandContext;
+    const work = loaded.accounts.find((account) => account.id === "claude:work")!;
+    const codex = loaded.accounts.find((account) => account.id === "codex:personal")!;
+    // The other run's entry appears between the load above and this run's change.
+    writeFileSync(join(fixture.relayHome, "config.toml"), ACCOUNTS + entry("claude:work"), { mode: 0o600 });
+    const said: string[] = [];
+    allowOnProject(ctx, work, fixture.scratch.repo, (line: string) => said.push(line));
+    expect(said).toEqual([]);
+    expect(config(fixture).match(/\[\[projects\]\]/g)).toHaveLength(1);
+    // add-relay-switch: an account the entry does not name is asked about later, not refused here.
+    expect(allowOnProject(ctx, codex, fixture.scratch.repo, () => {})).toBe(false);
+    expect(config(fixture).match(/\[\[projects\]\]/g)).toHaveLength(1);
   } finally {
     fixture.cleanup();
   }

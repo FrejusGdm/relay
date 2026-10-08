@@ -2,7 +2,6 @@
 import { expect, test, setDefaultTimeout } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { takeWorkerLock } from "../../src/job/lock";
 import { relayRun, runFixture, spawnRelayRun, steps, until, workers } from "./helpers";
 
 // add-relay-switch: a second relay run in a job continues it through a handoff, which takes longer.
@@ -39,17 +38,30 @@ test("a headless Codex run leaves a complete record with mode 0600", async () =>
   }
 });
 
-test("the record is replaced whole while the agent runs, never left half written", async () => {
+test("the record is replaced through a new file each time, never rewritten in place", async () => {
   const fixture = await runFixture();
   try {
     const run = spawnRelayRun(fixture, ["claude:work", "--headless", "--prompt", "Wait."], steps({ say: "Waiting." }, { hang: true }));
-    await until(() => workers(fixture)[0]?.provider_session_id !== undefined && readFileSync(join(fixture.scratch.repo, ".relay", "events.jsonl"), "utf8").includes("worker_session_identified"));
+    await until(() => readFileSync(join(fixture.scratch.repo, ".relay", "events.jsonl"), "utf8").includes("worker_session_identified"));
     const running = workers(fixture)[0]!;
     expect(running).toMatchObject({ ended_at: null, exit_code: null, end_reason: null, transport: "claude-print" });
     const folder = join(fixture.relayHome, "jobs", fixture.jobId, "workers");
-    expect(readdirSync(folder)).toEqual([`${running.worker_id}.json`]);
+    const path = join(folder, `${running.worker_id}.json`);
+    // A rename gives the path a new file; a write in place would keep the same one.
+    const first = statSync(path).ino;
+    let torn = false;
+    const reader = setInterval(() => {
+      try {
+        JSON.parse(readFileSync(path, "utf8"));
+      } catch {
+        torn = true;
+      }
+    }, 1);
     process.kill(-run.child.pid!, "SIGINT");
     expect(await run.exited).toBe(130);
+    clearInterval(reader);
+    expect(torn).toBe(false);
+    expect(statSync(path).ino).not.toBe(first);
     expect(readdirSync(folder)).toEqual([`${running.worker_id}.json`]);
     expect(workers(fixture)[0]).toMatchObject({ worker_id: running.worker_id, end_reason: "interrupted" });
   } finally {
@@ -57,21 +69,21 @@ test("the record is replaced whole while the agent runs, never left half written
   }
 });
 
-test("a second run in the same job is refused with exit 6 while the worker lock is held", async () => {
+test("a second run in the same job is refused with exit 6 while the first one runs", async () => {
   const fixture = await runFixture();
   try {
-    const release = takeWorkerLock(fixture.relayHome, fixture.jobId, "claude:work");
-    try {
-      const lock = JSON.parse(readFileSync(join(fixture.relayHome, "locks", `${fixture.jobId}.worker.lock`), "utf8"));
-      expect(Object.keys(lock)).toEqual(["pid", "account", "started_at"]);
-      expect(statSync(join(fixture.relayHome, "locks", `${fixture.jobId}.worker.lock`)).mode & 0o777).toBe(0o600);
-      expect(await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], steps({ say: "Hi." }))).toMatchObject({
-        code: 6, stderr: "relay: Claude Code · work is working on this job. To hand it over, run relay switch claude:work.\n",
-      });
-      expect(workers(fixture)).toEqual([]);
-    } finally {
-      release();
-    }
+    const first = spawnRelayRun(fixture, ["claude:work", "--headless", "--prompt", "Wait."], steps({ say: "Waiting." }, { hang: true }));
+    await until(() => first.stdout().includes("Started Claude Code"));
+    const lock = JSON.parse(readFileSync(join(fixture.relayHome, "locks", `${fixture.jobId}.worker.lock`), "utf8"));
+    // add-relay-switch adds the fields relay switch reads.
+    expect(Object.keys(lock)).toEqual(["pid", "account", "started_at", "schema_version", "process_started_at", "worker_id", "mode", "relay_version"]);
+    expect(statSync(join(fixture.relayHome, "locks", `${fixture.jobId}.worker.lock`)).mode & 0o777).toBe(0o600);
+    expect(await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], steps({ say: "Hi." }))).toMatchObject({
+      code: 6, stderr: "relay: Claude Code · work is working on this job. To hand it over, run relay switch claude:work.\n",
+    });
+    expect(workers(fixture)).toHaveLength(1);
+    process.kill(-first.child.pid!, "SIGINT");
+    expect(await first.exited).toBe(130);
     expect((await relayRun(fixture, ["claude:work", "--headless", "--prompt", "Hi."], steps({ say: "Hi." }))).code).toBe(0);
     expect(readdirSync(join(fixture.relayHome, "locks")).filter((name) => name.includes("worker"))).toEqual([]);
   } finally {
