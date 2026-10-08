@@ -28,6 +28,7 @@ export interface FakeT3Options {
   omitTools?: string[];
   pairingCode?: string;
   expiresIn?: number;
+  echoTokenError?: boolean;
 }
 export interface FakeT3 {
   url: string;
@@ -188,6 +189,9 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
       // Codes are single-use, even after a failed exchange.
       if (code !== null) codes.delete(code);
       const verifier = params.get("code_verifier");
+      if (options.echoTokenError) {
+        return json({ error: "invalid_grant", error_description: `${verifier ?? ""} ${code ?? ""}` }, 400);
+      }
       if (params.get("grant_type") !== "authorization_code" || !grant || !verifier
         || params.get("client_id") !== grant.clientId || params.get("redirect_uri") !== grant.redirectUri
         || createHash("sha256").update(verifier).digest("base64url") !== grant.challenge) {

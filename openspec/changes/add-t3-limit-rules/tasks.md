@@ -15,7 +15,7 @@ provider or a real T3 Code: they use the fake T3 server of task 4.1, phase 3's `
   `t3 auth pairing create`, call `orchestrator_capabilities`, restart T3, and call it again.
   Write the instance IDs before and after the restart and the T3 build in the research file
   under "What I could not verify". Verify by reading the updated section.
-- [ ] 1.2 Run `claude -p "/usage"` three times on the Omarchy machine with a signed-in
+- [x] 1.2 Run `claude -p "/usage"` three times on the Omarchy machine with a signed-in
   Claude account, with `/usage` in the account's statistics before and after, and check whether a
   session transcript appears under `~/.claude/projects/`. Also check whether
   `claude --no-session-persistence` exists (`claude --help`). Save the outputs, with any account

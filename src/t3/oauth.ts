@@ -18,6 +18,11 @@ export interface SignInOptions {
 const TIMEOUT = "T3 Code did not send relay back within 2 minutes. Run relay t3 connect again.";
 const EXPLANATION = 'T3 Code will ask for a pairing code and an access level. Choose "full-access": T3 only lets relay act on threads whose permission mode is not broader than relay\'s, and new T3 threads use full access. relay never changes a thread\'s permission mode.';
 const MAX_LIFETIME = 30 * 86_400_000;
+const OAUTH_ERRORS = new Set([
+  "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client",
+  "unsupported_grant_type", "invalid_scope", "invalid_redirect_uri",
+  "invalid_client_metadata", "access_denied", "server_error",
+]);
 
 // Only a command at the keyboard calls this. The daemon never starts a TCP listener.
 export async function signIn(options: SignInOptions): Promise<{ serverVersion: string | null; expiresAt: Date }> {
@@ -33,21 +38,20 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
   const abort = new AbortController();
   let active = true;
   let accepted = false;
-  let tokenSaved = false;
-  let registrationSaved = false;
+  let pendingTokens: Parameters<OAuthClientProvider["saveTokens"]>[0] | undefined;
+  let pendingRegistration: { client_id: string; issuer: string } | undefined;
   let verifier: string | undefined;
   let discovery: Parameters<NonNullable<OAuthClientProvider["saveDiscoveryState"]>>[0] | undefined;
   let issuedAt: Date | undefined;
   let expiresAt: Date | undefined;
   let authorizationCode: string | null = null;
   let resolveCallback!: (params: URLSearchParams) => void;
-  let rejectCallback!: (error: Error) => void;
-  const callback = new Promise<URLSearchParams>((resolve, reject) => {
+  const callback = new Promise<URLSearchParams>((resolve) => {
     resolveCallback = resolve;
-    rejectCallback = reject;
   });
-  // Discovery or browser opening can take longer than the listener's deadline.
-  void callback.catch(() => {});
+  let rejectDeadline!: (error: Error) => void;
+  const deadline = new Promise<never>((_, reject) => { rejectDeadline = reject; });
+  void deadline.catch(() => {});
   const listener = Bun.serve({
     hostname: "127.0.0.1", port: 0,
     fetch(request) {
@@ -55,7 +59,6 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
       if (!active || accepted || request.method !== "GET" || url.pathname !== "/callback"
         || url.searchParams.get("state") !== state) return new Response(null, { status: 404 });
       accepted = true;
-      clearTimeout(timer);
       resolveCallback(url.searchParams);
       // Graceful stop lets the one accepted response finish before closing the socket.
       void listener.stop();
@@ -70,7 +73,7 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     active = false;
     abort.abort();
     void listener.stop(true);
-    rejectCallback(new Error(TIMEOUT));
+    rejectDeadline(new Error(TIMEOUT));
   }, options.callbackTimeoutMs ?? 120_000);
   const requireActive = () => { if (!active) throw new Error(TIMEOUT); };
   const provider: OAuthClientProvider = {
@@ -81,24 +84,27 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
       grant_types: ["authorization_code"], response_types: ["code"], token_endpoint_auth_method: "none",
     },
     async clientInformation(ctx) {
+      // Return the issuer too: the SDK checks this stamp so a client ID is never used with another
+      // authorization server, and registers again when it is missing.
+      if (pendingRegistration) return { client_id: pendingRegistration.client_id, issuer: pendingRegistration.issuer };
       const stored = await options.store.get(`${options.url}#client`);
       if (stored === null) return undefined;
-      const info: unknown = JSON.parse(stored);
+      let info: unknown;
+      try { info = JSON.parse(stored); } catch { return undefined; }
       if (typeof info !== "object" || info === null) return undefined;
       const registration = info as { client_id?: unknown; issuer?: unknown };
-      if (typeof registration.client_id !== "string" || registration.issuer !== (ctx?.issuer ?? resource.origin)) return undefined;
-      return { client_id: registration.client_id };
+      // The SDK also asks without an issuer before discovery or a new connection.
+      const issuer = ctx?.issuer ?? resource.origin;
+      if (typeof registration.client_id !== "string" || registration.issuer !== issuer) return undefined;
+      return { client_id: registration.client_id, issuer };
     },
     async saveClientInformation(info, ctx) {
       requireActive();
-      registrationSaved = true;
-      await options.store.set(`${options.url}#client`, JSON.stringify({ client_id: info.client_id, issuer: ctx?.issuer ?? resource.origin }));
+      pendingRegistration = { client_id: info.client_id, issuer: ctx?.issuer ?? resource.origin };
     },
     async tokens() {
       // Connecting is an explicit renewal. Reuse the public registration, not an old grant.
-      if (!tokenSaved) return undefined;
-      const token = await options.store.get(options.url);
-      return token === null ? undefined : { access_token: token, token_type: "Bearer" };
+      return pendingTokens;
     },
     async saveTokens(tokens) {
       requireActive();
@@ -107,8 +113,7 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
       const lifetime = seconds !== undefined && Number.isFinite(seconds) && seconds >= 0
         ? Math.min(MAX_LIFETIME, seconds * 1000) : MAX_LIFETIME;
       expiresAt = new Date(issuedAt.getTime() + lifetime);
-      tokenSaved = true;
-      await options.store.set(options.url, tokens.access_token);
+      pendingTokens = tokens;
     },
     state: () => state,
     saveDiscoveryState(s) { discovery = s; },
@@ -125,12 +130,12 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
       if ([storedToken, verifier].some((secret) => secret && url.toString().includes(secret))) {
         throw new Error("T3 Code sent an invalid sign-in address.");
       }
-      try { await options.openBrowser(url); }
-      catch {
-        requireActive();
-        options.print("relay could not open your browser. Open this address to connect to T3 Code:");
-        options.print(url.toString());
-      }
+      void options.openBrowser(url).catch(() => {
+        if (active) {
+          options.print("relay could not open your browser. Open this address to connect to T3 Code:");
+          options.print(url.toString());
+        }
+      });
     },
     saveCodeVerifier(value) { requireActive(); verifier = value; },
     codeVerifier() {
@@ -144,10 +149,22 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     if (url.origin !== resource.origin) throw new Error("T3 Code sent an invalid sign-in address.");
     const headers = new Headers(init?.headers);
     if (url.href !== resource.href) headers.delete("Authorization");
-    return (options.fetch ?? globalThis.fetch)(target, {
+    const response = await (options.fetch ?? globalThis.fetch)(target, {
       ...init, headers, redirect: "error",
       signal: init?.signal ? AbortSignal.any([init.signal, abort.signal]) : abort.signal,
     });
+    if (url.pathname !== resource.pathname && response.status >= 400) {
+      let code = "server_error";
+      try {
+        const body: unknown = await response.json();
+        if (typeof body === "object" && body !== null && "error" in body
+          && typeof body.error === "string" && OAUTH_ERRORS.has(body.error)) code = body.error;
+      } catch { /* Never pass untrusted OAuth error text to the SDK. */ }
+      return new Response(JSON.stringify({ error: code }), {
+        status: response.status, headers: { "Content-Type": "application/json" },
+      });
+    }
+    return response;
   };
   const clients: Client[] = [];
   const transports: StreamableHTTPClientTransport[] = [];
@@ -176,16 +193,20 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     if (T3_TOOLS.some((tool) => !tools.some((entry) => entry.name === tool))) {
       throw new T3Error("too_old", "this T3 Code build cannot be driven by other programs. Install a nightly build from v0.0.46-nightly.20261006.2752 or later.");
     }
-    if (!issuedAt || !expiresAt) throw new Error("T3 Code did not complete sign-in. Run relay t3 connect again.");
+    if (!pendingTokens || !issuedAt || !expiresAt) throw new Error("T3 Code did not complete sign-in. Run relay t3 connect again.");
     const serverVersion = client.getServerVersion()?.version ?? null;
     // Server text is untrusted. An echoed secret must never enter the connection record.
-    const token = await options.store.get(options.url);
+    const token = pendingTokens.access_token;
     if (serverVersion && [token, authorizationCode, verifier].some((secret) => secret && serverVersion.includes(secret))) {
       throw new Error("T3 Code sent an invalid server version.");
     }
     verifier = undefined;
     authorizationCode = null;
     requireActive();
+    await options.store.set(options.url, token);
+    if (pendingRegistration) {
+      await options.store.set(`${options.url}#client`, JSON.stringify(pendingRegistration));
+    }
     writeConnection(options.relayHome, {
       v: 1, url: options.url, connected_at: issuedAt.toISOString(),
       expires_at: expiresAt.toISOString(), server_version: serverVersion,
@@ -193,14 +214,11 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     return { serverVersion, expiresAt };
   };
   try {
-    // Race only against rejection; a valid callback belongs to the SDK exchange above.
-    return await Promise.race([flow(), callback.then(() => new Promise<never>(() => {}))]);
+    // The deadline still applies after the callback, through token exchange and tool checks.
+    return await Promise.race([flow(), deadline]);
   } catch (error) {
     active = false;
     abort.abort();
-    if (tokenSaved || registrationSaved) {
-      await signOut(options).catch(() => {});
-    }
     if (error instanceof T3Error) throw error;
     if (error instanceof Error && error.message === TIMEOUT) throw new Error(TIMEOUT);
     throw new Error("relay could not connect to T3 Code. Run relay t3 connect again.");
@@ -211,6 +229,8 @@ export async function signIn(options: SignInOptions): Promise<{ serverVersion: s
     verifier = undefined;
     authorizationCode = null;
     discovery = undefined;
+    pendingTokens = undefined;
+    pendingRegistration = undefined;
     await listener.stop(true);
     for (const client of clients) await client.close().catch(() => {});
     for (const transport of transports) await transport.close().catch(() => {});
@@ -229,11 +249,17 @@ export async function signOut(options: { url: string; relayHome: string; store: 
 }
 
 export async function openT3Browser(url: URL): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const child = Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", url.toString()], {
       stdin: "ignore", stdout: "ignore", stderr: "ignore",
     });
-    if (await child.exited === 0) return;
+    const opened = await Promise.race([
+      child.exited.then((code) => code === 0),
+      new Promise<true>((resolve) => { timer = setTimeout(() => resolve(true), 1_000); }),
+    ]);
+    if (opened) return;
   } catch { /* Do not repeat native process errors. */ }
+  finally { clearTimeout(timer); }
   throw new Error("relay could not open your browser.");
 }
