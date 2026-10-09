@@ -18,6 +18,7 @@ The design is decision 17 of `openspec/changes/add-provider-adapters/design.md`.
 | `RELAY_CODEX_BIN` | relay | The same for `codex`. Tests set it to the absolute path of `test/fakes/fake-codex.ts`. |
 | `RELAY_FAKE_SCENARIO` | the fakes | The scenario file a fake follows. Without it, every turn says one sentence and finishes. |
 | `RELAY_FAKE_RECORD` | the fakes | A file where the fake writes what it received (see "The record"). |
+| `RELAY_FAKE_NOW` | the Codex fake | A time such as `2026-10-08T12:00:00.000Z`. The fake uses it instead of the real time to decide whether a usage-limit reset is today, so its message does not change from day to day. |
 
 relay starts a program by its absolute path, so a fake must be executable. Both fakes start with
 `#!/usr/bin/env bun` and are committed with the executable bit.

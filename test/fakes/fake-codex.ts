@@ -137,7 +137,8 @@ const ERROR_INFO = {
 };
 function usageMessage(time: string): string {
   const reset = new Date(time);
-  const now = new Date();
+  // RELAY_FAKE_NOW lets a test fix the time that decides whether the reset is today.
+  const now = process.env.RELAY_FAKE_NOW === undefined ? new Date() : new Date(process.env.RELAY_FAKE_NOW);
   const hours = reset.getHours();
   const clock = `${hours % 12 || 12}:${String(reset.getMinutes()).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
   const today = reset.getFullYear() === now.getFullYear() && reset.getMonth() === now.getMonth() && reset.getDate() === now.getDate();

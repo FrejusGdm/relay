@@ -61,7 +61,7 @@ for (const [name, scenario] of Object.entries(scenarios)) {
     const claude = fixture.meta.provider === "claude";
     const argv = claude ? ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", ...(fixture.name === "resumed" ? ["--resume", SESSION] : [])] : app ? ["app-server"] : ["exec", ...(fixture.name === "resumed" ? ["resume", SESSION] : []), "--json", ...(fixture.name === "resumed" ? [] : ["-C", cwd]), "<prompt>"];
     const child = Bun.spawn([process.execPath, resolve(import.meta.dir, `../fakes/fake-${claude ? "claude" : "codex"}.ts`), ...argv], {
-      cwd, env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: join(home, ".claude"), CODEX_HOME: join(home, ".codex"), RELAY_FAKE_SCENARIO: scenarioFile, TZ: "UTC" },
+      cwd, env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: join(home, ".claude"), CODEX_HOME: join(home, ".codex"), RELAY_FAKE_SCENARIO: scenarioFile, RELAY_FAKE_NOW: fixture.meta.recorded_at, TZ: "UTC" },
       stdin: claude || app ? "pipe" : "ignore", stdout: "pipe", stderr: "pipe",
     });
     const stderr = new Response(child.stderr).text();
@@ -116,9 +116,7 @@ for (const [name, scenario] of Object.entries(scenarios)) {
       if (mapper !== undefined) {
         // Paths are stable in fixtures and temporary in fake runs.
         const stableOutput = JSON.stringify(output).replaceAll(cwd, "/home/user/project");
-        // The fake adds the month and day when its reset is not today.
-        const normalized = JSON.parse(stableOutput.replaceAll("try again at Oct 8, 3:45 PM.", "try again at 3:45 PM.")) as unknown[];
-        replayFixture({ ...fixture, messages: normalized }, mapper);
+        replayFixture({ ...fixture, messages: JSON.parse(stableOutput) as unknown[] }, mapper);
       } else {
         for (let i = 0; i < Math.max(output.length, fixture.messages.length); i++) {
           const actual = output[i]; const expected = fixture.messages[i];
