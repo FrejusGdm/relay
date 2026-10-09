@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Replaces the pricing section's promise of later paid features with a short joke price and the plain fact that relay is free and open source.
+Replaces the pricing section's promise of later paid features with a short joke price and the plain fact that relay is free and open source, and adds a link to the GitHub repository with its star count.
 
 ## MODIFIED Requirements
 
@@ -45,3 +45,22 @@ The pricing section (`id="pricing"`) SHALL have the heading "What relay costs." 
 - **AND** none of `checkout`, `stripe`, `buy`, `lifetime`, `license key` or `paid feature` appears, in any case
 - **AND** there is no link to `/license` and no address under `/api/`
 - **AND** every form has `method="dialog"`
+
+### Requirement: GitHub link with the star count
+The navigation SHALL have a link to `https://github.com/FrejusGdm/relay` between the theme button and "Get relay". It SHALL show the GitHub mark (`mark-github-16` from Octicons, MIT License, credited in a comment beside it) and the repository's star count, written as the number up to 999 and as thousands above it (`1.2k`, `26k`). `site/public/github.js` SHALL read the count from `https://api.github.com/repos/FrejusGdm/relay` (`stargazers_count`) without cookies or referrer, and SHALL keep it for one hour in the `localStorage` entry `relay-github-stars`. The count's width SHALL be kept free from the start, so the navigation does not move when it arrives. When the request fails or the repository is private, the link SHALL show no number and nothing SHALL be saved. The link's accessible name SHALL be "relay on GitHub", followed by ", <count> stars" once the count is known. Below 641 pixels the link SHALL show the mark only. It SHALL use only the existing fonts and colour tokens, work in both themes, and show the site's focus outline.
+
+#### Scenario: Count shown
+- **WHEN** GitHub answers with `stargazers_count` 1234
+- **THEN** the link shows `1.2k` and its accessible name is `relay on GitHub, 1.2k stars`
+
+#### Scenario: Request fails or repository is private
+- **WHEN** GitHub answers 404 or the request fails
+- **THEN** the link is shown without a number, its accessible name is `relay on GitHub`, and `relay-github-stars` is not saved
+
+#### Scenario: Count kept for an hour
+- **WHEN** the page is opened again within an hour
+- **THEN** it shows the saved count without asking GitHub, and after an hour it asks again
+
+#### Scenario: No shift
+- **WHEN** the count arrives after the page is drawn
+- **THEN** the "Get relay" button does not move

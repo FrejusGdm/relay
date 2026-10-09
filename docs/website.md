@@ -55,11 +55,12 @@ focus to the macOS command-line part when the visitor clicked "Get relay" in the
 closing panel.
 
 The pages load nothing from other servers and contain no inline script or style, because the
-Content-Security-Policy in `staticwebapp.config.json` allows only the site's own files. The
+Content-Security-Policy in `staticwebapp.config.json` allows only the site's own files; the one
+request to another server is the star count from GitHub's API, described below. The
 navigation has one theme button: it shows a moon on the light page and a sun on the dark page,
 and a click switches to the other theme. The page is light until the visitor chooses dark.
-`theme.js` remembers the choice in one `localStorage` entry, `relay-theme`, which is the only
-thing the site stores in the browser. Josué asked on 2026-10-08 for this button in place of the
+`theme.js` remembers the choice in one `localStorage` entry, `relay-theme`; the only other entry
+is the star count, `relay-github-stars`. Josué asked on 2026-10-08 for this button in place of the
 first Light, Dark and System switch, after seeing the live site.
 
 ## Fonts
@@ -94,6 +95,15 @@ relay is free: nothing is paid and nothing is locked (Josué's decision of 2026-
 pricing section, "What relay costs.", makes a small joke of it. It shows the price `$19.99`, then
 the underlined line "I’m joking.", then "relay is free and open source." and "You already paid for
 the agents." The site has no buy button, no checkout, no license page and no API.
+
+The navigation links to the GitHub repository with GitHub's mark (Octicons `mark-github-16`, MIT
+License) and the star count, like the header of shadcn/ui. `site/public/github.js` asks
+`https://api.github.com/repos/FrejusGdm/relay` for `stargazers_count`, without cookies or
+referrer, and keeps the answer for an hour in the `localStorage` entry `relay-github-stars`. It
+writes counts above 999 as thousands (`1.2k`). When the request fails, or the repository is
+private and GitHub answers 404, the link shows no number. The count's width is kept free from the
+start, so the navigation does not move, and phones show the mark only. The Content-Security-Policy
+allows `connect-src https://api.github.com` for this request and nothing else.
 
 ## The install panel
 
@@ -151,6 +161,8 @@ bun run site:test
 They check that the pages have no inline script or style and load only their own files, that the
 stylesheet names no other server, that `site.js` uses no browser storage and makes no network
 request, that `theme.js` uses only its one `localStorage` entry, inside `try`, and no network,
+that `github.js` asks only GitHub's API for the repository, without cookies or referrer, and uses
+only its one `localStorage` entry, inside `try`,
 that the font list is exact, and that `staticwebapp.config.json` holds exactly the headers
 of the design. They also check the content: the links, the section order, the headline and title,
 the theme button and the olive "Get relay" in the navigation, the absence of the hero's track
@@ -182,6 +194,12 @@ page in each theme to `site/e2e/out/local-theme-light-<width>.png` and
 `site/e2e/out/local-theme-dark-<width>.png`. At 1440 and 390 pixels they check the pricing note in
 both themes, check that the page has no buy form or license link, and save the section to
 `site/e2e/out/local-pricing-light-<width>.png` and `site/e2e/out/local-pricing-dark-<width>.png`.
+Every browser test answers for GitHub's API itself, so no test reaches GitHub. The GitHub link
+tests check the count, its accessible name, the focus outline and the mark-only phone layout in
+both themes, and save the navigation to `site/e2e/out/local-nav-github-light-<width>.png` and
+`local-nav-github-dark-<width>.png` at 1440 and 390 pixels. Others check that a 404 or a failed
+request shows no number and saves nothing, that the count is kept for an hour, and that the
+navigation does not move when the count arrives.
 
 The emulator's server process can outlive Playwright. After a run, check that nothing still
 listens on the port, and stop a leftover process by the PID that `ss` shows:

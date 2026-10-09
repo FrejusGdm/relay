@@ -141,6 +141,14 @@ section { padding: 128px 0; border-top: 1px solid var(--rule); }
 .theme-toggle .icon-sun, :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
 
+/* GitHub link: the mark and the star count, which github.js fills in. The count's width is kept
+   free from the start, so the navigation does not move when it arrives. Phones show the mark only. */
+.gh-link { display: inline-flex; align-items: center; gap: 6px; flex: none; height: 34px; padding: 0 8px; margin: 0 -8px; border-radius: 6px; color: var(--muted); text-decoration: none; font: 500 14px var(--font-text); font-variant-numeric: tabular-nums; }
+.gh-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.gh-mark { width: 18px; height: 18px; display: block; }
+.gh-stars { min-width: 4ch; }
+@media (max-width: 640px) { .gh-stars { display: none; } }
+
 /* Hero */
 .hero { padding: 64px 0 128px; }
 .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) 374px; gap: 72px; align-items: center; }

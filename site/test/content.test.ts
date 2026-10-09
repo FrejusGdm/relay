@@ -65,6 +65,19 @@ describe("index.html", () => {
     expect(nav).not.toMatch(/data-theme-choice|role="group"/);
   });
 
+  test("links to the GitHub repository in the navigation, with the Octicons mark, its credit and a place for the star count", async () => {
+    const html = await read("index.html");
+    const nav = html.match(/<nav class="site-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    const link = nav.match(/<a class="gh-link"[\s\S]*?<\/a>/)?.[0] ?? "";
+    expect(link).toStartWith('<a class="gh-link" href="https://github.com/FrejusGdm/relay" aria-label="relay on GitHub" data-gh-link>');
+    expect(link).toContain('<svg class="gh-mark" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328');
+    expect(link).toEndWith('<span class="gh-stars" data-gh-stars></span></a>');
+    expect(nav).toContain("mark-github-16 from Octicons (https://github.com/primer/octicons), copyright GitHub Inc., MIT License.");
+    expect(nav.indexOf('id="theme-toggle"')).toBeLessThan(nav.indexOf("gh-link"));
+    expect(nav.indexOf("gh-link")).toBeLessThan(nav.indexOf(">Get relay</button>"));
+    expect(html).toContain('<script src="/github.js" defer></script>');
+  });
+
   test("shows Get relay in the navigation as the olive primary button", async () => {
     const nav = (await read("index.html")).match(/<nav class="site-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(nav).toContain('<button type="button" class="btn btn-primary btn-sm" popovertarget="install">Get relay</button>');

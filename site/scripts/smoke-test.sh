@@ -3,7 +3,7 @@
 set -eu
 url=${1:?usage: smoke-test.sh <base address, for example https://example.azurestaticapps.net>}
 url=${url%/}
-csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://api.github.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fail() { echo "Smoke test failed: $1" >&2; exit 1; }
