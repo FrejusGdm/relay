@@ -1,4 +1,4 @@
-import { expect, type Page, test as base } from "@playwright/test";
+import { expect, type Page, type Route, test as base } from "@playwright/test";
 import path from "node:path";
 
 const target = process.env.SITE_URL ? "live" : "local";
@@ -6,11 +6,17 @@ const widths = [1440, 1024, 390];
 
 type Problem = { text: string; url: string };
 
+const GITHUB_API = "https://api.github.com/repos/FrejusGdm/relay";
+const answerStars = (route: Route, count: number) =>
+  route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ stargazers_count: count }) });
+
 // Every test collects console errors, page errors and Content-Security-Policy violations,
 // and fails if any is left when it ends.
 const test = base.extend<{ problems: Problem[] }>({
   problems: [
     async ({ page }, use) => {
+      // No test reaches GitHub: the star count always comes from this answer unless a test replaces it.
+      await page.route(GITHUB_API, (route) => answerStars(route, 1234));
       const problems: Problem[] = [];
       await page.addInitScript(() => {
         document.addEventListener("securitypolicyviolation", (event) => {
@@ -306,4 +312,128 @@ test("unknown address shows the 404 page", async ({ page, problems }) => {
   // Chromium reports the 404 answer of the page itself as a console error; only that one message is expected.
   const own = problems.findIndex((p) => p.url === page.url() && p.text.includes("status of 404"));
   if (own >= 0) problems.splice(own, 1);
+});
+
+for (const width of [1440, 390]) {
+  test.describe(`pricing at ${width} pixels`, () => {
+    test.use({ viewport: { width, height: 900 }, reducedMotion: "reduce", colorScheme: "light" });
+
+    test(`the joke price, then the free note, in both themes at ${width} pixels`, async ({ page }) => {
+      await page.goto("/");
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      const pricing = page.locator("#pricing");
+      await expect(pricing.locator(".price-big")).toHaveText("$19.99");
+      await expect(pricing.locator(".price-joke")).toHaveText("I’m joking.");
+      await expect(pricing.locator(".price-joke")).toHaveCSS("text-decoration-line", "underline");
+      await expect(pricing.locator(".price-free")).toHaveText("relay is free and open source.");
+      await expect(page.locator('form:not([method="dialog"]), [action*="checkout"], a[href*="license"]:not([href*="apache.org"])')).toHaveCount(0);
+      await pricing.scrollIntoViewIfNeeded();
+      await pricing.screenshot({ path: path.join(import.meta.dirname, "out", `${target}-pricing-light-${width}.png`) });
+
+      await themeToggle(page).click();
+      await page.mouse.move(0, 0);
+      await expectBackground(page, darkBackground);
+      await expect(pricing.locator(".price-big")).toHaveCSS("color", "rgb(237, 235, 228)");
+      await pricing.screenshot({ path: path.join(import.meta.dirname, "out", `${target}-pricing-dark-${width}.png`) });
+    });
+  });
+}
+
+for (const width of [1440, 390]) {
+  test.describe(`GitHub link at ${width} pixels`, () => {
+    test.use({ viewport: { width, height: 900 }, reducedMotion: "reduce", colorScheme: "light" });
+
+    test(`the mark and the star count, in both themes at ${width} pixels`, async ({ page }) => {
+      await page.goto("/");
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      const link = page.locator("nav.site-nav .gh-link");
+      await expect(link).toHaveAttribute("href", "https://github.com/FrejusGdm/relay");
+      await expect(link).toHaveAttribute("aria-label", "relay on GitHub, 1.2k stars");
+      await expect(link.locator(".gh-stars")).toHaveText("1.2k");
+      await expect(link.locator(".gh-stars")).toBeVisible({ visible: width > 640 });
+      await expect(link.locator(".gh-mark")).toBeVisible();
+      expect(await page.evaluate(overflowCheck)).toEqual([]);
+      await themeToggle(page).focus();
+      await page.keyboard.press("Tab");
+      await expect(link).toBeFocused();
+      expect(await link.evaluate((el) => el.matches(":focus-visible") && getComputedStyle(el).outlineStyle)).toBe("solid");
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const nav = page.locator("nav.site-nav");
+      await nav.screenshot({ path: path.join(import.meta.dirname, "out", `${target}-nav-github-light-${width}.png`) });
+
+      await themeToggle(page).click();
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await expectBackground(page, darkBackground);
+      await expect(link).toHaveCSS("color", "rgb(138, 135, 127)");
+      await nav.screenshot({ path: path.join(import.meta.dirname, "out", `${target}-nav-github-dark-${width}.png`) });
+    });
+  });
+}
+
+test.describe("GitHub star count", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("the count arrives without moving the navigation", async ({ page }) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(GITHUB_API, async (route) => {
+      await held;
+      await answerStars(route, 987);
+    });
+    await page.goto("/");
+    const button = page.locator("nav.site-nav .btn-primary");
+    const before = await button.boundingBox();
+    await expect(page.locator(".gh-stars")).toHaveText("");
+    release();
+    await expect(page.locator(".gh-stars")).toHaveText("987");
+    expect(await button.boundingBox()).toEqual(before);
+  });
+
+  test("a failed request or a private repository shows the link without a number, and nothing is saved", async ({ page, problems }) => {
+    for (const answer of ["404", "network"] as const) {
+      await page.route(GITHUB_API, (route) =>
+        answer === "404" ? route.fulfill({ status: 404, headers: { "Access-Control-Allow-Origin": "*" }, body: '{"message":"Not Found"}' }) : route.abort(),
+      );
+      const asked = page.waitForRequest(GITHUB_API);
+      await page.goto("/");
+      await asked;
+      await page.waitForTimeout(300);
+      const link = page.locator("nav.site-nav .gh-link");
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("aria-label", "relay on GitHub");
+      await expect(link.locator(".gh-stars")).toHaveText("");
+      expect(await page.evaluate(() => localStorage.getItem("relay-github-stars"))).toBeNull();
+    }
+    // Chromium reports the failed requests themselves as console errors; only those are expected.
+    for (let i = problems.length - 1; i >= 0; i--) {
+      if (/status of 404|net::ERR_FAILED/.test(problems[i]!.text)) problems.splice(i, 1);
+    }
+  });
+
+  test("the count is kept for an hour, then asked again", async ({ page }) => {
+    let requests = 0;
+    let count = 42;
+    await page.route(GITHUB_API, (route) => {
+      requests++;
+      return answerStars(route, count);
+    });
+    await page.goto("/");
+    await expect(page.locator(".gh-stars")).toHaveText("42");
+    expect(requests).toBe(1);
+
+    count = 25_600;
+    await page.reload();
+    await expect(page.locator(".gh-stars")).toHaveText("42");
+    expect(requests).toBe(1);
+
+    await page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem("relay-github-stars")!);
+      localStorage.setItem("relay-github-stars", JSON.stringify({ ...saved, time: Date.now() - 61 * 60 * 1000 }));
+    });
+    await page.reload();
+    await expect(page.locator(".gh-stars")).toHaveText("26k");
+    await expect(page.locator(".gh-link")).toHaveAttribute("aria-label", "relay on GitHub, 26k stars");
+    expect(requests).toBe(2);
+  });
 });

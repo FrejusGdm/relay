@@ -46,7 +46,9 @@ The changes are built in this order. Each change needs the ones before it.
 | 5 | `add-daemon-api-and-status` | The daemon, the local API, SQLite, `relay status`, delivery of hook events to the daemon, and `relay doctor --reindex` | Phases 1 to 4 (its switch endpoint calls the phase 4 engine) |
 | 6 | `add-handoff-evaluation` | The opt-in evaluation harness in `eval/handoff/`, run with `bun run eval:handoff` | Phases 1 to 5 for real runs; its task groups 2 to 7 use a stub `relay` and can be built while phases 3 to 5 are built |
 | 7 (first part) | `add-t3-limit-rules` | Usage readings, limit rules per account and window, and moving T3 Code threads to another provider past a threshold; `relay t3` | Phases 1, 3, 4 and 5; its settings, rules engine and T3 client need only phase 1 |
-| Outside the phases | `add-lifetime-license` | The lifetime license: `relay license`, the offline key check, and the license server in `license-server/` that sells and delivers keys with Stripe Checkout | Phase 1; its website parts need `add-website` |
+
+`add-lifetime-license`, a paid license outside the phases, was withdrawn on 2026-10-09 because
+relay is free; `make-relay-free` removed what it had built.
 
 Some later changes modify code that an earlier change created. Each of these is declared in the
 later change:
@@ -98,7 +100,6 @@ command its real behaviour and its final options.
 | `relay statusline <provider>` | 1 | Called by Claude Code's status line; records usage and runs the person's own status line | `add-provider-adapters` | |
 | `relay daemon <start\|stop\|restart\|status\|run>` | 1 | Controls the background service | `add-daemon-api-and-status` | |
 | `relay doctor --reindex` | 0 | Rebuilds the daemon's index from the job files and git | `add-daemon-api-and-status` | |
-| `relay license <activate\|status\|remove> [<key>]` | 1 to 2 | Saves, shows or removes the license key, and checks it on this computer only | `add-lifetime-license` | |
 | `relay t3 <connect\|enable\|disable\|status\|disconnect> [<folder>]` | 1 to 2 | Connects relay to T3 Code and chooses the projects whose threads relay manages; `enable` and `disable` take a folder | `add-t3-limit-rules` | |
 
 Every command also accepts `-h`, `--help` and `--log-level <level>`. `relay --help` and
@@ -133,8 +134,6 @@ number for different meanings. A command returns only the codes that apply to it
 | 40 | T3 Code is not answering at its address | `add-t3-limit-rules` |
 | 41 | This T3 Code build cannot be driven by other programs (a nightly build is needed) | `add-t3-limit-rules` |
 | 42 | relay is not connected to T3 Code, or the connection expired | `add-t3-limit-rules` |
-| 50 | The license key is not valid: wrong format, a test key, an unknown signing key, a failed signature check, or another product (50 and 51, because 40 to 42 were already taken) | `add-lifetime-license` |
-| 51 | No license is active | `add-lifetime-license` |
 | 69 | The command exists but this version cannot do it yet | `add-cli-scaffold` |
 | 70 | A bug inside relay | `add-cli-scaffold` |
 | 78 | The relay folder, `config.toml`, a relay environment variable or a profile folder is wrong or unsafe | `add-cli-scaffold` |
@@ -213,7 +212,6 @@ other file that may appear in `.relay/`.
 | `RELAY_CLAUDE_BIN`, `RELAY_CODEX_BIN`, `RELAY_FAKE_SCENARIO`, `RELAY_FAKE_RECORD` | tests | `add-provider-adapters` and every later change's tests |
 | `RELAY_GITLEAKS` | tests | `add-checkpoint-engine` and later changes' tests |
 | `RELAY_TEST` | the test preload of `add-cli-scaffold` | `add-relay-switch` (crash tests) |
-| `RELAY_TEST_LICENSE_KEY`, `RELAY_TEST_LICENSE_PUBLIC_KEY` | the person running the test-mode run | `test/license/test-mode-key.test.ts` only; the `relay` program never reads them |
 
 ## Source code map
 
@@ -248,8 +246,6 @@ never compiled into the `relay` binary.
 | `src/run/control.ts` | `add-relay-switch` | Switch requests sent to a running `relay run` |
 | `src/handoff/` | `add-relay-switch` | The switch engine, notes, checks, claims, templates, allow list and safety checks |
 | `src/daemon/`, `src/api/`, `src/state/`, `src/status/`, `src/client/` | `add-daemon-api-and-status` | The daemon, the local API, the SQLite index, `relay status`, and the only code that opens a connection (to relay's own socket) |
-| `src/license/` | `add-lifetime-license` | The license key check, the built-in public keys, the saved key file and the list of paid features |
-| `license-server/` | `add-lifetime-license` | The license server: its own Bun project, bundled for the website's Azure Functions API and never compiled into `relay` |
 | `src/limits/`, `src/usage/`, `src/t3/` | `add-t3-limit-rules` | Limit rules and crossings, usage readings, and the T3 Code client (the only code that connects to T3, on `127.0.0.1`) |
 
 ## Functions used across changes
@@ -286,7 +282,6 @@ every change.
 | `add-daemon-api-and-status` | `daemon-lifecycle`, `local-api`, `live-state-index`, `provider-hooks`, `status-command` |
 | `add-handoff-evaluation` | `handoff-evaluation` |
 | `add-t3-limit-rules` | `t3-connection`, `usage-readings`, `limit-rules`, `t3-thread-actions` |
-| `add-lifetime-license` | `license-keys`, `license-command`, `license-checkout`, `license-fulfillment`, `license-page` |
 
 Two pairs of capabilities touch the same command, and each pair is written so that the two parts
 agree. `agent-runs` (phase 3) defines `relay run`, and `run-continuation` (phase 4) adds the

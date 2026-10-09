@@ -5,7 +5,7 @@ import { join } from "node:path";
 const site = join(import.meta.dir, "..");
 const pub = join(site, "public");
 const read = (path: string) => Bun.file(path).text();
-const htmlFiles = readdirSync(pub, { recursive: true, encoding: "utf8" }).filter((name) => name.endsWith(".html") && !name.startsWith("fonts/"));
+const htmlFiles = readdirSync(pub).filter((name) => name.endsWith(".html"));
 const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe.each(htmlFiles)("%s", (name) => {
@@ -89,16 +89,25 @@ describe("site.js", () => {
   });
 });
 
-describe("license/license.js", () => {
-  const forbidden = ["localStorage", "sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "EventSource", "eval(", "new Function", "style=", "http"];
+describe("github.js", () => {
+  const forbidden = ["sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "EventSource", "eval(", "new Function", "innerHTML", "style"];
 
   test.each(forbidden)("does not contain %s", async (text) => {
-    expect(await read(join(pub, "license", "license.js"))).not.toContain(text);
+    const js = (await read(join(pub, "github.js"))).replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(js).not.toContain(text);
   });
 
-  test("calls only this site's /api/license", async () => {
-    const js = await read(join(pub, "license", "license.js"));
-    expect(js.match(/fetch\([^,]*/g)).toEqual(['fetch("/api/license?session_id=" + encodeURIComponent(sessionId)']);
+  test("asks only GitHub's API for relay's repository, without cookies or referrer", async () => {
+    const js = await read(join(pub, "github.js"));
+    expect(js.match(/https?:\/\/[^"'\s]*/g)).toEqual(["https://api.github.com/repos/FrejusGdm/relay"]);
+    expect(js.match(/fetch\([^)]*\)/g)).toEqual(['fetch(API, { credentials: "omit", referrerPolicy: "no-referrer" })']);
+  });
+
+  test("reads and writes localStorage only inside try blocks, under one key", async () => {
+    const js = await read(join(pub, "github.js"));
+    expect(js.match(/localStorage\.\w+\(/g)).toEqual(["localStorage.getItem(", "localStorage.setItem("]);
+    expect(js.match(/try \{\s*(var saved = JSON\.parse\()?localStorage\./g)?.length).toBe(2);
+    expect(js).toContain('var KEY = "relay-github-stars";');
   });
 });
 

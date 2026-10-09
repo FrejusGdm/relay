@@ -1,6 +1,6 @@
 # The website
 
-relay's website is one static page, a not-found page and the license page, built from the design preview
+relay's website is one static page and a not-found page, built from the design preview
 (`docs/design/preview.html`) with plain HTML, CSS and JavaScript. There is no build step and no
 framework: the folder `site/public/` is deployed exactly as it is in the repository. The change
 `openspec/changes/add-website/` describes every decision; this page explains how to work with the
@@ -18,16 +18,14 @@ assets, `relay-darwin-arm64` and `relay-linux-x64` (see "Deploying").
 |---|---|
 | `site/public/index.html` | The home page |
 | `site/public/404.html` | The page shown for an address that does not exist |
-| `site/public/license/index.html`, `site/public/license/license.js` | The license page that Stripe Checkout returns the buyer to; it shows the license key (`docs/licensing.md`) |
 | `site/public/styles.css` | All the CSS, including the `@font-face` rules |
 | `site/public/site.js` | The home page's JavaScript: the hero card's story, the closing panel's track map, the task graph and the copy buttons |
 | `site/public/theme.js` | The theme button; it applies the saved theme before the first paint |
 | `site/public/favicon.svg`, `site/public/robots.txt` | The tab icon, and the file that asks search engines to stay away |
-| `site/public/staticwebapp.config.json` | The headers, the 404 rule, the routes and the API runtime (`node:22`) for Azure Static Web Apps |
+| `site/public/staticwebapp.config.json` | The headers, the 404 rule and the routes for Azure Static Web Apps |
 | `site/public/fonts/` | The fonts, downloaded by `site/scripts/fetch-fonts.sh` and never committed |
 | `site/fonts.sha256` | The SHA-256 of each font file |
-| `site/buy-section.html`, `site/scripts/build.sh` | The buy section, and the script that builds the deployed copy of `site/public` with it (buying on) or without it (buying off); see `docs/licensing.md`, "The buy switch" |
-| `site/scripts/deploy.sh` | Deploys `site/public`, with `license-server/dist` as its API, to production or to a preview environment, then runs the smoke test against that address |
+| `site/scripts/deploy.sh` | Deploys `site/public` to the Static Web App, then runs the smoke test against the live address |
 | `site/scripts/smoke-test.sh` | Checks a running copy of the site: the page, the install commands, the headers and the 404 page |
 | `site/test/` | File checks that `bun test` runs, without a browser |
 | `site/e2e/site.pw.ts`, `site/playwright.config.ts` | Browser checks that Playwright runs |
@@ -44,9 +42,6 @@ flowchart LR
   css -->|"@font-face"| fonts["fonts/*.woff2"]
   script["scripts/fetch-fonts.sh"] -->|"downloads and checks with fonts.sha256"| fonts
   buttons["Get relay and CLI setup buttons"] -->|"popovertarget"| panel["#install panel in index.html"]
-  index -->|"buy form posts to"| api["/api/checkout (license-server)"]
-  licensepage["license/index.html"] -->|"loads"| licensejs["license/license.js"]
-  licensejs -->|"GET /api/license"| api
   js -->|"copy buttons, focus on the macOS command-line part"| panel
 ```
 
@@ -59,19 +54,13 @@ button on the home page opens the same panel, and `site.js` only adds the copy b
 focus to the macOS command-line part when the visitor clicked "Get relay" in the hero or the
 closing panel.
 
-The buy form in the pricing section posts to `/api/checkout`, the license server's function on
-the same site, and the license page's own script asks `/api/license` for the key. Addresses that
-start with `/license` get `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and a
-Content-Security-Policy that also allows `connect-src 'self'`; the site-wide policy allows forms to
-post to the site and to `https://checkout.stripe.com`. `docs/licensing.md` describes the license
-server.
-
 The pages load nothing from other servers and contain no inline script or style, because the
-Content-Security-Policy in `staticwebapp.config.json` allows only the site's own files. The
+Content-Security-Policy in `staticwebapp.config.json` allows only the site's own files; the one
+request to another server is the star count from GitHub's API, described below. The
 navigation has one theme button: it shows a moon on the light page and a sun on the dark page,
 and a click switches to the other theme. The page is light until the visitor chooses dark.
-`theme.js` remembers the choice in one `localStorage` entry, `relay-theme`, which is the only
-thing the site stores in the browser. Josué asked on 2026-10-08 for this button in place of the
+`theme.js` remembers the choice in one `localStorage` entry, `relay-theme`; the only other entry
+is the star count, `relay-github-stars`. Josué asked on 2026-10-08 for this button in place of the
 first Light, Dark and System switch, after seeing the live site.
 
 ## Fonts
@@ -102,13 +91,19 @@ navigation's "Get relay" to use the olive of the hero's main button, and for no 
 Every link goes to a part of the page, to the home page, to the Apache 2.0 license text or to the
 public repository, https://github.com/FrejusGdm/relay.
 
-The pricing section says that the core is free and that paid features will come later as a
-one-time payment for a lifetime license. It names no price, because the price is still Josué's
-decision. In `site/public` its paid column says "Not on sale yet". When buying is on,
-`site/scripts/build.sh` replaces that column with the buy section of `site/buy-section.html`
-(`id="buy"`, added by `add-lifetime-license`): a form with the button "Buy a lifetime license" that
-posts to `/api/checkout` and sends the buyer to Stripe's payment page, which shows the price.
-Production is deployed with buying off until live mode exists.
+relay is free: nothing is paid and nothing is locked (Josué's decision of 2026-10-09). The
+pricing section, "What relay costs.", makes a small joke of it. It shows the price `$19.99`, then
+the underlined line "I’m joking.", then "relay is free and open source." and "You already paid for
+the agents." The site has no buy button, no checkout, no license page and no API.
+
+The navigation links to the GitHub repository with GitHub's mark (Octicons `mark-github-16`, MIT
+License) and the star count, like the header of shadcn/ui. `site/public/github.js` asks
+`https://api.github.com/repos/FrejusGdm/relay` for `stargazers_count`, without cookies or
+referrer, and keeps the answer for an hour in the `localStorage` entry `relay-github-stars`. It
+writes counts above 999 as thousands (`1.2k`). When the request fails, or the repository is
+private and GitHub answers 404, the link shows no number. The count's width is kept free from the
+start, so the navigation does not move, and phones show the mark only. The Content-Security-Policy
+allows `connect-src https://api.github.com` for this request and nothing else.
 
 ## The install panel
 
@@ -165,15 +160,15 @@ bun run site:test
 
 They check that the pages have no inline script or style and load only their own files, that the
 stylesheet names no other server, that `site.js` uses no browser storage and makes no network
-request, that `license/license.js` uses no browser storage and calls only `/api/license`, that
-`theme.js` uses only its one `localStorage` entry, inside `try`, and no network,
+request, that `theme.js` uses only its one `localStorage` entry, inside `try`, and no network,
+that `github.js` asks only GitHub's API for the repository, without cookies or referrer, and uses
+only its one `localStorage` entry, inside `try`,
 that the font list is exact, and that `staticwebapp.config.json` holds exactly the headers
 of the design. They also check the content: the links, the section order, the headline and title,
 the theme button and the olive "Get relay" in the navigation, the absence of the hero's track
-lines, of the terminal section and of tool logos, the pricing words, the absence of any price,
-that `index.html` has no checkout, the license page's texts, the buy switch of
-`site/scripts/build.sh` (`site/test/build.test.ts`), `robots.txt`,
-and the exact install commands.
+lines, of the terminal section and of tool logos, the pricing note's three lines with `$19.99` as
+the only price, the absence of any buy form, checkout or license link, `robots.txt`, and the
+exact install commands.
 
 The browser checks need the fonts and Playwright's Chromium:
 
@@ -183,8 +178,7 @@ bunx playwright install chromium
 SITE_PORT=4280 bun run site:e2e
 ```
 
-Playwright starts Microsoft's Static Web Apps emulator on `site/public`, or on the folder in
-`SITE_ROOT` (for example a copy built by `site/scripts/build.sh`), at the port in `SITE_PORT`
+Playwright starts Microsoft's Static Web Apps emulator on `site/public`, at the port in `SITE_PORT`
 (4280 when it is not set), so the page gets the same headers and 404 rule as on Azure. The tests
 load the page at 1440, 1024 and 390 pixels wide, check that nothing sticks out of the window or out
 of a box that clips it, check the spacing, the fonts, the theme button (light by default, the dark
@@ -197,7 +191,15 @@ macOS command-line part, and that the Mac app block has no command and says the 
 released yet. They save full-page screenshots to `site/e2e/out/local-<width>.png` and screenshots
 of the open panel to `site/e2e/out/local-install-<width>.png`, and screenshots of the top of the
 page in each theme to `site/e2e/out/local-theme-light-<width>.png` and
-`site/e2e/out/local-theme-dark-<width>.png`.
+`site/e2e/out/local-theme-dark-<width>.png`. At 1440 and 390 pixels they check the pricing note in
+both themes, check that the page has no buy form or license link, and save the section to
+`site/e2e/out/local-pricing-light-<width>.png` and `site/e2e/out/local-pricing-dark-<width>.png`.
+Every browser test answers for GitHub's API itself, so no test reaches GitHub. The GitHub link
+tests check the count, its accessible name, the focus outline and the mark-only phone layout in
+both themes, and save the navigation to `site/e2e/out/local-nav-github-light-<width>.png` and
+`local-nav-github-dark-<width>.png` at 1440 and 390 pixels. Others check that a 404 or a failed
+request shows no number and saves nothing, that the count is kept for an hour, and that the
+navigation does not move when the count arrives.
 
 The emulator's server process can outlive Playwright. After a run, check that nothing still
 listens on the port, and stop a leftover process by the PID that `ss` shows:
@@ -216,8 +218,7 @@ the page needs the browser's types, which clash with Bun's. `bun run typecheck` 
 `site/scripts/smoke-test.sh` checks a running copy of the site at a base address: the home page
 answers 200 with the right title and the install commands, the Content-Security-Policy and the
 other security headers are exact, no cookie is set, the Satoshi font is served as `font/woff2`,
-`/.auth/login/github` and `/no-such-page` answer 404, the 404 page has its text, and `/license/`
-answers with `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. It prints
+`/.auth/login/github` and `/no-such-page` answer 404, and the 404 page has its text. It prints
 `Smoke test passed: <address>` or stops at the first failure with `Smoke test failed: <reason>`
 and exit code 1.
 
@@ -260,16 +261,8 @@ az staticwebapp show --subscription "Azure subscription 1" --name relay-site --r
 Deploy from the Omarchy machine, in the repository root, after `bun install`:
 
 ```sh
-bash site/scripts/deploy.sh                # production
-bash site/scripts/deploy.sh license-test   # a preview environment; production is left alone
+bash site/scripts/deploy.sh
 ```
-
-The script builds the deployed copy with `site/scripts/build.sh`: with buying on for a preview
-environment, and off for production unless `RELAY_LICENSE_BUY=on` is set. The smoke test then
-checks for the buy form, or its absence. The script also tests and builds the license server and deploys `license-server/dist` as the
-site's API, with the API build skipped. Azure keeps only the letters and digits of a preview
-environment's name (`license-test` becomes `licensetest`), and the script finds the preview
-address under that name.
 
 ```mermaid
 sequenceDiagram

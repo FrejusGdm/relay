@@ -12,6 +12,8 @@ another coding agent you use stops, for example at its usage limit, relay moves 
 job to another of your agents, with the same repository, plan and decisions.
 Agents own cognition; relay owns state.
 
+Early preview, built and maintained by one person; expect rough edges.
+
 ## What relay does, and what it does not do
 
 relay works with the coding agents you already use and pay for yourself, such as
@@ -34,13 +36,11 @@ and decisions.
 - The first handoff to a different company's tool asks for your confirmation, because
   it sends your code to that company.
 
-
-**Status:** early preview (v0.2.2): relay runs Claude Code or Codex on your own accounts, saves checkpoints, and hands a task from one to the other with `relay switch`. A first real handoff from Claude Code to Codex has worked; expect rough edges. Read [VISION.md](VISION.md) for the idea,
+relay v0.2.2 runs Claude Code or Codex on your own accounts, saves checkpoints, and hands a task from one to the other with `relay switch`. A first real handoff from Claude Code to Codex has worked. Read [VISION.md](VISION.md) for the idea,
 [docs/ROADMAP.md](docs/ROADMAP.md) for the plan and the open decisions, and
 [DESIGN.md](DESIGN.md) for the design direction.
 
-relay's core is free and stays free; a one-time payment for a lifetime license will unlock the
-paid features, and [docs/licensing.md](docs/licensing.md) explains how the license works.
+relay is free and open source: it has no paid features, no license key and nothing locked.
 
 ## Install
 
@@ -101,7 +101,6 @@ an agent" of [docs/adapters.md](docs/adapters.md) explains `relay run`.
 | [docs/mac-app.md](docs/mac-app.md) | The Mac menu-bar app: install, first launch, how it talks to the daemon, and how it is built |
 | `DESIGN.md`, `docs/design/` | The design direction and its working preview |
 | `site/` | The public website, deployed to Azure Static Web Apps; see [docs/website.md](docs/website.md) |
-| `license-server/` | The server that sells and delivers the lifetime license with Stripe Checkout; see [docs/licensing.md](docs/licensing.md) |
 | `openspec/` | Project rules (`config.yaml`) and detailed change proposals for the first version |
 | `AGENTS.md`, `CLAUDE.md` | Instructions for coding agents |
 
