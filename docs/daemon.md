@@ -419,7 +419,7 @@ to `logs/workers/`, and relay saves a checkpoint when it ends.
 | Situation | What the daemon does |
 |---|---|
 | The reset time is known | Resumes 60 seconds after it, plus a random delay of up to 30 seconds. |
-| The reset time is unknown | Checks again every 15 minutes, plus a random delay of up to a minute, never more often. A check reads the account's availability: Codex's rate limits through the app server, or what relay recorded for Claude Code (the status line, hooks, other sessions). A future reset time is waited for; a newer reading that still says limited means another 15 minutes; otherwise relay resumes. |
+| The reset time is unknown | Checks again every 15 minutes, plus a random delay of up to a minute, never more often. A check reads the account's availability without spending usage: Codex's rate limits through the app server, or Claude Code's `claude -p "/usage" --no-session-persistence` with the account's profile folder, and what relay recorded (the status line, hooks, other sessions). A future reset time is waited for; a newer reading that still says limited means another 15 minutes; otherwise relay resumes. |
 | The resumed agent completes its turn | The wait ends with exit code 0. |
 | It stops at a usage limit again | relay waits again. After 3 resumes in a row that hit the limit again (`--max-resumes`), the wait ends with exit code 23. A resume made without a known reset time does not count, and such a wait ends after 7 days. |
 | It stops with `credits_required` or any other failure | The wait ends at once, with that run's exit code. |
@@ -446,9 +446,13 @@ same for the threads the person chose, through the connection `relay t3 connect`
 tools only. Every 60 seconds the daemon lists the failed threads of each T3 project. T3 shows no
 limit status and no reset time to outside programs, so for each new failed run of a chosen thread
 relay reads the run's last timeline items once and looks for the limit message of Claude Code or
-Codex in its error item, such as "You've hit your session limit · resets 6:50pm". It takes the reset
-time from that message, or from the account's recorded availability, or checks every 15 minutes as
-above.
+Codex in its error item, such as "You've hit your session limit · resets 6:50pm", or T3's own
+wording, such as "Claude usage limit reached. Send the message again once the limit resets." It
+takes the reset time from the run's messages (in the time zone they name), from the account's
+recorded availability, or from Claude Code's `/usage` or Codex's rate limits, and otherwise checks
+every 15 minutes as above. Because you see every message in the thread, relay never sends blindly:
+when no reading exists at all, it sends once 5 hours have passed since the stop, the longest a
+session limit lasts.
 
 At the time, relay reads the thread again and sends "The usage limit has reset. Continue the task
 from where you stopped." only when the thread has no active run and its newest run is still the one
@@ -457,7 +461,8 @@ that stopped. It sends with `mode: "queue"`, which never steers a running turn, 
 send in `t3/resume-at-reset.json` before it calls T3, so a daemon restart never sends twice. When
 the thread moved on (the person, T3's own resume or another program continued it), relay sends
 nothing. After 3 sends in a row whose next run stopped at the limit again (`max_resumes`), relay
-stops for that thread until a run completes. Every action is a line in `t3/actions.jsonl` with the
+stays away from that thread, also when your own retries hit the limit, until one of its runs
+completes. Every action is a line in `t3/actions.jsonl` with the
 thread ID, run ID, account and times only; message texts and thread titles are never stored or
 logged. `relay resume-at-reset off --thread <id>` cancels a thread's wait.
 
