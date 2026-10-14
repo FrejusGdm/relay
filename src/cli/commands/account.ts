@@ -300,6 +300,7 @@ const STATE_TEXT: Record<Availability["state"], string> = {
 };
 const SOURCE_TEXT: Record<Availability["source"], string> = {
   provider_api: "provider",
+  usage_command: "usage command",
   stream_event: "agent output",
   hook: "hook",
   status_line: "status line",

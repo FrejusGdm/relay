@@ -61,6 +61,7 @@ export async function workerFacts(
 function howItEnded(record: WorkerRecord): string {
   if (record.lastFailure === "usage_limit") return "stopped at its usage limit";
   if (record.lastFailure === "rate_limit") return "stopped at a rate limit";
+  if (record.lastFailure === "credits_required") return "stopped because the account needs usage credits";
   if (record.endReason === "stopped_by_switch") return "stopped by relay switch";
   if (record.endReason === "exited" && record.exitCode !== null) return `exited by itself with code ${record.exitCode}`;
   return "was stopped when its relay run ended";

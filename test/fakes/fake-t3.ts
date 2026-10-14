@@ -18,6 +18,8 @@ export interface FakeThread {
   model: string;
   runtimeMode: "full-access";
   runs: FakeThreadRun[];
+  // Timeline items of the activity view, oldest first, such as a failed run's error item.
+  items?: { type: string; runId: string | null; text: string | null }[];
 }
 export interface FakeProject { id: string; title: string; workspaceRoot: string }
 export interface FakeT3Options {
@@ -29,6 +31,8 @@ export interface FakeT3Options {
   pairingCode?: string;
   expiresIn?: number;
   echoTokenError?: boolean;
+  // Runs before each tool call, so a test can change state while relay waits for an answer.
+  beforeCall?: (tool: string, args: Record<string, unknown>) => Promise<void> | void;
 }
 export interface FakeT3 {
   url: string;
@@ -58,9 +62,14 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
   let sequence = 0;
 
   const schemas = {
-    t3_project_list: z.object({}),
-    t3_thread_list: z.object({ projectId: z.string().optional() }),
-    t3_thread_read: z.object({ threadId: z.string() }),
+    t3_project_list: z.object({ cursor: z.number().int().optional(), limit: z.number().int().optional() }),
+    t3_thread_list: z.object({
+      projectId: z.string().optional(), statuses: z.array(z.string()).optional(), cursor: z.number().int().optional(), limit: z.number().int().optional(),
+    }),
+    t3_thread_read: z.object({
+      threadId: z.string(), view: z.enum(["messages", "activity"]).optional(), afterPosition: z.number().int().optional(),
+      limit: z.number().int().optional(), runLimit: z.number().int().optional(),
+    }).strict(),
     t3_thread_configure: z.object({ threadId: z.string(), modelSelection: z.object({ instanceId: z.string(), model: z.string() }) }),
     t3_thread_send: z.object({ threadId: z.string(), message: z.string(), mode: z.enum(["auto", "queue", "steer", "restart"]), clientRequestId: z.string() }),
     t3_thread_interrupt: z.object({ threadId: z.string(), runId: z.string().optional(), reason: z.string().optional() }),
@@ -68,7 +77,7 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
   };
 
   const runTool = (tool: string, args: Record<string, unknown>): Record<string, unknown> | null => {
-    if (tool === "t3_project_list") return { projects: options.projects ?? [] };
+    if (tool === "t3_project_list") return { projects: options.projects ?? [], nextCursor: null };
     if (tool === "orchestrator_capabilities") {
       return { providers: (options.instances ?? []).map((instance) => ({
         providerInstanceId: instance.providerInstanceId, driverKind: instance.driverKind,
@@ -76,7 +85,9 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
       })) };
     }
     if (tool === "t3_thread_list") {
-      return { threads: threads.filter((thread) => args.projectId === undefined || thread.projectId === args.projectId).map((thread) => ({
+      const statuses = args.statuses as string[] | undefined;
+      return { nextCursor: null, threads: threads.filter((thread) => (args.projectId === undefined || thread.projectId === args.projectId)
+        && (statuses === undefined || statuses.includes(statusOf(thread)))).map((thread) => ({
         threadId: thread.threadId, title: thread.title, status: statusOf(thread),
         latestRunId: thread.runs[0]?.runId ?? null, providerInstanceId: thread.providerInstanceId,
         model: thread.model, runtimeMode: thread.runtimeMode,
@@ -86,12 +97,17 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
     const thread = threads.find((item) => item.threadId === args.threadId);
     if (!thread) return null;
     if (tool === "t3_thread_read") {
+      const timeline = (thread.items ?? []).map((item, position) => ({ position, ...item }));
+      const after = typeof args.afterPosition === "number" ? args.afterPosition : -1;
+      const page = timeline.filter((item) => item.position > after).slice(0, typeof args.limit === "number" ? args.limit : 50);
       return {
         thread: {
           threadId: thread.threadId, status: statusOf(thread), activeRunId: activeRun(thread)?.runId ?? null,
-          providerInstanceId: thread.providerInstanceId, model: thread.model, runtimeMode: thread.runtimeMode,
+          providerInstanceId: thread.providerInstanceId, model: thread.model, runtimeMode: thread.runtimeMode, itemCount: timeline.length,
         },
-        recentRuns: thread.runs.map((run) => ({ ...run, providerInstanceId: thread.providerInstanceId, model: thread.model })),
+        recentRuns: thread.runs.slice(0, typeof args.runLimit === "number" ? args.runLimit : 5)
+          .map((run) => ({ ...run, providerInstanceId: thread.providerInstanceId, model: thread.model })),
+        items: page, nextPosition: page.at(-1)?.position ?? null, hasMore: page.length > 0 && page.at(-1)!.position < timeline.length - 1,
       };
     }
     if (tool === "t3_thread_configure") {
@@ -126,6 +142,7 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
       const inputSchema: z.ZodObject = schemas[tool];
       server.registerTool(tool, { description: `Fake ${tool} for relay tests.`, inputSchema }, async (args) => {
         calls.push({ tool, args, authorization: authorization.getStore() ?? null });
+        await options.beforeCall?.(tool, args);
         const result = runTool(tool, args);
         if (result === null) return { content: [{ type: "text", text: "The thread or active run was not found." }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };

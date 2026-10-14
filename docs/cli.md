@@ -15,7 +15,7 @@ commands do not yet. The change named in the "Built by" column builds each one.
 | Command | Usage | Arguments | Built by |
 |---|---|---|---|
 | `init` | `relay init [--title <text>]` | none | `add-checkpoint-engine` |
-| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` |
+| `run` | `relay run [<provider[:account]>] [--headless] [--prompt <text> \| --prompt-file <path>] [--resume <id> \| --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary] [--resume-at-reset [--max-resumes <n>]]` | 0 or 1 | `add-provider-adapters`, extended by `add-relay-switch` and `add-resume-at-reset` |
 | `checkpoint` | `relay checkpoint [-m <text>] [--include <path>]... [--json]` | none | `add-checkpoint-engine` |
 | `checkpoints` | `relay checkpoints [--json]` | none | `add-checkpoint-engine` |
 | `rollback` | `relay rollback [<checkpoint>] [--yes] [--dry-run]` | 0 or 1 | `add-checkpoint-engine` |
@@ -30,6 +30,8 @@ commands do not yet. The change named in the "Built by" column builds each one.
 | `statusline` | `relay statusline <provider>` | 1 | `add-provider-adapters` |
 | `daemon` | `relay daemon <start\|stop\|restart\|status\|run>` | 1 | `add-daemon-api-and-status` |
 | `doctor` | `relay doctor --reindex` | none | `add-daemon-api-and-status` |
+| `resume-at-reset` | `relay resume-at-reset off [--job <id> \| --thread <id>]` | 1 | `add-resume-at-reset` |
+| `t3` | `relay t3 <connect\|disconnect>` | 1 | `add-resume-at-reset` (the sign-in is from `add-t3-limit-rules`) |
 
 The `\|` in the table stands for `|`. An option followed by `...`, such as `[--include <path>]...`, may be given more than once. Every command also accepts `-h`, `--help` and
 `--log-level <level>`, where the level is `debug`, `info`, `warn` or `error`. Options come after
@@ -252,7 +254,10 @@ All relay commands share this table. `src/cli/exit-codes.ts` holds the same numb
 | 31 | `StartFailed` | The next agent did not start; the handoff is ready to retry. |
 | 32 | `WouldRaisePermission` | A handoff would give the next agent less supervision or more permission than the job had. |
 | 33 | `CannotStop` | The current agent could not be stopped, or the `relay run` that holds it did not answer. |
-| 9 to 63 | (reserved) | Specific outcomes added by later changes: 40 to 42 by `add-t3-limit-rules`. The other numbers are free, including 50 and 51, which the removed license command used. |
+| 40 | `T3NotAnswering` | T3 Code does not answer at `t3.url`. |
+| 41 | `T3TooOld` | This T3 Code build cannot be driven by other programs. |
+| 42 | `T3Refused` | T3 Code refused relay's sign-in, or the connection has expired. |
+| 9 to 63 | (reserved) | Specific outcomes added by later changes. The other numbers are free, including 50 and 51, which the removed license command used. |
 | 69 | `NotAvailable` | The command exists but this version cannot do it (`EX_UNAVAILABLE`). |
 | 70 | `Internal` | A bug in relay (`EX_SOFTWARE`). |
 | 78 | `Settings` | The relay folder, `config.toml` or a relay environment variable is wrong (`EX_CONFIG`). |
@@ -270,11 +275,13 @@ lists the other codes of the commands that `add-provider-adapters` and `add-rela
 
 | Command | Exit codes |
 |---|---|
-| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access or a session of another account; 4 a secret in the work when relay saves the checkpoint at the agent's exit, or in a handoff; 7 an answer is needed, such as the first handoff to an account or a change of the checks without a terminal; 31 the agent of a handoff did not start; 32 the handoff would raise the mode or the permission; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code |
+| `relay run` | 0 the turn completed; 3 relay is not set up here; 6 another agent works on the job; 20 the program is missing or too old; 21 no such account; 22 not signed in or the key variable is missing; 23 the agent stopped at a limit; 24 the agent failed, crashed or asked for a permission; 25 refused by full access or a session of another account; 4 a secret in the work when relay saves the checkpoint at the agent's exit, or in a handoff; 7 an answer is needed, such as the first handoff to an account or a change of the checks without a terminal; 31 the agent of a handoff did not start; 32 the handoff would raise the mode or the permission; 78 an unsafe profile folder; 130 interrupted with Ctrl+C; 143 stopped by SIGTERM or SIGHUP; an interactive run otherwise exits with the agent's own exit code. With `--resume-at-reset`, a stop at a usage limit does not end the run: it exits when the wait ends, with 0 when a resumed agent finished the task, 23 when relay gave up or the wait was cancelled, 130 when Ctrl+C cancelled the wait, or the resumed agent's own code |
 | `relay switch` | 0 switched or prepared; 1 a failure after the switch started; 3 not set up, or no agent worked on the job; 4 the secret scan; 5 git's settings or hooks changed; 6 the job is busy; 7 an answer is needed or was no; 20 to 22 the next agent's program or account is not ready; 25 full access; 31 the next agent did not start; 32 the mode or permission would go up; 33 the agent could not be stopped, or its `relay run` did not answer. After an interactive start, `relay switch` supervises the next agent and exits as `relay run` would. `docs/handoff.md` says what to do after each code |
 | `relay account` | 0 done; 1 the account table could not be found to remove; 6 another command is changing `config.toml`; 7 an answer is needed; 20 the program is missing; 21 no such account; 22 the sign-in did not finish; 78 an unsafe profile folder |
 | `relay hooks` | 0 done; 1 a settings file could not be changed, or relay runs from source without `RELAY_BIN`; 7 an answer is needed; 21 no such account; 78 an unsafe profile folder |
 | `relay policy show` | 0 done; 2 a provider relay has no adapter for |
+| `relay resume-at-reset off` | 0 cancelled; 1 no wait to cancel; 3 not in a relay job and no `--job` |
+| `relay t3` | 0 done; 7 `connect` without a terminal; 40 T3 Code does not answer; 41 the T3 build is too old; 42 T3 refused the sign-in; 78 a `t3.url` that is not on this computer |
 | `relay providers` | 0 done |
 
 ## How to add a command

@@ -13,6 +13,7 @@ export async function run(ctx: CommandContext): Promise<number> {
       promptFile: text("prompt-file"), resume: text("resume"), permission: text("permission"), model: text("model"),
       json: ctx.values.json === true, checks: parseChecks(ctx.values.check as string[] | undefined),
       yes: ctx.values.yes === true, noSummary: ctx.values["no-summary"] === true,
+      resumeAtReset: ctx.values["resume-at-reset"] === true, maxResumes: text("max-resumes"),
     });
   } catch (error) {
     if (error instanceof ProfileError) {

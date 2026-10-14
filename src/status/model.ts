@@ -2,6 +2,8 @@
 // lanes need, each row's role and activity, and the closing sentence. The text and JSON renderers
 // both start from this view, so they always agree.
 import { PROVIDER_NAMES, type AccountView, type JobView, type WorkerView } from "../state/queries";
+import type { WaitRecord } from "../resume/wait";
+import type { T3Wait } from "../t3/resume-state";
 
 export interface StatusData {
   job: JobView;
@@ -10,6 +12,9 @@ export interface StatusData {
   daemon: "running" | "not_running";
   // Built from the files because the daemon did not answer or has not indexed the project yet.
   savedState: boolean;
+  // add-resume-at-reset: the job's wait, and the waits of T3 threads.
+  resumeAtReset?: WaitRecord | null;
+  t3Waits?: T3Wait[];
 }
 
 export type Role = "previous" | "current" | "other";
@@ -27,6 +32,8 @@ export interface StatusView {
   closing: string;
   daemon: "running" | "not_running";
   savedState: boolean;
+  resumeAtReset: WaitRecord | null;
+  t3Waits: T3Wait[];
 }
 
 export function buildView(data: StatusData): StatusView {
@@ -46,7 +53,10 @@ export function buildView(data: StatusData): StatusView {
     if (other.configured && !shown.has(other.target)) rows.push({ account: other, role: "other", activity: "idle" });
   }
 
-  return { job, rows, closing: closingSentence(current), daemon: data.daemon, savedState: data.savedState };
+  return {
+    job, rows, closing: closingSentence(current), daemon: data.daemon, savedState: data.savedState,
+    resumeAtReset: data.resumeAtReset ?? null, t3Waits: data.t3Waits ?? [],
+  };
 }
 
 function activityOf(worker: WorkerView): Activity {

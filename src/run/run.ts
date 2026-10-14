@@ -52,6 +52,10 @@ import {
   type SwitchRequest,
 } from "./control";
 import { relayInstructions } from "./instructions";
+import { recordWaiting, waitAfterStop } from "../resume/jobs";
+import { cancelHint, followWait, waitingLine } from "../resume/follow";
+import { DEFAULT_MAX_RESUMES, isUsageLimit, MAX_RESUMES_LIMIT, resumeTiming } from "../resume/timing";
+import { endWait, readWait, withWaitLock, writeWait, type WaitRecord } from "../resume/wait";
 import { findJobContext } from "./job-context";
 import { failureLine, jsonLine, limitLine, progressLines, sessionLine } from "./progress";
 import { checkAgentReady } from "./ready";
@@ -72,6 +76,9 @@ export interface RunOptions {
   checks: string[] | null;
   yes: boolean;
   noSummary: boolean;
+  // add-resume-at-reset: wait for a usage limit to reset and continue the same session.
+  resumeAtReset?: boolean;
+  maxResumes?: string;
 }
 
 const PERMISSIONS = ["read-only", "edit-in-workspace", "full-access"];
@@ -127,6 +134,7 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
     throw usage("relay: --permission works only with --headless. An agent in your terminal asks you itself.");
   }
   if (options.headless && prompt === undefined) throw usage("A headless run needs --prompt or --prompt-file.");
+  const maxResumes = parseMaxResumes(options);
 
   const { job, state } = await findJobContext(ctx.cwd, ctx.relayHome);
   const repo = await openRepository(job.worktreeRoot);
@@ -172,7 +180,34 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
   // The agent's hooks need a receiver (add-daemon-api-and-status, design decision 6).
   await ensureDaemon({ relayHome: ctx.relayHome, env: ctx.env, err: ctx.io.err });
   const supervisor = new JobSupervisor(ctx, job, registry, say, options.json);
+  const armed = maxResumes === null ? false : await armWait(ctx, job, account, permission, options.model ?? null, maxResumes);
+  let following: { wait: WaitRecord; after: number } | null = null;
+  let code: number;
   try {
+    try {
+      code = await runFirst();
+    } catch (error) {
+      if (armed) {
+        // Only the wait this run armed ends here; another process's wait is left alone.
+        await withWaitLock(ctx.relayHome, job.id, async () => {
+          const wait = readWait(ctx.relayHome, job.id);
+          if (wait?.state === "watching" && wait.owner_pid === process.pid) {
+            await endWait(ctx.relayHome, wait, "stopped", "run_failed", error instanceof CommandError ? error.code : ExitCode.Internal);
+          }
+        }).catch(() => {});
+      }
+      throw error;
+    }
+    if (armed) following = await settleWait(ctx, job, supervisor, registry, code);
+  } finally {
+    supervisor.close();
+  }
+  if (following === null) return code;
+  say(waitingLine(following.wait));
+  say(cancelHint(job.id));
+  return await followWait(ctx, job, following.wait, options.json, say, following.after);
+
+  async function runFirst(): Promise<number> {
     // A job with earlier work continues through a handoff, unless the person resumes a session.
     if (records.length > 0 && options.resume === undefined) {
       const reused = await reusePrepared(ctx, repo, job, account, say);
@@ -203,9 +238,83 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
       fromHandoff: null, startCheck: false,
     });
     return await supervisor.supervise(worker);
-  } finally {
-    supervisor.close();
   }
+}
+
+// --resume-at-reset and --max-resumes (add-resume-at-reset): null when resume at reset is off.
+function parseMaxResumes(options: RunOptions): number | null {
+  if (options.resumeAtReset !== true) {
+    if (options.maxResumes !== undefined) throw usage("relay: --max-resumes works only with --resume-at-reset.");
+    return null;
+  }
+  if (!options.headless) throw usage("relay: --resume-at-reset works only with --headless.");
+  if (options.maxResumes === undefined) return DEFAULT_MAX_RESUMES;
+  const value = Number(options.maxResumes);
+  if (!/^\d+$/.test(options.maxResumes) || value < 1 || value > MAX_RESUMES_LIMIT) {
+    throw usage(`relay: --max-resumes must be a whole number from 1 to ${MAX_RESUMES_LIMIT}.`);
+  }
+  return value;
+}
+
+// Writes the job's wait in the state watching before the first agent starts, so relay status shows
+// that resume at reset is on and relay resume-at-reset off can turn it off. A wait that another
+// process is using (a relay run whose agent works, or the daemon running a resumed agent) is never
+// replaced: the run is refused. A wait that only waits ends: this run takes the job over.
+async function armWait(
+  ctx: CommandContext, job: JobRef, account: Account, permission: PermissionLevel, model: string | null, maxResumes: number,
+): Promise<boolean> {
+  await withWaitLock(ctx.relayHome, job.id, async () => {
+    const earlier = readWait(ctx.relayHome, job.id);
+    if (readSupervisor(ctx.relayHome, job.id) !== null || earlier?.state === "resuming"
+      || (earlier?.state === "watching" && earlier.owner_pid !== null && processAlive(earlier.owner_pid))) {
+      throw new CommandError(ExitCode.Busy, [
+        `relay: Another relay process is working on this job with resume at reset. To stop it, run relay resume-at-reset off --job ${job.id}`,
+      ]);
+    }
+    if (earlier !== null) await endWait(ctx.relayHome, earlier, "cancelled", "job_moved_on", ExitCode.LimitReached);
+    writeWait(ctx.relayHome, {
+      schema_version: 1, job_id: job.id, root: job.worktreeRoot, account: account.id, provider: account.provider, session_id: null,
+      permission, model, max_resumes: maxResumes, state: "watching", stop: null, next_check_at: null, resumes: 0, resumes_in_a_row: 0,
+      counted: false, waiting_since: null, worker_id: null, owner_pid: process.pid, updated_at: now().toISOString(),
+    });
+    await appendEvent(job, "resume_at_reset_on", { worker_id: null, target: account.id, max_resumes: maxResumes });
+  });
+  return true;
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code === "EPERM";
+  }
+}
+
+// After the first agent: a stop at a usage limit hands the job to the daemon, which waits; any other
+// end ends the wait. This runs while relay run still holds the worker lock, so the daemon cannot
+// resume before relay run has let the job go.
+async function settleWait(
+  ctx: CommandContext, job: JobRef, supervisor: JobSupervisor, registry: AdapterRegistry, code: number,
+): Promise<{ wait: WaitRecord; after: number } | null> {
+  return await withWaitLock(ctx.relayHome, job.id, async () => {
+    const wait = readWait(ctx.relayHome, job.id);
+    // relay resume-at-reset off ended it while the agent ran.
+    if (wait === null) return null;
+    const last = supervisor.lastEnd;
+    const turn = last?.lastTurn ?? null;
+    if (code === ExitCode.LimitReached && last !== null && turn !== null && !turn.completed && isUsageLimit(turn.reason)) {
+      const next = await waitAfterStop({
+        relayHome: ctx.relayHome, env: ctx.env, timing: resumeTiming(ctx.env), wait, last, adapter: registry.get(last.account.provider),
+      });
+      writeWait(ctx.relayHome, next);
+      return { wait: next, after: await recordWaiting(ctx.relayHome, next) };
+    }
+    const reason = code === ExitCode.Ok ? "completed" : turn !== null && !turn.completed ? turn.reason : last?.interrupted ? "interrupted" : "exited";
+    await endWait(ctx.relayHome, wait, code === ExitCode.Ok ? "finished" : "stopped", reason, code);
+    if (reason === "credits_required") ctx.io.err("relay does not wait for this.\n");
+    return null;
+  });
 }
 
 // What a job supervisor needs of the command that runs it. The daemon gives its own
@@ -354,7 +463,7 @@ function resolveResume(
   return resume;
 }
 
-interface WorkerPlan {
+export interface WorkerPlan {
   account: Account;
   adapter: ProviderAdapter;
   mode: Mode;
@@ -373,7 +482,22 @@ interface WorkerPlan {
 
 type Signal = "SIGINT" | "SIGTERM" | "SIGHUP";
 type ExitStatus = { code: number | null; signal: string | null };
-type LastTurn = { completed: true } | { completed: false; reason: FailureReason; retryAt?: Date };
+export type LastTurn = { completed: true } | { completed: false; reason: FailureReason; retryAt?: Date };
+
+// How the last worker of a supervisor ended, for resume at reset (add-resume-at-reset, design
+// decision 5): the worker, its account and session, and its last turn.
+export interface LastEnd {
+  workerId: string;
+  account: Account;
+  sessionId: string | null;
+  permission: PermissionLevel;
+  model: string | null;
+  lastTurn: LastTurn | null;
+  interrupted: boolean;
+  terminated: boolean;
+  code: number;
+  endedAt: Date;
+}
 
 interface Ended {
   switched: boolean;
@@ -404,6 +528,7 @@ interface Worker {
 // daemon, `signals` is false: the daemon keeps its own signal handlers and stops agents itself.
 export class JobSupervisor {
   exitCode: number = ExitCode.Ok;
+  lastEnd: LastEnd | null = null;
   private lock: WorkerLock | null = null;
   private forgetLock: (() => void) | null = null;
   private stopListening: (() => void) | null = null;
@@ -838,6 +963,16 @@ export class JobSupervisor {
 
   // After the last agent ends: the closing lines, a checkpoint of kind auto, and the exit code.
   private async finish(worker: Worker, ended: Ended): Promise<number> {
+    const code = await this.closeWorker(worker, ended);
+    this.lastEnd = {
+      workerId: worker.record.worker_id, account: worker.plan.account, sessionId: worker.record.provider_session_id,
+      permission: worker.plan.permission, model: worker.plan.model ?? null, lastTurn: ended.lastTurn,
+      interrupted: ended.interrupted, terminated: ended.terminated, code, endedAt: now(),
+    };
+    return code;
+  }
+
+  private async closeWorker(worker: Worker, ended: Ended): Promise<number> {
     const code = outcome(this.ctx, worker, ended, this.say);
     const { account } = worker.plan;
     const label = accountLabel(account);
@@ -875,7 +1010,7 @@ function outcome(ctx: SupervisorContext, worker: Worker, result: Ended, say: (li
   const { adapter, account } = worker.plan;
   const err = (line: string) => ctx.io.err(`${line}\n`);
   const { lastTurn, status } = result;
-  const limit = lastTurn !== null && !lastTurn.completed && (lastTurn.reason === "usage_limit" || lastTurn.reason === "rate_limit")
+  const limit = lastTurn !== null && !lastTurn.completed && (lastTurn.reason === "usage_limit" || lastTurn.reason === "rate_limit" || lastTurn.reason === "credits_required")
     ? { reason: lastTurn.reason, retryAt: lastTurn.retryAt } : null;
   if (result.interrupted) {
     const sessionId = worker.record.provider_session_id;

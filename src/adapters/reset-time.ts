@@ -55,3 +55,41 @@ export function resetTimeFromText(text: string, after: Date = now()): Date | und
   }
   return undefined;
 }
+
+// Like resetTimeFromText, but a time zone named in parentheses, as in "6:50pm (Europe/Berlin)",
+// is honoured: the time is read as that zone's clock (add-resume-at-reset). Text without a zone,
+// or with a name the system does not know, is read as local time.
+export function resetTimeInZone(text: string, after: Date = now()): Date | undefined {
+  const zone = /\(([A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)*)\)\s*\.?\s*$/.exec(text.trim())?.[1];
+  if (zone === undefined || !knownZone(zone)) return resetTimeFromText(text, after);
+  // The zone's clock at `after`, as a local date, so the local reading finds the next moment that
+  // clock shows the time; its fields are then read back as the zone's clock.
+  const shifted = new Date(after.getTime() + (offsetMs(after, zone) - localOffsetMs(after)));
+  const wall = resetTimeFromText(text, shifted);
+  if (wall === undefined) return undefined;
+  const guess = Date.UTC(wall.getFullYear(), wall.getMonth(), wall.getDate(), wall.getHours(), wall.getMinutes());
+  const first = guess - offsetMs(new Date(guess), zone);
+  return new Date(guess - offsetMs(new Date(first), zone));
+}
+
+function knownZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// How far the zone's clock is ahead of UTC at `at`, in milliseconds.
+function offsetMs(at: Date, zone: string): number {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(at).map((part) => [part.type, part.value]));
+  const wall = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+  return wall - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+function localOffsetMs(at: Date): number {
+  return -at.getTimezoneOffset() * 60_000;
+}

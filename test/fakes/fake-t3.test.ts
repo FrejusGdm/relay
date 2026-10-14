@@ -57,9 +57,9 @@ test("all tool fields, project filtering, configuration, send deduplication and 
   const { fake, client } = await connected();
   const call = async (name: string, args: Record<string, unknown> = {}) =>
     (await client.callTool({ name, arguments: args })).structuredContent;
-  expect(await call("t3_project_list")).toEqual({ projects: [{ id: "project-1", title: "A project", workspaceRoot: "/tmp/project" }] });
+  expect(await call("t3_project_list")).toEqual({ projects: [{ id: "project-1", title: "A project", workspaceRoot: "/tmp/project" }], nextCursor: null });
   expect(await call("orchestrator_capabilities")).toEqual({ providers: [{ providerInstanceId: "codex", driverKind: "codex", models: [{ id: "gpt-6.1-sol" }] }] });
-  expect(await call("t3_thread_list", { projectId: "other" })).toEqual({ threads: [] });
+  expect(await call("t3_thread_list", { projectId: "other" })).toEqual({ threads: [], nextCursor: null });
   expect(await call("t3_thread_list", { projectId: "project-1" })).toMatchObject({ threads: [{
     threadId: "thread-1", title: fake.threads[0]!.title, status: "running", latestRunId: "run-1",
     providerInstanceId: "claude", model: "sonnet", runtimeMode: "full-access", updatedAt: "2026-10-08T00:00:00.000Z",

@@ -16,6 +16,11 @@ import { preflight, type HandoffEnv } from "../handoff/preflight";
 import { CommandError } from "../cli/errors";
 import { handSwitchOver } from "../run/control";
 import { JobSupervisor, switchJson, type SupervisorContext } from "../run/run";
+import { relayInstructions } from "../run/instructions";
+import { CONTINUE_PROMPT } from "../resume/timing";
+import type { Started } from "../resume/jobs";
+import type { WaitRecord } from "../resume/wait";
+import type { Account } from "../core/config/types";
 import type { CheckpointView } from "../state/queries";
 import type { HeadlessWorkers } from "./workers";
 
@@ -113,6 +118,43 @@ export async function switchJob(
     supervisor.close();
     throw error;
   }
+}
+
+// Resume at reset (add-resume-at-reset, design decision 5): resumes the wait's provider session on
+// the wait's account, headless, with the job's permission and model, under a job supervisor in the
+// daemon, as a switch through the API does. The supervisor takes the worker lock, so a job another
+// relay process holds is refused with exit code 6.
+export async function resumeJob(ctx: EngineContext, wait: WaitRecord, account: Account): Promise<Started> {
+  const config = readConfig(ctx);
+  const repo = await openProject(ctx.relayHome, { id: wait.job_id, root: wait.root });
+  const { job, state } = findJob(repo, ctx.relayHome);
+  const registry = createAdapterRegistry({}, ctx.env);
+  const adapter = registry.get(account.provider);
+  const detection = await adapter.detect();
+  const supervisor = new JobSupervisor(supervisorContext(ctx, config), job, registry, () => {}, false, false);
+  let workerId: string;
+  let supervised: Promise<number>;
+  try {
+    const worker = await supervisor.begin({
+      account, adapter, mode: "headless", permission: wait.permission, instructions: relayInstructions(job.id, job.worktreeRoot),
+      prompt: CONTINUE_PROMPT, ...(wait.session_id === null ? {} : { resume: wait.session_id }),
+      ...(wait.model === null ? {} : { model: wait.model }), providerVersion: detection.version ?? null,
+      startCheckpoint: state.latest_checkpoint?.number ?? null, fromHandoff: null, startCheck: false,
+    });
+    workerId = worker.record.worker_id;
+    supervised = supervisor.supervise(worker);
+  } catch (error) {
+    supervisor.close();
+    throw error;
+  }
+  const done = supervised.then(() => supervisor.lastEnd).finally(() => supervisor.close());
+  ctx.workers.add(job.id, {
+    running: () => supervisor.runningRecord(),
+    stop: () => supervisor.stopRunning(),
+    finishSwitch: () => supervisor.stopTakingRequests(),
+    done,
+  });
+  return { workerId, done };
 }
 
 // config.toml is read for each request, because relay account and the allow list change it while

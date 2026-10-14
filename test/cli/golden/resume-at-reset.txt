@@ -1,0 +1,17 @@
+Usage
+  relay resume-at-reset off [--job <id> | --thread <id>]
+
+Cancel a wait for a usage limit to reset.
+relay run --headless --resume-at-reset turns it on for a job,
+and [t3.resume_at_reset] in config.toml turns it on for T3 Code threads.
+Without --job or --thread, relay cancels the wait of the job in this folder.
+
+Examples
+  relay resume-at-reset off
+  relay resume-at-reset off --job 3f9a2c1d
+
+Options
+      --job <id>           Cancel this job's wait
+      --thread <id>        Cancel this T3 Code thread's wait
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error

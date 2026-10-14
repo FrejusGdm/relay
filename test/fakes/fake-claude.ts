@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { startRecord } from "./record";
-import { crashWith, loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
+import { crashWith, forResume, loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
 import type { Scenario } from "./scenario";
 import { runHooks, runStatusLine } from "./run-hooks";
 
@@ -52,7 +52,7 @@ if (argv[0] === "auth") {
 const COMMANDS = new Set(["agents", "attach", "auth", "auto-mode", "doctor", "gateway", "import", "install", "logs", "mcp",
   "plugin", "plugins", "project", "respawn", "rm", "setup-token", "stop", "kill", "ultrareview", "update", "upgrade", "help"]);
 const valueOptions = new Set(["--input-format", "--output-format", "--session-id", "--resume", "-r", "--permission-mode", "--permission-prompts", "--append-system-prompt", "--model"]);
-const booleanOptions = new Set(["-p", "--print", "--verbose"]);
+const booleanOptions = new Set(["-p", "--print", "--verbose", "--no-session-persistence"]);
 const flags = new Map<string, string>();
 const switches = new Set<string>();
 const prompts: string[] = [];
@@ -86,9 +86,15 @@ const resumeFlag = flags.get("--resume");
 if (sessionIdFlag !== undefined && resumeFlag !== undefined) fail("Error: --session-id can only be used with --continue or --resume if --fork-session is also specified.");
 if (sessionIdFlag !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionIdFlag)) fail("Error: Invalid session ID. Must be a valid UUID.");
 const headless = switches.has("-p") || switches.has("--print");
+// claude -p "/usage" prints the account's usage, a local command that spends no usage.
+if (headless && prompts[0] === "/usage") {
+  if (scenario.usage_text !== undefined) plain(scenario.usage_text);
+  process.exit(0);
+}
 if (!headless && (flags.has("--input-format") || flags.has("--output-format") || switches.has("--verbose"))) fail("fake-claude: --input-format, --output-format and --verbose need -p.");
 if (headless && (flags.get("--output-format") !== "stream-json" || (flags.has("--input-format") && flags.get("--input-format") !== "stream-json"))) fail("fake-claude: with -p only --input-format stream-json and --output-format stream-json are supported.");
 if (headless && !switches.has("--verbose")) fail("Error: When using --print, --output-format=stream-json requires --verbose");
+if (headless && resumeFlag !== undefined) scenario = forResume(scenario, process.env.RELAY_FAKE_SCENARIO, "claude");
 const SESSION_ID = scenario.session_id ?? sessionIdFlag ?? resumeFlag ?? randomUUID();
 const MODEL = flags.get("--model") ?? "claude-sonnet-4-6";
 const PERMISSION_MODE = flags.get("--permission-mode") ?? "default";
@@ -174,7 +180,8 @@ const errors = {
   billing_error: ["Credit balance is too low", "400 Bad Request"],
   server_error: ["API Error: 500 Internal server error", "500 Internal Server Error"],
 } as const;
-function limitText(time: string, weekly: boolean): string {
+function limitText(time: string | undefined, weekly: boolean): string {
+  if (time === undefined) return weekly ? "You've hit your weekly limit" : "You've hit your session limit";
   const date = new Date(time);
   const hour = date.getHours();
   const clock = `${hour % 12 || 12}:${String(date.getMinutes()).padStart(2, "0")}${hour < 12 ? "am" : "pm"}`;
@@ -251,9 +258,15 @@ async function turn(index: number) {
       }
     } else if ("limit" in step) {
       const usage = step.limit.kind !== "rate";
+      const credits = step.limit.kind === "credits";
       const name = windowName(step.limit.window);
-      if (headless && usage) json({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: unixSeconds(step.limit.resets_at), rate_limit_type: name, utilization: 1 }, session_id: SESSION_ID, uuid: randomUUID() });
-      await failure("rate_limit", usage ? limitText(step.limit.resets_at, name === "seven_day") : "API Error: Rate limit reached", "429 Too Many Requests");
+      const resetsAt = step.limit.resets_at === undefined ? {} : { resetsAt: unixSeconds(step.limit.resets_at) };
+      // Claude Code 2.1.181 and later mark a subscription whose included usage is used up with
+      // errorCode "credits_required" (Agent SDK reference, SDKRateLimitEvent).
+      const creditFields = credits ? { errorCode: "credits_required", canUserPurchaseCredits: true, hasChargeableSavedPaymentMethod: false } : {};
+      if (headless && usage) json({ type: "rate_limit_event", rate_limit_info: { status: "rejected", ...resetsAt, rate_limit_type: name, utilization: 1, ...creditFields }, session_id: SESSION_ID, uuid: randomUUID() });
+      const text = credits ? "You're out of included usage · /usage-credits to continue" : usage ? limitText(step.limit.resets_at, name === "seven_day") : "API Error: Rate limit reached";
+      await failure("rate_limit", text, "429 Too Many Requests");
       return;
     } else if ("error" in step) {
       const [text, details] = errors[step.error];

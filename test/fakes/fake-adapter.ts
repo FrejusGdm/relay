@@ -169,15 +169,16 @@ export function createFakeAdapter(options: FakeAdapterOptions): ProviderAdapter 
             events.push({ kind: "tool", ...tool, status: "completed" });
           } else if ("limit" in step) {
             const name = windowName(step.limit.window);
-            const retryAt = new Date(step.limit.resets_at);
+            const retryAt = step.limit.resets_at === undefined ? undefined : new Date(step.limit.resets_at);
             const rate = step.limit.kind === "rate";
+            const at = retryAt === undefined ? {} : { retryAt };
             const update: Extract<WorkerEvent, { kind: "limit_update" }> = {
-              kind: "limit_update", windows: [{ name, windowMinutes: name === "five_hour" ? 300 : 10080, usedPercent: 100, resetsAt: retryAt, source }],
-              state: rate ? "rate_limited" : "quota_exhausted", retryAt, source,
+              kind: "limit_update", windows: [{ name, windowMinutes: name === "five_hour" ? 300 : 10080, usedPercent: 100, ...(retryAt === undefined ? {} : { resetsAt: retryAt }), source }],
+              state: rate ? "rate_limited" : "quota_exhausted", ...at, source,
             };
             record(account.id, update);
             events.push(update);
-            events.push({ kind: "turn_failed", reason: rate ? "rate_limit" : "usage_limit", retryAt, source,
+            events.push({ kind: "turn_failed", reason: rate ? "rate_limit" : step.limit.kind === "credits" ? "credits_required" : "usage_limit", ...at, source,
               message: rate ? "Rate limit reached." : claude
                 ? name === "five_hour" ? "You've hit your session limit." : "You've hit your weekly limit."
                 : "You’ve hit your usage limit." });

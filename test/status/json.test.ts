@@ -18,7 +18,7 @@ test("every field is present, with null for what relay does not know, and no tot
   const output = renderJson(buildView(SCENARIOS["after-handoff"]!), NOW);
   expect(output.endsWith("}\n")).toBe(true);
   const status = JSON.parse(output);
-  expect(Object.keys(status)).toEqual(["schema", "daemon", "saved_state", "generated_at", "job", "checkpoint", "accounts"]);
+  expect(Object.keys(status)).toEqual(["schema", "daemon", "saved_state", "generated_at", "job", "checkpoint", "accounts", "resume_at_reset", "t3_resume_at_reset"]);
   expect(status).toMatchObject({ schema: "relay.status/v1", daemon: "running", generated_at: "2026-10-07T14:32:00.000Z" });
   expect(status.job).toEqual({
     id: "3f9a2c1d",

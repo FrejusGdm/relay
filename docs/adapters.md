@@ -215,6 +215,7 @@ sent the interrupt and `crashed` otherwise, then `exited`.
 |---|---|
 | `usage_limit` | The account reached a usage limit of its plan, and the reset time is known. |
 | `rate_limit` | The provider refused because of too many requests, without a known reset time. |
+| `credits_required` | Claude Code only: the plan's included usage is used up and the session can continue only with usage credits (`rate_limit_event` with `errorCode: "credits_required"`, Claude Code 2.1.181 and later). No reset ends it, so resume at reset never waits for it. |
 | `overloaded` | The provider's service was overloaded. |
 | `auth` | The sign-in or the key was refused. |
 | `billing` | The account has no credit or a billing problem. |
@@ -240,6 +241,7 @@ state is `unknown` with source `none`.
 | Source | Where the reading came from |
 |---|---|
 | `provider_api` | A provider call made for the purpose, such as Codex's `account/rateLimits/read`. |
+| `usage_command` | Claude Code's `claude -p "/usage" --no-session-persistence`, a local command that spends no usage, run with the account's profile folder. Resume at reset reads it when a reset time is unknown. |
 | `stream_event` | An event in the agent's own output, such as Claude Code's `rate_limit_event`. |
 | `hook` | A hook the tool ran, such as Claude Code's `StopFailure`. |
 | `status_line` | The usage numbers Claude Code gives its status line. |
@@ -501,6 +503,7 @@ command is in `src/cli/commands/run.ts`; the spec is `agent-runs` in
 ```
 relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>]
           [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]
+          [--resume-at-reset [--max-resumes <n>]]
 ```
 
 Without `--headless`, the agent runs in your terminal. With `--headless`, it works on its own on
@@ -667,6 +670,37 @@ a limit.
 the program confirmed: its output or a hook reported the session, or a turn in it completed. A
 session ID that relay chose for a run whose program never started a session is skipped. relay refuses, with exit code 25, a
 session that a worker of any job started on another account.
+
+### Resuming at a reset
+
+`--resume-at-reset` makes a headless run continue by itself after a usage limit resets, on the same
+account and in the same session, instead of ending with exit code 23:
+
+```
+$ relay run claude:work --headless --resume-at-reset --prompt "Finish the migration."
+Started Claude Code on claude:work · session 7c1e9a52
+  ran bun test · exit 1
+Claude Code · work stopped (exit code 1)
+Claude Code stopped: usage limit, resets 15:47.
+Waiting for claude:work's limit to reset at 15:47, then continuing.
+You can close this terminal. To cancel, run relay resume-at-reset off --job 87c0a8cf
+Continuing session 7c1e9a52 on claude:work (resume 1).
+  changed src/migrate.ts
+Turn finished · 212 s
+The task ended normally after 1 resume.
+```
+
+Claude Code continues an interactive session at a reset by itself (its setting
+`autoContinueAtUsageLimit`, which relay never changes), but nothing does that for `claude -p`, so the
+option is for headless runs only. relay reads the reset time from the stop itself (Claude Code's
+`rate_limit_event`, the limit message, or Codex's rate limits), then from the account's recorded
+availability, such as the status line's `resets_at`. When the agent stops, the daemon takes over the
+wait, so the terminal can be closed; it resumes the session with `claude -p --resume <id>` or Codex's
+`thread/resume` (`codex exec resume <id>` in the fallback) and the prompt "The usage limit has reset.
+Continue the task from where you stopped." The run ends with 0 when the task ends normally, and with
+23 after `--max-resumes` resumes in a row (3 by default, at most 20) that hit the limit again. A stop
+with `credits_required` is never waited for. `docs/daemon.md`, "Resume at reset", describes the
+wait, the checks every 15 minutes when the reset time is unknown, and cancelling.
 
 ### What comes later
 

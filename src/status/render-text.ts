@@ -7,6 +7,9 @@ import { STALE_REASON } from "../state/availability";
 import type { AccountView, UsageItem } from "../state/queries";
 import type { StatusRow, StatusView } from "./model";
 import { formatAge, formatTime } from "./time-format";
+import { waitingLine } from "../resume/follow";
+import type { WaitRecord } from "../resume/wait";
+import { t3WaitLine } from "../t3/resume-state";
 
 const LANE = 16;
 const TITLE_MAX = 48;
@@ -47,8 +50,22 @@ export function renderText(view: StatusView, options: { now: Date; style: boolea
   }
 
   lines.push("", view.closing);
+  const resume = resumeLine(view.resumeAtReset, view.daemon, now);
+  if (resume !== null) lines.push(resume);
+  for (const wait of view.t3Waits) lines.push(t3WaitLine(wait));
   if (view.savedState) lines.push("", SAVED_STATE_LINES[view.daemon]);
   return `${lines.join("\n")}\n`;
+}
+
+// The job's resume at reset (add-resume-at-reset). A wait whose time has passed while no daemon runs
+// says what will make it go on.
+function resumeLine(wait: WaitRecord | null, daemon: StatusView["daemon"], now: Date): string | null {
+  if (wait === null) return null;
+  if (wait.state === "watching") return `Resume at reset is on: if ${printable(wait.account)} reaches its usage limit, relay continues after the reset.`;
+  if (wait.state === "resuming") return `Resumed on ${printable(wait.account)} after its limit reset (resume ${wait.resumes}).`;
+  const line = waitingLine({ ...wait, account: printable(wait.account) });
+  const due = wait.next_check_at !== null && Date.parse(wait.next_check_at) <= now.getTime();
+  return due && daemon === "not_running" ? `${line} The relay daemon is not running; run relay daemon start to continue.` : line;
 }
 
 function shortTitle(title: string): string {

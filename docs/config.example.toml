@@ -51,6 +51,12 @@ account = "claude:personal"
 account = "codex:personal"
 model = "gpt-6.1-sol"
 
+# Continue T3 Code threads on the same account after a usage limit resets: every thread on these
+# accounts, and these threads. relay sends the continue message only to an idle thread.
+[t3.resume_at_reset]
+accounts = ["claude:personal"]
+threads = []
+
 # Keep 10 percent of the weekly Claude limit. A target defaults the action to switch.
 [limits."claude:personal".seven_day]
 threshold = 90

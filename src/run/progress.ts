@@ -10,6 +10,7 @@ import { redact } from "../secrets/redact";
 const REASON_TEXT: Record<FailureReason, string> = {
   usage_limit: "usage limit",
   rate_limit: "rate limit",
+  credits_required: "this account has used its included usage and needs usage credits to continue",
   overloaded: "the service is overloaded",
   auth: "it is not signed in",
   billing: "a billing problem",
@@ -44,7 +45,8 @@ export function progressLines(event: WorkerEvent, displayName: string, paths: st
 }
 
 // "Codex stopped: usage limit, resets 15:45."
-export function limitLine(displayName: string, reason: "usage_limit" | "rate_limit", retryAt?: Date): string {
+export function limitLine(displayName: string, reason: "usage_limit" | "rate_limit" | "credits_required", retryAt?: Date): string {
+  if (reason === "credits_required") return `${displayName} stopped: ${REASON_TEXT[reason]}.`;
   return `${displayName} stopped: ${REASON_TEXT[reason]}${retryAt === undefined ? "" : `, resets ${clockText(retryAt)}`}.`;
 }
 

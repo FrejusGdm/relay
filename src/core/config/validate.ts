@@ -33,7 +33,7 @@ export function emptyConfig(relayHome: string): RelayConfig {
     checkpoint: { maxFileSizeMb: 20 },
     accounts: [],
     projects: [],
-    t3: { url: "http://127.0.0.1:3773/mcp", projects: [], instances: [] },
+    t3: { url: "http://127.0.0.1:3773/mcp", projects: [], instances: [], resumeAtReset: { accounts: [], threads: [], maxResumes: 3 } },
     limits: [],
     handoff: { askForSummary: true, summaryTimeoutSeconds: 120, stopTimeoutSeconds: 30, checkTimeoutSeconds: 600, startCheckSeconds: 5 },
   };
@@ -205,6 +205,7 @@ export function validateConfig(
   }
 
   const t3ProjectPaths = new Map<string, number>();
+  const resumeAccountKeys: { key: string; account: AccountId }[] = [];
   const instanceAccounts = new Map<AccountId, string>();
   function checkInstance(id: string, value: unknown): void {
     const key = `t3.instances.${quoteKey(id)}`;
@@ -362,6 +363,41 @@ export function validateConfig(
             if (isTable(child)) for (const [id, instance] of Object.entries(child)) checkInstance(id, instance);
             else add(key, TABLE);
           },
+          resume_at_reset: (key, child) => {
+            walkTable(key, child, {
+              accounts: (listKey, list) => {
+                if (!Array.isArray(list)) {
+                  add(listKey, "must be a list of account names.");
+                  return;
+                }
+                list.forEach((item, index) => {
+                  const itemKey = `${listKey}[${index + 1}]`;
+                  if (typeof item !== "string") add(itemKey, STRING);
+                  else {
+                    const account = accountRef(itemKey, item);
+                    if (account !== null) {
+                      config.t3.resumeAtReset.accounts.push(account);
+                      resumeAccountKeys.push({ key: itemKey, account });
+                    }
+                  }
+                });
+              },
+              threads: (listKey, list) => {
+                if (!Array.isArray(list)) {
+                  add(listKey, "must be a list of T3 thread IDs.");
+                  return;
+                }
+                list.forEach((item, index) => {
+                  if (typeof item === "string" && /^[A-Za-z0-9_:.-]{1,200}$/.test(item)) config.t3.resumeAtReset.threads.push(item);
+                  else add(`${listKey}[${index + 1}]`, 'must be a T3 thread ID: letters, digits, "_", ":", "." and "-".');
+                });
+              },
+              max_resumes: (countKey, count) => {
+                if (Number.isInteger(count) && (count as number) >= 1 && (count as number) <= 20) config.t3.resumeAtReset.maxResumes = count as number;
+                else add(countKey, "must be a whole number from 1 to 20.");
+              },
+            });
+          },
         });
         break;
       case "limits":
@@ -391,6 +427,9 @@ export function validateConfig(
     }
   }
   const mapped = new Set(config.t3.instances.map((instance) => instance.account));
+  for (const { key, account } of resumeAccountKeys) {
+    if (!mapped.has(account)) add(key, `T3 Code has no provider mapped to ${account}. Map it in [t3.instances.<id>].`);
+  }
   for (const { key, setting, hasSwitchTo } of limitChecks) {
     const targetKey = `${key}.switch_to`;
     if (setting.action === "switch" && !hasSwitchTo) add(targetKey, 'is required when action is "switch".');

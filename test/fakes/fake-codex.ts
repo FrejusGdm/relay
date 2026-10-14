@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { startRecord } from "./record";
 import { listCommandHooks, runHooks } from "./run-hooks";
-import { crashWith, loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
+import { crashWith, forResume, loadScenario, ScenarioError, sleep, turnSteps, unixSeconds, windowName, writeStepFile } from "./scenario";
 import type { FakeWindow, Scenario } from "./scenario";
 
 const argv = process.argv.slice(2);
@@ -135,7 +135,8 @@ const ERROR_INFO = {
   authentication_failed: "unauthorized", overloaded: "serverOverloaded",
   billing_error: "other", server_error: "internalServerError",
 };
-function usageMessage(time: string): string {
+function usageMessage(time: string | undefined): string {
+  if (time === undefined) return "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro) or visit https://chatgpt.com/settings/usage to purchase more credits.";
   const reset = new Date(time);
   // RELAY_FAKE_NOW lets a test fix the time that decides whether the reset is today.
   const now = process.env.RELAY_FAKE_NOW === undefined ? new Date() : new Date(process.env.RELAY_FAKE_NOW);
@@ -152,7 +153,7 @@ function usageMessage(time: string): string {
 const RATE_MESSAGE = "exceeded retry limit, last status: 429 Too Many Requests";
 const EXEC_USAGE = { input_tokens: 1000, cached_input_tokens: 200, output_tokens: 50, reasoning_output_tokens: 0 };
 const LAST_USAGE = { totalTokens: 1250, inputTokens: 1000, cachedInputTokens: 200, outputTokens: 50, reasoningOutputTokens: 0 };
-function window(value?: FakeWindow) {
+function window(value?: FakeWindow): { usedPercent: number; windowDurationMins: number; resetsAt: number | null } | null {
   return value === undefined ? null : { usedPercent: value.used_percent, windowDurationMins: value.window_minutes, resetsAt: unixSeconds(value.resets_at) };
 }
 const snapshot = {
@@ -258,7 +259,7 @@ async function runTurn(turn: Turn, index: number, mode: "app" | "exec" | "intera
       if (mode === "app") {
         if ("limit" in step && !rate) {
           const name = windowName(step.limit.window) === "five_hour" ? "primary" : "secondary";
-          snapshot[name] = { usedPercent: 100, windowDurationMins: snapshot[name]?.windowDurationMins ?? (name === "primary" ? 300 : 10080), resetsAt: unixSeconds(step.limit.resets_at) };
+          snapshot[name] = { usedPercent: 100, windowDurationMins: snapshot[name]?.windowDurationMins ?? (name === "primary" ? 300 : 10080), resetsAt: step.limit.resets_at === undefined ? null : unixSeconds(step.limit.resets_at) };
           allowed = false;
           notify("account/rateLimits/updated", { rateLimits: snapshot });
         }
@@ -388,6 +389,7 @@ async function appServer() {
     if (method === "thread/start" || method === "thread/resume") {
       if (method === "thread/start" && scenario.app_server === "method_not_found") { error(id, -32601, "Method not found"); return; }
       if (method === "thread/resume" && typeof params.threadId !== "string") { error(id, -32602, "Invalid params: threadId is required"); return; }
+      if (method === "thread/resume") scenario = forResume(scenario, process.env.RELAY_FAKE_SCENARIO, "codex");
       session = { id: method === "thread/resume" ? params.threadId as string : scenario.session_id ?? randomUUID(), root: typeof params.cwd === "string" ? params.cwd : process.cwd(), model: typeof params.model === "string" ? params.model : "gpt-6.1-sol", turnId: null, completed: 0 };
       const now = Math.floor(Date.now() / 1000);
       const thread = { id: session.id, preview: "", modelProvider: "openai", createdAt: now, updatedAt: now, path: null, cwd: session.root, cliVersion: VERSION, source: "appServer", gitInfo: null, turns: [] };
@@ -460,6 +462,7 @@ async function main() {
   const resumeId = resume ? argv[offset + 1] : undefined;
   if (resume && (resumeId === undefined || resumeId.startsWith("-"))) fatal("error: a value is required for '<SESSION_ID>' but none was supplied");
   const options = parseOptions(argv.slice(offset + (resume ? 2 : 0)), exec ? resume ? "exec-resume" : "exec" : "interactive");
+  if (resume && exec) scenario = forResume(scenario, process.env.RELAY_FAKE_SCENARIO, "codex");
   if (exec) await execMode(options, resumeId);
   else await interactiveMode(options, resumeId);
 }

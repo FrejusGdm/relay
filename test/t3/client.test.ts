@@ -123,7 +123,7 @@ test("a successful call returns structuredContent and the server version", async
   const setup = await setUp();
   const client = setup.makeClient();
   expect(await client.connect()).toEqual({ serverVersion: "1.0.0" });
-  expect(await client.call("t3_project_list", {})).toEqual({ projects: [] });
+  expect(await client.call("t3_project_list", {})).toEqual({ projects: [], nextCursor: null });
   expect(setup.lines).toEqual([{ message: "t3 call", fields: { tool: "t3_project_list", thread: null, attempt: 1, outcome: "ok" } }]);
 });
 
