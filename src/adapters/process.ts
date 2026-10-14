@@ -294,6 +294,8 @@ export interface ShortCommandOptions {
   args: string[];
   env: Record<string, string>;
   timeoutMs: number;
+  // The working folder; relay's own folder when absent.
+  cwd?: string;
 }
 
 // Runs a short provider command, such as `claude --version` or `codex login status`, with its input
@@ -304,7 +306,7 @@ export function runShortCommand(options: ShortCommandOptions): Promise<{ code: n
   return new Promise((done, fail) => {
     let child: ChildProcess;
     try {
-      child = spawn(options.path, options.args, { env: options.env, stdio: ["ignore", "pipe", "ignore"] });
+      child = spawn(options.path, options.args, { env: options.env, stdio: ["ignore", "pipe", "ignore"], ...(options.cwd === undefined ? {} : { cwd: options.cwd }) });
     } catch (error) {
       fail(error);
       return;

@@ -29,8 +29,11 @@ Every 60 seconds, when the feature is on and relay is connected to T3, the daemo
 classified, read the last 25 `activity` items once. It SHALL call the stop a usage limit only when
 the thread has no active run and an `error` item of the newest run matches Claude Code's or Codex's
 usage limit message. The reset time SHALL come from that message, then from the account's recorded
-availability; without one, relay SHALL check every 15 minutes plus up to 60 seconds, as
-`resume-at-reset` says. relay SHALL never store or log the message text or the thread title.
+availability or a reading that spends no usage (Claude Code's `/usage` command, Codex's rate
+limits); without one, relay SHALL check every 15 minutes plus up to 60 seconds. When no reading
+exists at all, relay SHALL NOT send before 5 hours have passed since the stop. A time zone named in
+the message SHALL be honoured. relay SHALL never store or log the message text or the thread
+title.
 
 #### Scenario: Claude limit with a reset time
 - **WHEN** a thread's newest run failed with the error text `You've hit your session limit · resets 6:50pm (Europe/Berlin)`
@@ -65,9 +68,15 @@ restarts.
 ### Requirement: Stopping and cancelling
 relay SHALL count sends in a row whose next run stopped at a usage limit again, and after
 `max_resumes` of them SHALL record `gave_up` and stop sending to that thread until a run completes.
-`relay resume-at-reset off --thread <id>` SHALL cancel a thread's wait, record `cancelled`, and
+relay SHALL NOT start a new wait for that thread, also when later runs stop at the limit again,
+until one of its runs completes. `relay resume-at-reset off --thread <id>` SHALL cancel a thread's
+wait, record `cancelled`, and
 print `Cancelled resume at reset for T3 thread <id>.` `relay status` SHALL list each T3 wait as
 `T3 thread <id> on <account>: waiting for the limit to reset at <time>, then continuing`.
+
+#### Scenario: A manual retry after relay gave up
+- **WHEN** relay gave up on a thread and the person's own retry stops at the limit again
+- **THEN** relay sends nothing, until a run of the thread completes
 
 #### Scenario: Cancel a thread's wait
 - **WHEN** the person runs `relay resume-at-reset off --thread thread-1` before the reset

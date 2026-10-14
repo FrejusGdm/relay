@@ -14,6 +14,8 @@ export interface Scenario {
   rate_limits?: { primary?: FakeWindow; secondary?: FakeWindow; reached?: string | null; ordinary_usage_allowed?: boolean | null };
   hooks_trusted?: boolean | "modified";   // "modified": changed since the person trusted them
   app_server?: "ok" | "exit_immediately" | "no_answer" | "method_not_found";
+  // What `claude -p "/usage"` prints; without it, nothing.
+  usage_text?: string;
   turns: { steps: Step[] }[];
   // The turns of the first, second, ... start that resumes a session (add-resume-at-reset). A
   // resume past the end of the list follows the default turns.
@@ -138,7 +140,7 @@ function windowProblem(name: string, value: unknown): string | null {
 
 function scenarioProblem(value: Json): string | null {
   const unknown = onlyKeys(value, [
-    "version", "tool_version", "startup_delay_ms", "session_id", "auth", "login", "rate_limits", "hooks_trusted", "app_server", "turns", "resumes",
+    "version", "tool_version", "startup_delay_ms", "session_id", "auth", "login", "rate_limits", "hooks_trusted", "app_server", "usage_text", "turns", "resumes",
   ]);
   if (unknown !== null) return unknown;
   if (value.version !== 1) return "version must be 1";
@@ -185,6 +187,7 @@ function scenarioProblem(value: Json): string | null {
   }
   if (!Array.isArray(value.turns)) return "turns must be a list";
   if (value.resumes !== undefined && !Array.isArray(value.resumes)) return "resumes must be a list";
+  if (value.usage_text !== undefined && typeof value.usage_text !== "string") return "usage_text must be text";
   return null;
 }
 

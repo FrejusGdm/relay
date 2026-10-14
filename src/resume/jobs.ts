@@ -104,16 +104,22 @@ export class JobResumer {
       // again, and that resume does not count.
       await withWaitLock(relayHome, wait.job_id, () => {
         const current = readWait(relayHome, wait.job_id);
-        if (current?.state !== "resuming") return;
-        writeWait(relayHome, { ...current, state: "waiting", next_check_at: now().toISOString(), worker_id: null, counted: false });
+        if (current?.state !== "resuming" || current.stop === null) return;
+        writeWait(relayHome, {
+          ...current, state: "waiting", next_check_at: now().toISOString(), worker_id: null, counted: false,
+          stop: { ...current.stop, worker_id: resumedWorker(relayHome, current) ?? current.stop.worker_id },
+        });
         this.options.log.warn("resume_at_reset_recovered", { job: current.job_id });
       });
       return;
     }
     if (wait.next_check_at === null || Date.parse(wait.next_check_at) > now().getTime()) return;
-    const resume = this.resume(wait.job_id).finally(() => this.running.delete(wait.job_id));
+    // The resume runs on its own, so a long resumed agent never holds up other jobs or the daemon's
+    // shutdown; `running` keeps a second look from starting it twice.
+    const resume = this.resume(wait.job_id)
+      .catch((error: unknown) => this.options.log.error("resume_at_reset_failed", { job: wait.job_id, error_name: error instanceof Error ? error.name : typeof error }))
+      .finally(() => this.running.delete(wait.job_id));
     this.running.set(wait.job_id, resume);
-    await resume;
   }
 
   // Decides under the lock whether to resume now, then starts the agent and waits for its end.
@@ -208,9 +214,13 @@ export class JobResumer {
         await endWait(relayHome, wait, "stopped", "relay_error", ExitCode.Internal);
         return;
       }
-      // The daemon stopped the agent because it is stopping: the next daemon resumes again.
+      // The daemon stopped the agent because it is stopping: the next daemon resumes the same session
+      // again, and expects the agent it stopped to be the job's newest worker.
       if (last.terminated) {
-        writeWait(relayHome, { ...wait, state: "waiting", next_check_at: now().toISOString(), worker_id: null, counted: false });
+        writeWait(relayHome, {
+          ...wait, state: "waiting", next_check_at: now().toISOString(), worker_id: null, counted: false,
+          stop: wait.stop === null ? null : { ...wait.stop, worker_id: workerId },
+        });
         return;
       }
       const turn = last.lastTurn;
@@ -293,6 +303,15 @@ function failureSource(job: JobRef, workerId: string): ReadingSource {
     // The event log is unreadable; the stop keeps the usual source.
   }
   return source;
+}
+
+// The worker a daemon that ended without recording it had resumed: the wait's own record, or the
+// job's newest worker when it resumed the wait's session on the wait's account.
+function resumedWorker(relayHome: string, wait: WaitRecord): string | null {
+  if (wait.worker_id !== null) return wait.worker_id;
+  const newest = readWorkerRecords(relayHome, wait.job_id)[0];
+  return newest !== undefined && newest.account === wait.account && wait.session_id !== null && newest.resumed_from === wait.session_id
+    ? newest.worker_id : null;
 }
 
 function alive(pid: number): boolean {

@@ -241,6 +241,7 @@ state is `unknown` with source `none`.
 | Source | Where the reading came from |
 |---|---|
 | `provider_api` | A provider call made for the purpose, such as Codex's `account/rateLimits/read`. |
+| `usage_command` | Claude Code's `claude -p "/usage" --no-session-persistence`, a local command that spends no usage, run with the account's profile folder. Resume at reset reads it when a reset time is unknown. |
 | `stream_event` | An event in the agent's own output, such as Claude Code's `rate_limit_event`. |
 | `hook` | A hook the tool ran, such as Claude Code's `StopFailure`. |
 | `status_line` | The usage numbers Claude Code gives its status line. |

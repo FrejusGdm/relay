@@ -85,8 +85,14 @@ relay takes the first of these that gives a time after the stop:
 2. the account's recorded availability (`availability.json`: the status line's `resets_at`, the
    `StopFailure` hook, readings of other sessions on the same account), when its state is
    `quota_exhausted` or `rate_limited`;
-3. for Codex, a live `account/rateLimits/read` through `adapter.availability()`, which spends no
-   usage.
+3. a live reading that spends no usage: for Codex, `account/rateLimits/read` through
+   `adapter.availability()`; for Claude Code, `claude -p "/usage" --no-session-persistence` with the
+   account's profile folder (`src/usage/claude.ts`, the command of `add-t3-limit-rules`'
+   `usage-readings` spec, which `docs/research/t3-outside-access.md` confirmed spends no usage). The
+   reading is recorded as the account's availability with the source `usage_command`.
+
+A reset time written with a time zone in parentheses, as Claude Code writes it ("resets 6:50pm
+(Europe/Berlin)"), is read in that zone (`resetTimeInZone` in `src/adapters/reset-time.ts`).
 
 relay resumes 60 seconds after the reset time, plus a random delay of up to 30 seconds, because
 providers round reset times to the minute and the reported minute can move by one between readings
@@ -99,7 +105,9 @@ and never sooner. A check reads the account's availability as in decision 2. A f
 makes relay wait for it; `quota_exhausted` without a time means another 15 minutes; `available`,
 `unknown` or a reset time that has passed makes relay resume. A resume at a limit that is still in
 force costs no usage, because the provider refuses the first request, and its stop often brings
-the reset time that was missing.
+the reset time that was missing. For a T3 Code thread the person sees every message, so when no
+reading exists at all relay does not try a send that would only fail there: it checks every 15
+minutes and sends once 5 hours have passed since the stop, the longest a session limit lasts.
 
 ### 4. When relay stops trying
 
@@ -125,7 +133,15 @@ the daemon applies decision 4 using the new `lastEnd` the supervisor records.
 
 When the daemon stops while a resumed agent runs, it stops the agent as today and puts the wait
 back to `waiting` with `next_check_at` set to now, so the next daemon resumes the same session.
-This resume does not count toward `max_resumes`.
+This resume does not count toward `max_resumes`. The wait then expects the agent it stopped as the
+job's newest worker, so the next daemon does not take relay's own resumed agent for another agent.
+A daemon that died without recording the end does the same with the newest worker that resumed the
+wait's session on the wait's account. The daemon starts each resume on its own: a long resumed
+agent never holds up the resumes of other jobs or the daemon's shutdown.
+
+`relay run --resume-at-reset` refuses with exit code 6 when another process uses the job's wait (a
+`relay run` whose agent works, or the daemon running a resumed agent), and a run that fails before
+its agent ends only its own wait.
 
 ### 6. `relay run` follows the job until it ends
 
@@ -212,7 +228,12 @@ margin of decision 2 lets T3's own resume go first when it works; relay then see
 does nothing.
 
 Per thread, relay counts sends in a row whose next run stopped at a limit again, with the same
-`max_resumes` of 3 (`[t3.resume_at_reset] max_resumes`). A completed run resets the count.
+`max_resumes` of 3 (`[t3.resume_at_reset] max_resumes`). After that, relay stays away from the
+thread, also when later runs stop at the limit again, until one of its runs completes.
+
+T3 writes its own text for a Claude limit, such as "Claude usage limit reached. Send the message
+again once the limit resets.", without the reset time. relay then looks for Claude Code's own
+message, with the time, among the other items of the same run.
 
 State: `RELAY_HOME/t3/resume-at-reset.json` (mode 0600, under `locks/t3-resume.lock`). Events:
 `RELAY_HOME/t3/actions.jsonl`, one JSON line per action (`limit_seen`, `waiting`, `checked`,

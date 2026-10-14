@@ -81,6 +81,7 @@ Every field except `version` and `turns` is optional.
 | `hooks_trusted` | Whether `fake-codex` treats the hooks in `hooks.json` as trusted: `true`, `false`, or `"modified"` for hooks that changed after the person trusted them. Codex runs only trusted hooks. Default: not trusted. |
 | `app_server` | How `fake-codex app-server` behaves: `ok`, `exit_immediately` (exits with code 2 before reading anything), `no_answer` (reads but never answers) or `method_not_found` (answers `thread/start` with error code -32601). |
 | `turns` | One entry per turn, in order. Turn 1 runs for the first user message, turn 2 for the second, and so on. A turn the list does not have says `I finished the task.` and finishes. |
+| `usage_text` | What `fake-claude -p "/usage"` prints, as Claude Code's `/usage` command does. Without it, the fake prints nothing. |
 | `resumes` | The turns of each start that resumes a session (`claude -p --resume`, `codex exec resume`, the app server's `thread/resume`), as `{ "turns": [...] }`, in order. The fake counts its resumes in the file `<scenario>.<program>-resumes` next to the scenario file, so the count goes on from one process to the next, as when the daemon resumes a session after a usage limit. A resume past the end of the list follows the default turns. |
 
 A turn ends at a `finish`, `limit` or `error` step, or after its last step. A turn that ends

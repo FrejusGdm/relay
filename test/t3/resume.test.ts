@@ -27,7 +27,9 @@ account = "codex:personal"
 `;
 // 2026-10-13 12:00 on this computer's clock; limit messages give local times.
 const NOON = new Date(2026, 9, 13, 12, 0, 0);
-const CLAUDE_LIMIT = "You've hit your session limit · resets 1:00pm (Europe/Berlin)";
+// Claude Code names the person's time zone; here it is the zone the tests run in.
+const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const CLAUDE_LIMIT = `You've hit your session limit · resets 1:00pm (${ZONE})`;
 
 let clock = NOON;
 let fake: FakeT3 | undefined;
@@ -52,12 +54,12 @@ function limitedThread(threadId: string, instance = "claude", text = CLAUDE_LIMI
   };
 }
 
-async function setUp(threads: FakeThread[], settings = 'accounts = ["claude:personal"]') {
+async function setUp(threads: FakeThread[], settings = 'accounts = ["claude:personal"]', scenario: Parameters<typeof fakeEnv>[0] = {}) {
   fake = await startFakeT3({ token: TOKEN, threads, projects: [{ id: "project-1", title: "Project", workspaceRoot: "/work/project" }] });
   const relayHome = tempRelayHome();
   const { config, problems } = validateConfig(parseToml(`${CONFIG}[t3.resume_at_reset]\n${settings}\n`), { relayHome, homedir: "/home/person" });
   expect(problems).toEqual([]);
-  const env = { ...process.env, ...fakeEnv() };
+  const env = { ...process.env, ...fakeEnv(scenario) };
   const resumer = () => new T3Resumer({
     relayHome, env, timing: TIMING, random: () => 0, config: () => config, registry: () => createAdapterRegistry({}, env),
     log: { info: () => {}, warn: () => {}, error: () => {} },
@@ -157,12 +159,12 @@ test("a send that hits the limit again counts, and relay gives up after max_resu
   clock = new Date(2026, 9, 13, 13, 2, 0);
   await watcher.tick();
   expect(sends()).toHaveLength(1);
-  failNewest("You've hit your session limit · resets 2:00pm (Europe/Berlin)");
+  failNewest(`You've hit your session limit · resets 2:00pm (${ZONE})`);
   await watcher.tick();
   clock = new Date(2026, 9, 13, 14, 2, 0);
   await watcher.tick();
   expect(sends()).toHaveLength(2);
-  failNewest("You've hit your session limit · resets 3:00pm (Europe/Berlin)");
+  failNewest(`You've hit your session limit · resets 3:00pm (${ZONE})`);
   await watcher.tick();
   clock = new Date(2026, 9, 13, 15, 2, 0);
   await watcher.tick();
@@ -170,8 +172,8 @@ test("a send that hits the limit again counts, and relay gives up after max_resu
   expect(events(relayHome).at(-1)).toMatchObject({ type: "gave_up", reason: "limit_again", sends_in_a_row: 2 });
 });
 
-test("an unknown reset time is checked 15 minutes later, then the thread is continued", async () => {
-  const { relayHome, resumer, sends } = await setUp([limitedThread("thread-1", "claude", "Claude API rate limit reached. Try again later.")]);
+test("without any reading, an unknown reset time is checked every 15 minutes and the thread is continued after 5 hours", async () => {
+  const { relayHome, resumer, sends } = await setUp([limitedThread("thread-1", "claude", "Claude usage limit reached. Send the message again once the limit resets.")]);
   const watcher = resumer();
   await watcher.tick();
   expect(events(relayHome)[1]).toMatchObject({ type: "waiting", reset_at: null, next_check_at: new Date(NOON.getTime() + 15 * 60_000).toISOString() });
@@ -180,10 +182,68 @@ test("an unknown reset time is checked 15 minutes later, then the thread is cont
   expect(sends()).toHaveLength(0);
   clock = new Date(NOON.getTime() + 15 * 60_000);
   await watcher.tick();
+  expect(sends()).toHaveLength(0);
+  expect(events(relayHome).at(-1)).toMatchObject({ type: "checked", result: "no_reading", next_check_at: new Date(NOON.getTime() + 30 * 60_000).toISOString() });
+  clock = new Date(NOON.getTime() + 5 * 3_600_000 + 60_000);
+  await watcher.tick();
   expect(sends()).toHaveLength(1);
-  expect(events(relayHome).map((event) => [event.type, event.result ?? null])).toEqual([
-    ["limit_seen", null], ["waiting", null], ["checked", "resuming"], ["sent", null],
-  ]);
+  expect(events(relayHome).slice(-2).map((event) => [event.type, event.result ?? null])).toEqual([["checked", "resuming"], ["sent", null]]);
+});
+
+test("an unknown reset time is learned from Claude's /usage command", async () => {
+  const usage = "Current session: 100% used · resets 2:00pm (Asia/Tokyo)\nCurrent week (all models): 40% used · resets Oct 18, 9:00am (Asia/Tokyo)\n";
+  const { relayHome, resumer, sends } = await setUp([limitedThread("thread-1", "claude", "Claude stopped: a usage limit blocked the request.")], undefined, { usage_text: usage });
+  const watcher = resumer();
+  await watcher.tick();
+  // 2:00pm in Tokyo is 05:00 UTC on 2026-10-14 or 2026-10-13, whichever comes first after noon here.
+  const waiting = events(relayHome)[1]!;
+  expect(waiting).toMatchObject({ type: "waiting", source: "usage_command" });
+  const reset = new Date(waiting.reset_at as string);
+  expect(reset.getUTCHours()).toBe(5);
+  expect(reset > NOON && reset.getTime() - NOON.getTime() <= 86_400_000).toBe(true);
+  clock = new Date(reset.getTime() + 61_000);
+  await watcher.tick();
+  expect(sends()).toHaveLength(1);
+});
+
+test("T3's own limit text with Claude's message in the same run gives the reset time", async () => {
+  const thread = limitedThread("thread-1", "claude", "Claude usage limit reached. Send the message again once the limit resets.");
+  thread.items!.splice(1, 0, { type: "assistant_message", runId: "thread-1-run-1", text: CLAUDE_LIMIT });
+  const { relayHome, resumer } = await setUp([thread]);
+  await resumer().tick();
+  expect(events(relayHome)[1]).toMatchObject({ type: "waiting", source: "message_text", reset_at: new Date(2026, 9, 13, 13, 0).toISOString() });
+});
+
+test("after max_resumes relay stays away from the thread until one of its runs completes", async () => {
+  const { relayHome, resumer, sends, fake } = await setUp([limitedThread("thread-1")], 'accounts = ["claude:personal"]\nmax_resumes = 1');
+  const watcher = resumer();
+  const thread = fake.threads[0]!;
+  const failNewest = (text: string) => {
+    const run = thread.runs[0]!;
+    run.status = "failed";
+    run.completedAt = clock.toISOString();
+    thread.items!.push({ type: "error", runId: run.runId, text });
+  };
+  await watcher.tick();
+  clock = new Date(2026, 9, 13, 13, 2, 0);
+  await watcher.tick();
+  expect(sends()).toHaveLength(1);
+  failNewest(`You've hit your session limit · resets 2:00pm (${ZONE})`);
+  await watcher.tick();
+  expect(events(relayHome).at(-1)).toMatchObject({ type: "gave_up", reason: "limit_again" });
+  // The person tries again by hand and hits the limit again: relay still stays away.
+  thread.runs.unshift({ runId: "thread-1-run-9", status: "failed", startedAt: clock.toISOString(), completedAt: clock.toISOString() });
+  thread.items!.push({ type: "error", runId: "thread-1-run-9", text: `You've hit your session limit · resets 3:00pm (${ZONE})` });
+  clock = new Date(2026, 9, 13, 16, 0, 0);
+  await watcher.tick();
+  await watcher.tick();
+  expect(sends()).toHaveLength(1);
+  expect(readT3State(relayHome).threads["thread-1"]).toMatchObject({ state: "gave_up" });
+  // A run completes: relay watches the thread again.
+  thread.runs.unshift({ runId: "thread-1-run-10", status: "completed", startedAt: clock.toISOString(), completedAt: clock.toISOString() });
+  await watcher.tick();
+  expect(readT3State(relayHome).threads["thread-1"]).toBeUndefined();
+  expect(events(relayHome).at(-1)).toMatchObject({ type: "watching_again", thread_id: "thread-1" });
 });
 
 test("threads that are not chosen, and threads of an unmapped instance, are untouched", async () => {
@@ -216,6 +276,13 @@ test("the limit messages T3 shows are read with their reset times", () => {
   expect(classifyFailure("You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at Oct 15th, 2026 3:45 PM.", after))
     .toMatchObject({ kind: "limit", reset: { at: new Date(2026, 9, 15, 15, 45) } });
   expect(classifyFailure("Claude API rate limit reached. Try again later.", after)).toEqual({ kind: "limit", reset: null });
+  expect(classifyFailure("Claude usage limit reached. Send the message again once the limit resets.", after)).toEqual({ kind: "limit", reset: null });
+  expect(classifyFailure("Claude stopped: a usage limit blocked the request.", after)).toEqual({ kind: "limit", reset: null });
+  // A named zone is honoured: 1:00pm in Tokyo (UTC+9) is 04:00 UTC.
+  expect(classifyFailure("You've hit your session limit · resets 1:00pm (Asia/Tokyo)", new Date("2026-10-13T00:00:00Z")))
+    .toEqual({ kind: "limit", reset: { at: new Date("2026-10-13T04:00:00Z"), source: "message_text" } });
+  expect(classifyFailure("You've hit your session limit · resets 1:00pm (Asia/Tokyo)", new Date("2026-10-13T05:00:00Z")))
+    .toEqual({ kind: "limit", reset: { at: new Date("2026-10-14T04:00:00Z"), source: "message_text" } });
   expect(classifyFailure("You're out of included usage · /usage-credits to continue", after)).toEqual({ kind: "credits" });
   expect(classifyFailure("Claude API is overloaded (529). Try again shortly.", after)).toEqual({ kind: "other" });
 });

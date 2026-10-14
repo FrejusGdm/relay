@@ -188,9 +188,12 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
       code = await runFirst();
     } catch (error) {
       if (armed) {
+        // Only the wait this run armed ends here; another process's wait is left alone.
         await withWaitLock(ctx.relayHome, job.id, async () => {
           const wait = readWait(ctx.relayHome, job.id);
-          if (wait !== null) await endWait(ctx.relayHome, wait, "stopped", "run_failed", error instanceof CommandError ? error.code : ExitCode.Internal);
+          if (wait?.state === "watching" && wait.owner_pid === process.pid) {
+            await endWait(ctx.relayHome, wait, "stopped", "run_failed", error instanceof CommandError ? error.code : ExitCode.Internal);
+          }
         }).catch(() => {});
       }
       throw error;
@@ -254,13 +257,20 @@ function parseMaxResumes(options: RunOptions): number | null {
 }
 
 // Writes the job's wait in the state watching before the first agent starts, so relay status shows
-// that resume at reset is on and relay resume-at-reset off can turn it off. A wait left from an
-// earlier run of the job ends: this run takes the job over.
+// that resume at reset is on and relay resume-at-reset off can turn it off. A wait that another
+// process is using (a relay run whose agent works, or the daemon running a resumed agent) is never
+// replaced: the run is refused. A wait that only waits ends: this run takes the job over.
 async function armWait(
   ctx: CommandContext, job: JobRef, account: Account, permission: PermissionLevel, model: string | null, maxResumes: number,
 ): Promise<boolean> {
   await withWaitLock(ctx.relayHome, job.id, async () => {
     const earlier = readWait(ctx.relayHome, job.id);
+    if (readSupervisor(ctx.relayHome, job.id) !== null || earlier?.state === "resuming"
+      || (earlier?.state === "watching" && earlier.owner_pid !== null && processAlive(earlier.owner_pid))) {
+      throw new CommandError(ExitCode.Busy, [
+        `relay: Another relay process is working on this job with resume at reset. To stop it, run relay resume-at-reset off --job ${job.id}`,
+      ]);
+    }
     if (earlier !== null) await endWait(ctx.relayHome, earlier, "cancelled", "job_moved_on", ExitCode.LimitReached);
     writeWait(ctx.relayHome, {
       schema_version: 1, job_id: job.id, root: job.worktreeRoot, account: account.id, provider: account.provider, session_id: null,
@@ -270,6 +280,15 @@ async function armWait(
     await appendEvent(job, "resume_at_reset_on", { worker_id: null, target: account.id, max_resumes: maxResumes });
   });
   return true;
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code === "EPERM";
+  }
 }
 
 // After the first agent: a stop at a usage limit hands the job to the daemon, which waits; any other

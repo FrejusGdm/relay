@@ -10,6 +10,7 @@ import { fakeEnv } from "../helpers/fake-programs";
 import { FAKE_SCANNER, jobId } from "../helpers/job";
 import { spawnDaemon, stopDaemon, stopStartedDaemon } from "../helpers/relay-home";
 import { makeScratchRepo } from "../helpers/scratch-repo";
+import { readWait, writeWait } from "../../src/resume/wait";
 import { jobEvents, relayRun, runFixture, spawnRelayRun, until, workers, type FakeScenario, type RunFixture } from "../run/helpers";
 
 setDefaultTimeout(60_000);
@@ -238,4 +239,19 @@ test("two jobs on one account each resume their own session once", async () => {
   } finally {
     second.cleanup();
   }
+});
+
+test("a second relay run never replaces a wait the daemon is using", async () => {
+  const f = (fixture = await runFixture());
+  const root = f.scratch.repo;
+  writeWait(f.relayHome, {
+    schema_version: 1, job_id: f.jobId, root, account: "claude:work", provider: "claude", session_id: SESSION, permission: "edit-in-workspace",
+    model: null, max_resumes: 3, state: "resuming", stop: null, next_check_at: null, resumes: 1, resumes_in_a_row: 0, counted: true,
+    waiting_since: new Date().toISOString(), worker_id: "12345678", owner_pid: null, updated_at: new Date().toISOString(),
+  });
+  const result = await relayRun(f, ["claude:work", "--headless", "--resume-at-reset", "--prompt", "Go."]);
+  expect(result.code).toBe(6);
+  expect(result.stderr).toContain(`relay resume-at-reset off --job ${f.jobId}`);
+  expect(workers(f)).toHaveLength(0);
+  expect(readWait(f.relayHome, f.jobId)).toMatchObject({ state: "resuming", worker_id: "12345678" });
 });

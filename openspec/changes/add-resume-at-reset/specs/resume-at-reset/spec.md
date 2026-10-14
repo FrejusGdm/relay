@@ -30,8 +30,9 @@ in the state `waiting` with the worker, the account, the provider session ID, th
 time and its source, and the next check time, and SHALL record `resume_at_reset_waiting`. The reset
 time SHALL be taken, in this order, from the stop's `turn_failed` event, from the account's
 recorded availability when it is `quota_exhausted` or `rate_limited` with a reset time after the
-stop, and for Codex from a live rate-limit reading. The next check SHALL be 60 seconds after the
-reset time plus a random delay of up to 30 seconds.
+stop, and from a live reading that spends no usage (Codex's rate limits, Claude Code's
+`claude -p "/usage" --no-session-persistence`). The next check SHALL be 60 seconds after the reset
+time plus a random delay of up to 30 seconds.
 
 #### Scenario: Known reset time
 - **WHEN** Claude Code reports a rejected `rate_limit_event` with `resetsAt` at 15:47 and the turn fails with `rate_limit`
@@ -104,6 +105,10 @@ wait ends and then exit with the wait's exit code; SIGHUP and SIGTERM SHALL end 
 #### Scenario: The terminal closes
 - **WHEN** the terminal of the waiting `relay run` closes
 - **THEN** the daemon still resumes the session after the reset
+
+#### Scenario: The daemon stops a resumed agent
+- **WHEN** the daemon stops while a resumed agent runs, and starts again
+- **THEN** the new daemon resumes the same session again, and does not end the wait as `job_moved_on`
 
 #### Scenario: The daemon restarts during the wait
 - **WHEN** the daemon is stopped and started again before the reset

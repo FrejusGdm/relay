@@ -6,6 +6,7 @@ import { buildAgentEnv } from "../accounts/environment";
 import type { Availability, FailureReason, ProviderAdapter, ReadingSource } from "../adapters/types";
 import type { Account } from "../core/config/types";
 import { now } from "../platform/clock";
+import { readClaudeUsage } from "../usage/claude";
 
 export const CONTINUE_PROMPT = "The usage limit has reset. Continue the task from where you stopped.";
 export const DEFAULT_MAX_RESUMES = 3;
@@ -78,12 +79,14 @@ export async function findResetTime(options: {
   if (stopReset !== null && stopReset.at > stoppedAt) return stopReset;
   const recorded = readAvailability(relayHome, account);
   if (isLimited(recorded) && recorded.retryAt !== undefined && recorded.retryAt > stoppedAt) return { at: recorded.retryAt, source: recorded.source };
-  const live = await liveReading(options.adapter, account, options.env);
+  const live = await liveReading(options.adapter, account, options.env, relayHome);
   if (live !== null && isLimited(live) && live.retryAt !== undefined && live.retryAt > stoppedAt) return { at: live.retryAt, source: live.source };
   return null;
 }
 
-export type CheckResult = { kind: "reset_known"; reset: ResetTime } | { kind: "still_limited" } | { kind: "resuming" };
+// `resuming` says whether a reading supports it (`reading`) or relay has no reading at all
+// (`no_reading`).
+export type CheckResult = { kind: "reset_known"; reset: ResetTime } | { kind: "still_limited" } | { kind: "resuming"; basis: "reading" | "no_reading" };
 
 // A check of an account whose reset time is unknown (design decision 3). A future reset time makes
 // relay wait for it. A reading taken after the stop that still says the account is limited means
@@ -94,7 +97,7 @@ export async function checkAccount(options: {
 }): Promise<CheckResult> {
   const { account, relayHome, stoppedAt } = options;
   const today = now();
-  const readings = [await liveReading(options.adapter, account, options.env), readAvailability(relayHome, account, today)]
+  const readings = [await liveReading(options.adapter, account, options.env, relayHome), readAvailability(relayHome, account, today)]
     .filter((reading): reading is Availability => reading !== null);
   for (const reading of readings) {
     if (isLimited(reading) && reading.retryAt !== undefined && reading.retryAt > today) {
@@ -104,17 +107,20 @@ export async function checkAccount(options: {
   if (readings.some((reading) => isLimited(reading) && reading.retryAt === undefined && reading.observedAt > stoppedAt)) {
     return { kind: "still_limited" };
   }
-  return { kind: "resuming" };
+  const informed = readings.some((reading) => reading.source !== "none" && reading.observedAt > stoppedAt);
+  return { kind: "resuming", basis: informed ? "reading" : "no_reading" };
 }
 
 function isLimited(reading: Availability): boolean {
   return reading.state === "quota_exhausted" || reading.state === "rate_limited";
 }
 
-// Only Codex can be asked for its limits without spending usage (account/rateLimits/read). Claude
-// Code's readings come only from what relay already recorded (docs/adapters.md, "Availability").
-async function liveReading(adapter: ProviderAdapter, account: Account, env: Record<string, string | undefined>): Promise<Availability | null> {
-  if (account.provider !== "codex") return null;
+// A reading that spends no usage: Codex's account/rateLimits/read through the app server, or Claude
+// Code's local /usage command.
+async function liveReading(
+  adapter: ProviderAdapter, account: Account, env: Record<string, string | undefined>, relayHome: string,
+): Promise<Availability | null> {
+  if (account.provider === "claude") return await readClaudeUsage(account, env, relayHome);
   try {
     const reading = await adapter.availability(account, buildAgentEnv(account, env));
     return reading.source === "none" ? null : reading;

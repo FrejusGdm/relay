@@ -88,7 +88,7 @@ export interface HookSpec { file: string; events: string[] }
 
 export type FailureReason = "usage_limit" | "rate_limit" | "credits_required" | "overloaded" | "auth" | "billing"
   | "context_full" | "interrupted" | "crashed" | "other";
-export type ReadingSource = "provider_api" | "stream_event" | "hook" | "status_line" | "message_text" | "user" | "none";
+export type ReadingSource = "provider_api" | "usage_command" | "stream_event" | "hook" | "status_line" | "message_text" | "user" | "none";
 
 export interface LimitWindow { name: string; windowMinutes?: number; usedPercent?: number; resetsAt?: Date; source: ReadingSource }
 // name: "five_hour" (300 minutes), "seven_day" (10080 minutes), otherwise "<n>_minutes".

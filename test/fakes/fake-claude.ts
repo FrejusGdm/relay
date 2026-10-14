@@ -52,7 +52,7 @@ if (argv[0] === "auth") {
 const COMMANDS = new Set(["agents", "attach", "auth", "auto-mode", "doctor", "gateway", "import", "install", "logs", "mcp",
   "plugin", "plugins", "project", "respawn", "rm", "setup-token", "stop", "kill", "ultrareview", "update", "upgrade", "help"]);
 const valueOptions = new Set(["--input-format", "--output-format", "--session-id", "--resume", "-r", "--permission-mode", "--permission-prompts", "--append-system-prompt", "--model"]);
-const booleanOptions = new Set(["-p", "--print", "--verbose"]);
+const booleanOptions = new Set(["-p", "--print", "--verbose", "--no-session-persistence"]);
 const flags = new Map<string, string>();
 const switches = new Set<string>();
 const prompts: string[] = [];
@@ -86,6 +86,11 @@ const resumeFlag = flags.get("--resume");
 if (sessionIdFlag !== undefined && resumeFlag !== undefined) fail("Error: --session-id can only be used with --continue or --resume if --fork-session is also specified.");
 if (sessionIdFlag !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionIdFlag)) fail("Error: Invalid session ID. Must be a valid UUID.");
 const headless = switches.has("-p") || switches.has("--print");
+// claude -p "/usage" prints the account's usage, a local command that spends no usage.
+if (headless && prompts[0] === "/usage") {
+  if (scenario.usage_text !== undefined) plain(scenario.usage_text);
+  process.exit(0);
+}
 if (!headless && (flags.has("--input-format") || flags.has("--output-format") || switches.has("--verbose"))) fail("fake-claude: --input-format, --output-format and --verbose need -p.");
 if (headless && (flags.get("--output-format") !== "stream-json" || (flags.has("--input-format") && flags.get("--input-format") !== "stream-json"))) fail("fake-claude: with -p only --input-format stream-json and --output-format stream-json are supported.");
 if (headless && !switches.has("--verbose")) fail("Error: When using --print, --output-format=stream-json requires --verbose");

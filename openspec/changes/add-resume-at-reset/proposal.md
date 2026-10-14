@@ -29,6 +29,9 @@ Code's interactive mode already does by default (`docs/research/security.md`, "P
   times"). This change adds Claude Code's `errorCode: "credits_required"` as its own failure reason,
   `credits_required`, because such a stop does not end at a reset. When no reset time is known,
   relay checks again every 15 minutes with a random delay of up to one minute, and never more often.
+  A check reads Codex's rate limits or Claude Code's `claude -p "/usage"`, both of which spend no
+  usage; this change builds that Claude reading (`src/usage/claude.ts`), which `add-t3-limit-rules`
+  specified.
 - **`relay run --headless --resume-at-reset [--max-resumes <n>]`.** When the agent stops at a usage
   limit (today's exit code 23), relay records the stop and the reset time in the job's event log,
   waits, and resumes the same session on the same account with the prompt "The usage limit has

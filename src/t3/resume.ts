@@ -5,7 +5,7 @@
 // still the one that stopped. T3's own "Resume at reset" is not relied on
 // (pingdotgg/t3code#17808). Message texts and thread titles are read but never stored or logged.
 import type { AdapterRegistry } from "../adapters/registry";
-import { resetTimeFromText } from "../adapters/reset-time";
+import { resetTimeInZone } from "../adapters/reset-time";
 import { findAccount } from "../accounts/registry";
 import type { AccountId, RelayConfig } from "../core/config/types";
 import type { Logger } from "../core/log";
@@ -20,13 +20,16 @@ const MAX_PAGES = 10;
 const TAIL_ITEMS = 25;
 const SENT_KEPT_MS = 7 * 86_400_000;
 
-// The limit messages T3 shows in a failed run's error item (the provider's own text): Claude
-// Code's "You've hit your session limit · resets 6:50pm (Europe/Berlin)" and T3's "Claude API rate
-// limit reached. Try again later.", and Codex's "You've hit your usage limit. ... try again at
-// 6:50 PM."
-const LIMIT_TEXT = /hit your (?:session|weekly|opus|sonnet|usage) limit|rate limit reached|usage limit (?:reached|exceeded)/i;
+// The limit messages in a failed run's error item. T3 writes its own text for Claude ("Claude usage
+// limit reached. Send the message again once the limit resets.", "Claude API rate limit reached.
+// Try again later.", "Claude stopped: a usage limit blocked the request.") or Claude Code's own
+// ("You've hit your session limit · resets 6:50pm (Europe/Berlin)"), and Codex's text for Codex
+// ("You've hit your usage limit. ... try again at 6:50 PM."). Source: T3 Code at 80664d5,
+// apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts and CodexAdapterV2.ts.
+const LIMIT_TEXT = /hit your (?:session|weekly|opus|sonnet|usage) limit|rate limit reached|usage limit (?:reached|exceeded|blocked)/i;
+const FIVE_HOURS_MS = 5 * 3_600_000;
 const CREDITS_TEXT = /usage[- ]credits|out of included usage/i;
-const RESET_TEXT = /(?:· resets|resets at|try again at)\s+(.+?)(?:\s*\(|$|\. |\.$)/im;
+const RESET_TEXT = /(?:· resets|resets at|try again at)\s+(.+?(?:\s*\([^)]*\))?)(?:$|\. |\.$)/im;
 
 export interface T3ResumerOptions {
   relayHome: string;
@@ -52,7 +55,7 @@ export function classifyFailure(text: string, after: Date = now()): Classificati
   if (CREDITS_TEXT.test(text)) return { kind: "credits" };
   if (!LIMIT_TEXT.test(text)) return { kind: "other" };
   const time = RESET_TEXT.exec(text)?.[1];
-  const at = time === undefined ? undefined : resetTimeFromText(time.trim(), after);
+  const at = time === undefined ? undefined : resetTimeInZone(time.trim(), after);
   return { kind: "limit", reset: at === undefined ? null : { at, source: "message_text" } };
 }
 
@@ -131,6 +134,8 @@ export class T3Resumer {
         const entry = known.threads[threadId];
         if (known.classified[threadId] === runId) continue;
         if (entry !== undefined && entry.state !== "sent" && entry.run_id === runId) continue;
+        // After max_resumes relay stays away from the thread until one of its runs completes.
+        if (entry?.state === "gave_up") continue;
         const found = await this.classify(client, threadId, runId);
         await withT3Lock(relayHome, async () => {
           const state = readT3State(relayHome);
@@ -161,11 +166,20 @@ export class T3Resumer {
     const tail = await client.call("t3_thread_read", {
       threadId, view: "activity", limit: TAIL_ITEMS, runLimit: 1, ...(after >= 0 ? { afterPosition: after } : {}),
     }, { threadId });
-    const items = Array.isArray(tail.items) ? tail.items.map(record) : [];
-    const errors = items.filter((item) => item.type === "error" && item.runId === runId && typeof item.text === "string");
+    const items = Array.isArray(tail.items) ? tail.items.map(record).filter((item) => item.runId === runId && typeof item.text === "string") : [];
+    const errors = items.filter((item) => item.type === "error");
     for (const item of errors.reverse()) {
       const found = classifyFailure(item.text as string);
-      if (found.kind !== "other") return found;
+      if (found.kind !== "limit" || found.reset !== null) {
+        if (found.kind !== "other") return found;
+        continue;
+      }
+      // T3's own text has no reset time; Claude Code's message in the same run often has it.
+      for (const other of items.toReversed()) {
+        const again = classifyFailure(other.text as string);
+        if (again.kind === "limit" && again.reset !== null) return again;
+      }
+      return found;
     }
     return { kind: "other" };
   }
@@ -204,6 +218,10 @@ export class T3Resumer {
     const state = readT3State(relayHome);
     for (const [threadId, entry] of Object.entries(state.threads)) {
       if (this.stopped) return;
+      if (entry.state === "gave_up") {
+        await this.endGaveUpOnCompletion(client, threadId, entry);
+        continue;
+      }
       if (entry.state === "sent" && entry.sent_at !== null && now().getTime() - Date.parse(entry.sent_at) > SENT_KEPT_MS) {
         await this.change(threadId, entry.run_id, (current) => (current.state === "sent" ? null : current));
         continue;
@@ -225,6 +243,16 @@ export class T3Resumer {
           const result = await checkAccount({
             account, adapter: this.options.registry().get(account.provider), relayHome, env: this.options.env, stoppedAt: new Date(entry.waiting_since),
           });
+          // Without any reading relay does not try a send that would only fail in the person's
+          // thread; it sends once 5 hours have passed, the longest a session limit lasts.
+          if (result.kind === "resuming" && result.basis === "no_reading" && now().getTime() - Date.parse(entry.waiting_since) < FIVE_HOURS_MS) {
+            const next = nextUnknownCheck(now(), timing, this.options.random);
+            await this.change(threadId, entry.run_id, (current) => ({ ...current, next_check_at: next.toISOString() }));
+            recordT3Event(relayHome, "checked", {
+              thread_id: threadId, run_id: entry.run_id, account: entry.account, result: "no_reading", reset_at: null, next_check_at: next.toISOString(),
+            });
+            continue;
+          }
           if (result.kind !== "resuming") {
             const next = result.kind === "reset_known" ? afterReset(result.reset.at, timing, this.options.random) : nextUnknownCheck(now(), timing, this.options.random);
             await this.change(threadId, entry.run_id, (current) => ({
@@ -284,6 +312,15 @@ export class T3Resumer {
     await this.change(threadId, entry.run_id, (current) => ({ ...current, sent_run_id: sentRun }));
     recordT3Event(relayHome, "sent", { thread_id: threadId, run_id: entry.run_id, account: entry.account, new_run_id: sentRun });
     this.options.log.info("t3_resume_sent", { thread: threadId, account: entry.account });
+  }
+
+  // A thread relay gave up on is watched again once one of its runs completes.
+  private async endGaveUpOnCompletion(client: T3Client, threadId: string, entry: T3ThreadState): Promise<void> {
+    const read = await client.call("t3_thread_read", { threadId, view: "activity", limit: 1, runLimit: 1 }, { threadId });
+    const newest = Array.isArray(read.recentRuns) ? record(read.recentRuns[0]) : {};
+    if (newest.status !== "completed") return;
+    await this.change(threadId, entry.run_id, (current) => (current.state === "gave_up" ? null : current));
+    recordT3Event(this.options.relayHome, "watching_again", { thread_id: threadId, run_id: typeof newest.runId === "string" ? newest.runId : null, account: entry.account });
   }
 
   private async drop(threadId: string, entry: T3ThreadState, reason: string): Promise<void> {

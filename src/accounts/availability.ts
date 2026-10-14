@@ -9,7 +9,7 @@ import { now } from "../platform/clock";
 import { accountFolder, readJsonFile, writeJsonFile } from "./files";
 
 const STATES: AvailabilityState[] = ["available", "rate_limited", "quota_exhausted", "unavailable", "unknown"];
-const SOURCES: ReadingSource[] = ["provider_api", "stream_event", "hook", "status_line", "message_text", "user", "none"];
+const SOURCES: ReadingSource[] = ["provider_api", "usage_command", "stream_event", "hook", "status_line", "message_text", "user", "none"];
 export const RESET_PASSED = "The reset time has passed; relay has not measured since.";
 
 type AccountRef = Pick<Account, "id" | "provider" | "name">;
