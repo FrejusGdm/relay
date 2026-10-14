@@ -14,6 +14,8 @@ import { buildView, type StatusData } from "../../status/model";
 import { renderJson } from "../../status/render-json";
 import { renderText } from "../../status/render-text";
 import { fromFiles } from "../../status/sources";
+import { readWait } from "../../resume/wait";
+import { readT3Waits } from "../../t3/resume-state";
 import { CommandError } from "../errors";
 import { ExitCode } from "../exit-codes";
 import type { CommandContext } from "./registry";
@@ -47,7 +49,7 @@ export async function status(ctx: CommandContext): Promise<number> {
     ctx.io.err(`The job files in ${quote(join(found.root, ".relay"))} could not be read.\n`);
     return ExitCode.NotPossibleHere;
   }
-  const view = buildView(data);
+  const view = buildView({ ...data, resumeAtReset: readWait(ctx.relayHome, found.jobId), t3Waits: readT3Waits(ctx.relayHome) });
   const time = now();
   const style = ctx.io.stdoutIsTTY && !ctx.env.NO_COLOR && ctx.env.TERM !== "dumb";
   ctx.io.out(ctx.values.json === true ? renderJson(view, time) : renderText(view, { now: time, style }));

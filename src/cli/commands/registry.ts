@@ -96,7 +96,7 @@ export const COMMANDS: CommandDef[] = [
   },
   {
     name: "run",
-    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary]",
+    usage: "relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>] [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json] [--check <command>]... [--yes] [--no-summary] [--resume-at-reset [--max-resumes <n>]]",
     argsUsage: "[<provider[:account]>]",
     summary: "Start an agent inside a relay job",
     details: [
@@ -107,6 +107,7 @@ export const COMMANDS: CommandDef[] = [
       "relay run",
       "relay run claude:personal",
       'relay run codex:personal --headless --prompt "Fix the failing test."',
+      'relay run claude:personal --headless --resume-at-reset --prompt "Finish the migration."',
       "relay run claude:personal --resume last",
     ],
     options: [
@@ -120,6 +121,8 @@ export const COMMANDS: CommandDef[] = [
       { name: "check", value: "<command>", multiple: true, description: "A check relay runs at every handoff (\"\" clears them)" },
       { name: "yes", description: "Answer yes to relay's own questions" },
       { name: "no-summary", description: "Do not ask the previous agent for handoff notes" },
+      { name: "resume-at-reset", description: "headless: continue the same session when a usage limit resets" },
+      { name: "max-resumes", value: "<n>", description: "Stop after this many resumes in a row that hit the limit (default 3)" },
     ],
     minArgs: 0,
     maxArgs: 1,

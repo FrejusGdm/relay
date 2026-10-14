@@ -30,6 +30,10 @@ import { readProjects } from "../state/projects-list";
 import { Follower } from "./follow";
 import { Operations } from "./operations";
 import { HeadlessWorkers } from "./workers";
+import { resumeJob } from "./engines";
+import { createAdapterRegistry } from "../adapters/registry";
+import { JobResumer } from "../resume/jobs";
+import { resumeTiming } from "../resume/timing";
 import { openDaemonLog } from "./log";
 import { checkSocketPathLength, DaemonStartError, prepareRuntimeDir, removeStaleSocket, runtimeDir, socketPath } from "./paths";
 import { pidPath, readPidFile, removeOwnPidFile, takeDaemonLock, writePidFile } from "./singleton";
@@ -116,6 +120,20 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     const operations = new Operations();
     const workers = new HeadlessWorkers(log);
     const engines = { relayHome: opts.relayHome, homedir: opts.homedir, env: opts.env, workers };
+    // Resume at reset (add-resume-at-reset): the daemon owns every job's wait.
+    let lastConfig = opts.config;
+    const readConfig = () => {
+      try {
+        lastConfig = loadConfig({ relayHome: opts.relayHome, homedir: opts.homedir, uid: process.getuid!() });
+      } catch {
+        // The last readable settings stay in use.
+      }
+      return lastConfig;
+    };
+    const resumer = new JobResumer({
+      relayHome: opts.relayHome, env: opts.env, log, timing: resumeTiming(opts.env), config: readConfig,
+      registry: () => createAdapterRegistry({}, opts.env), start: (wait, account) => resumeJob(engines, wait, account),
+    });
     const started_at = new Date().toISOString();
     const router = createRouter([
       versionRoute({ pid: process.pid, started_at, schema_version: SCHEMA_VERSION }, db, () => workers.running()),
@@ -132,14 +150,17 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     log.info("daemon_started", { pid: process.pid, version: VERSION, socket, schema_version: SCHEMA_VERSION });
     follower.start();
     spool.start();
+    resumer.start();
 
     const signal = await stopSignal;
     log.info("daemon_stopping", { signal });
     server.refuse();
     stream.shutdown();
     await operations.finish(log);
+    await resumer.stop();
     await workers.finishSwitches();
     await workers.stopAll();
+    await resumer.finished();
     await server.stop();
     await spool.stop();
     await hooks.idle();
