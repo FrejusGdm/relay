@@ -85,7 +85,7 @@ test("sign-in saves the grant in the injected store and a tokenGetter client can
     logger: { info() {}, warn() {} },
   });
   cleanup.push(() => client.close());
-  expect(await client.call("t3_project_list", {})).toEqual({ projects: [] });
+  expect(await client.call("t3_project_list", {})).toEqual({ projects: [], nextCursor: null });
 });
 
 test("the callback ignores wrong states, paths and methods, then accepts the right GET", async () => {
