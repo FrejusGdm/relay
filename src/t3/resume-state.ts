@@ -1,6 +1,6 @@
 // What relay remembers about T3 Code threads for resume at reset (add-resume-at-reset, design
 // decision 11): RELAY_HOME/t3/resume-at-reset.json, mode 0600, changed only while relay holds
-// locks/t3-resume.lock, and the log of every action, RELAY_HOME/t3/events.jsonl. Neither holds a
+// locks/t3-resume.lock, and the log of every action, RELAY_HOME/t3/actions.jsonl. Neither holds a
 // message text, a thread title or a token: only IDs, accounts and times.
 import { appendFileSync, chmodSync, lstatSync } from "node:fs";
 import { join } from "node:path";
@@ -88,11 +88,11 @@ export async function withT3Lock<T>(relayHome: string, action: () => Promise<T> 
   }
 }
 
-// One action, as one JSON line in RELAY_HOME/t3/events.jsonl.
+// One action, as one JSON line in RELAY_HOME/t3/actions.jsonl.
 export function recordT3Event(relayHome: string, type: string, data: Record<string, string | number | boolean | null>): void {
   const folder = join(relayHome, "t3");
   makePrivateFolder(folder);
-  const path = join(folder, "events.jsonl");
+  const path = join(folder, "actions.jsonl");
   const existing = lstatSync(path, { throwIfNoEntry: false });
   if (existing !== undefined && !existing.isFile()) throw new Error(`${path} is not a regular file.`);
   appendFileSync(path, `${JSON.stringify({ ts: now().toISOString(), type, ...data })}\n`, { mode: 0o600 });

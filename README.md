@@ -82,6 +82,25 @@ A headless run prints one line per command and changed file, and exits with 23 w
 stops at a usage limit. [docs/cli.md](docs/cli.md) lists every command, and the section "Running
 an agent" of [docs/adapters.md](docs/adapters.md) explains `relay run`.
 
+### Continue after a usage limit resets
+
+With `--resume-at-reset`, a headless run does not end at a usage limit. relay waits until that
+account's limit resets, then continues the same session on the same account, and goes on until the
+task ends. relay's background service owns the wait, so you can close the terminal:
+
+```sh
+relay run claude:personal --headless --resume-at-reset --prompt "Finish the migration."
+relay status                       # Waiting for claude:personal's limit to reset at 15:47, then continuing.
+relay resume-at-reset off          # cancel the wait
+```
+
+relay never moves the work to another account or provider for this. It gives up after 3 resumes
+in a row that hit the limit again, and never waits when Claude Code says the account needs usage
+credits. For T3 Code threads, connect relay with `relay t3 connect` and turn it on in
+`config.toml` under `[t3.resume_at_reset]` ([docs/config.md](docs/config.md)). relay then sends
+the continue message to a limited thread after the reset, only when the thread is idle, and never
+twice for the same stop. [docs/daemon.md](docs/daemon.md), "Resume at reset", explains how.
+
 ## Repository layout
 
 | Path | What it is |

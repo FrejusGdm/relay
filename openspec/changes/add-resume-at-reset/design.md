@@ -215,7 +215,7 @@ Per thread, relay counts sends in a row whose next run stopped at a limit again,
 `max_resumes` of 3 (`[t3.resume_at_reset] max_resumes`). A completed run resets the count.
 
 State: `RELAY_HOME/t3/resume-at-reset.json` (mode 0600, under `locks/t3-resume.lock`). Events:
-`RELAY_HOME/t3/events.jsonl`, one JSON line per action (`limit_seen`, `waiting`, `checked`,
+`RELAY_HOME/t3/actions.jsonl`, one JSON line per action (`limit_seen`, `waiting`, `checked`,
 `sent`, `skipped`, `gave_up`, `cancelled`), with the thread ID, run ID, account and times only.
 
 ### 12. `relay t3 connect` and `relay t3 disconnect`

@@ -69,7 +69,7 @@ async function setUp(threads: FakeThread[], settings = 'accounts = ["claude:pers
 }
 
 function events(relayHome: string): Record<string, unknown>[] {
-  const path = join(relayHome, "t3", "events.jsonl");
+  const path = join(relayHome, "t3", "actions.jsonl");
   return existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>) : [];
 }
 
@@ -100,7 +100,7 @@ test("a Claude limit with a reset time: relay waits, then sends continue to the 
   });
   expect(events(relayHome).map((event) => event.type)).toEqual(["limit_seen", "waiting", "sent"]);
   // No event holds a message text or the title.
-  expect(readFileSync(join(relayHome, "t3", "events.jsonl"), "utf8")).not.toMatch(/session limit|private title|Do the work/);
+  expect(readFileSync(join(relayHome, "t3", "actions.jsonl"), "utf8")).not.toMatch(/session limit|private title|Do the work/);
   expect(readFileSync(join(relayHome, "t3", "resume-at-reset.json"), "utf8")).not.toMatch(/session limit|private title/);
 });
 

@@ -375,6 +375,17 @@ continuation prompts, and `verify-file.ts` counts the rows of
 before the outgoing agent is stopped, and `ask.ts` is how they ask. `docs/handoff.md` shows the
 order of a handoff, its safety checks and the two-terminal flow in diagrams.
 
+`src/resume/` holds resume at reset (`add-resume-at-reset`). `wait.ts` keeps a job's wait in
+`RELAY_HOME/jobs/<job>/resume-at-reset.json` under its own lock, `timing.ts` decides when to resume
+(the reset time, the margin after it, and the checks every 15 minutes when it is unknown),
+`jobs.ts` is the daemon's `JobResumer`, which resumes the same session through `resumeJob` in
+`src/daemon/engines.ts`, and `follow.ts` is what a waiting `relay run` prints. `src/t3/resume.ts`
+does the same for T3 Code threads, with its state and action log in `src/t3/resume-state.ts`.
+`src/cli/commands/resume-at-reset.ts` cancels a wait, and `src/cli/commands/t3.ts` connects relay
+to T3 Code. The tests are `test/resume/run.test.ts`, which runs the real program with the fake
+agents and a real daemon, and `test/t3/resume.test.ts`, which uses the fake T3 server and the
+injectable clock. `docs/daemon.md`, "Resume at reset", shows the flow in a diagram.
+
 `relay init` then saves the first checkpoint, and `src/cli/commands/checkpoint.ts` saves the next
 ones. Both call `saveCheckpoint` in `src/checkpoint/save.ts`, the one function that saves a
 checkpoint. It checks the trust record, takes the job lock, builds the tree with

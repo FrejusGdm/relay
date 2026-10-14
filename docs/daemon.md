@@ -11,8 +11,9 @@ index of jobs, workers, checkpoints and accounts in SQLite, follows the job file
 change them, answers the read endpoints and the live event stream that `docs/api.md` describes,
 and receives the agents' hook events (`docs/hooks.md`, "How hook events reach the daemon"). It also
 saves checkpoints and switches jobs when a client asks, with the same engines as `relay
-checkpoint` and `relay switch`, and runs the agents that such a switch starts. `relay run` and
-`relay switch` start it when it is not running.
+checkpoint` and `relay switch`, and runs the agents that such a switch starts. It also owns every
+wait for a usage limit to reset, and continues the job or the T3 Code thread after the reset ("Resume
+at reset" below). `relay run` and `relay switch` start it when it is not running.
 
 ## Where its files are
 
@@ -30,6 +31,10 @@ checkpoint` and `relay switch`, and runs the agents that such a switch starts. `
   logs/daemon.log                the daemon's log, JSON lines, 10 MB x 5 files
   logs/daemon.stderr.log         what the detached daemon prints, such as a crash trace
   logs/workers/<job>-<worker>.log   the output of an agent the daemon started
+  jobs/<job>/resume-at-reset.json   a job's wait for its usage limit to reset, mode 0600
+  locks/<job>.resume.lock        held while a command or the daemon changes that wait
+  t3/resume-at-reset.json        the T3 Code threads relay waits to continue, mode 0600
+  t3/actions.jsonl                every action relay took on a T3 Code thread, mode 0600
 ```
 
 On Linux, when `RELAY_HOME` is not set and `XDG_RUNTIME_DIR` is, the runtime directory is
@@ -371,6 +376,90 @@ seconds), the line is `Showing saved state. The relay daemon has not read this p
 JSON, `saved_state` is `true` in both cases.
 Outside a project, without `--job`, the command prints `This folder is not in a relay project. Run
 relay init here, or pass --job <id>.` and exits with code 3.
+
+## Resume at reset
+
+When an agent that relay runs stops because its account reached a usage limit, the daemon can wait
+until the limit resets and then continue the same session on the same account. It never uses
+another account or provider for this. The person turns it on per job with
+`relay run --headless --resume-at-reset`, and for T3 Code threads with `[t3.resume_at_reset]` in
+`config.toml` (`docs/config.md`). The plan is `openspec/changes/add-resume-at-reset/`.
+
+```mermaid
+sequenceDiagram
+  participant Run as relay run
+  participant Agent as agent (claude -p)
+  participant File as resume-at-reset.json
+  participant Daemon as daemon
+  Run->>File: state watching
+  Run->>Agent: start the task
+  Agent-->>Run: stops at a usage limit, resets 15:47
+  Run->>File: state waiting, reset 15:47, next check 15:48
+  Run-->>Run: prints the wait, then follows the event log
+  loop every 5 seconds
+    Daemon->>File: is a wait due?
+  end
+  Daemon->>File: state resuming
+  Daemon->>Agent: claude -p --resume <same session>, "The usage limit has reset. Continue the task from where you stopped."
+  Agent-->>Daemon: the turn completes
+  Daemon->>File: deleted, resume_at_reset_ended (finished, exit 0)
+  Run-->>Run: prints the end and exits 0
+```
+
+The diagram shows one headless job that stops once. `relay run` writes the job's wait file before
+the agent starts, so `relay status` can show that resume at reset is on. When the agent stops at a
+usage limit, `relay run` records the stop and its reset time in the wait file and in the job's event
+log, lets go of the job, makes sure the daemon runs, and then only prints what happens. The daemon
+looks at every wait file every 5 seconds. At the time, it checks that no other relay process holds
+the job and that no other agent ran in the job since the stop, and resumes the recorded session on
+the recorded account with the job's permission level and model, under a job supervisor, as it does
+for a switch. The resumed agent is listed in `agents_running` of `GET /v1/version`, its output goes
+to `logs/workers/`, and relay saves a checkpoint when it ends.
+
+| Situation | What the daemon does |
+|---|---|
+| The reset time is known | Resumes 60 seconds after it, plus a random delay of up to 30 seconds. |
+| The reset time is unknown | Checks again every 15 minutes, plus a random delay of up to a minute, never more often. A check reads the account's availability: Codex's rate limits through the app server, or what relay recorded for Claude Code (the status line, hooks, other sessions). A future reset time is waited for; a newer reading that still says limited means another 15 minutes; otherwise relay resumes. |
+| The resumed agent completes its turn | The wait ends with exit code 0. |
+| It stops at a usage limit again | relay waits again. After 3 resumes in a row that hit the limit again (`--max-resumes`), the wait ends with exit code 23. A resume made without a known reset time does not count, and such a wait ends after 7 days. |
+| It stops with `credits_required` or any other failure | The wait ends at once, with that run's exit code. |
+| Another agent ran in the job, or another process holds it | The wait ends as cancelled, with `job_moved_on`. |
+| The daemon stops while a resumed agent runs | The daemon stops the agent as it stops any agent it started, and the next daemon resumes the same session again. That resume does not count. |
+| The daemon is not running at the reset | Nothing happens until a relay command starts it (`relay run`, `relay switch` or `relay daemon start`); the wait then continues. `relay status` says so. |
+
+The waiting `relay run` reads the job's event log every half second and prints a line for each wait,
+check, resume, command, changed file and finished turn, and exits when the wait ends, with its exit
+code. It asks for the daemon again every minute. Closing its terminal (SIGHUP) or SIGTERM ends only
+`relay run`; the daemon goes on. Ctrl+C cancels the wait. `relay resume-at-reset off --job <id>`
+cancels it from anywhere; an agent the daemon has already resumed finishes its turn, and no later
+resume follows.
+
+The job's event log records `resume_at_reset_on`, `resume_at_reset_waiting`,
+`resume_at_reset_checked`, `resume_at_reset_resumed` and `resume_at_reset_ended`, with the account,
+the session ID, the reason, the reset time and its source, and never a message text.
+
+### T3 Code threads
+
+T3 Code's own "Resume at reset" has an open bug in which it never fires
+([pingdotgg/t3code#17808](https://github.com/pingdotgg/t3code/issues/17808)), so relay does the
+same for the threads the person chose, through the connection `relay t3 connect` made and T3's MCP
+tools only. Every 60 seconds the daemon lists the failed threads of each T3 project. T3 shows no
+limit status and no reset time to outside programs, so for each new failed run of a chosen thread
+relay reads the run's last timeline items once and looks for the limit message of Claude Code or
+Codex in its error item, such as "You've hit your session limit · resets 6:50pm". It takes the reset
+time from that message, or from the account's recorded availability, or checks every 15 minutes as
+above.
+
+At the time, relay reads the thread again and sends "The usage limit has reset. Continue the task
+from where you stopped." only when the thread has no active run and its newest run is still the one
+that stopped. It sends with `mode: "queue"`, which never steers a running turn, and with the
+`clientRequestId` `relay-resume-<thread>-<run>`, so T3 ignores a repeated send. relay records the
+send in `t3/resume-at-reset.json` before it calls T3, so a daemon restart never sends twice. When
+the thread moved on (the person, T3's own resume or another program continued it), relay sends
+nothing. After 3 sends in a row whose next run stopped at the limit again (`max_resumes`), relay
+stops for that thread until a run completes. Every action is a line in `t3/actions.jsonl` with the
+thread ID, run ID, account and times only; message texts and thread titles are never stored or
+logged. `relay resume-at-reset off --thread <id>` cancels a thread's wait.
 
 ## Reading the log
 

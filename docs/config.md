@@ -171,6 +171,7 @@ listed here.
 | `url` | string | `"http://127.0.0.1:3773/mcp"` | The T3 Code MCP address. Its host must be `127.0.0.1` or `localhost`, its scheme must be `http`, and its path must be `/mcp`. |
 | `projects` | list of paths | `[]` | The project folders whose T3 threads relay may manage. Two entries cannot name the same folder. |
 | `instances` | table of tables | no instances | The T3 provider instances mapped to your accounts, below. |
+| `resume_at_reset` | table | nothing turned on | The T3 threads relay continues after a usage limit resets, below. |
 
 The defaults also apply when `[t3]` is absent. The T3 token is never stored in this file.
 relay keeps the token T3 issues to it only in the operating system's credential store.
@@ -185,6 +186,25 @@ the same account. The account's profile folder must be the one T3 uses for that 
 |---|---|---|---|
 | `account` | account name | required | The relay account this T3 instance uses. It must be one of your accounts. |
 | `model` | non-empty string | none | The model ID relay uses when switching to this instance. When absent, relay uses the first model T3 lists for it. |
+
+### `[t3.resume_at_reset]`
+
+relay continues these T3 Code threads in the same thread, on the same account, after a usage limit
+resets (`docs/daemon.md`, "Resume at reset"). Without this table, relay makes no T3 call for it.
+
+| Setting | Type | Default | Meaning |
+|---|---|---|---|
+| `accounts` | list of account names | `[]` | Every thread whose T3 provider instance maps to one of these accounts. Each account must be mapped in `[t3.instances.<id>]`. |
+| `threads` | list of T3 thread IDs | `[]` | These threads, on whichever mapped account they run. IDs use letters, digits, `_`, `:`, `.` and `-`. |
+| `max_resumes` | whole number from 1 to 20 | `3` | After this many sends in a row whose next run stopped at the limit again, relay stops for that thread until a run completes. |
+
+```toml
+[t3.instances.claude]
+account = "claude:personal"
+
+[t3.resume_at_reset]
+accounts = ["claude:personal"]
+```
 
 ### `[limits."<provider>:<name>".<window>]`
 
@@ -329,6 +349,9 @@ what your terminal shows. `[[projects]]` entries are counted from 1, as in `proj
 | A switch target uses the same Claude provider | `relay does not move work between two Claude accounts on its own. Anthropic's terms say plan limits assume ordinary, individual use.` |
 | A switch target uses the same Codex provider | `relay does not move work between two Codex accounts on its own. OpenAI's terms forbid getting around rate limits.` |
 | A switch target has no T3 mapping | `T3 Code has no provider mapped to codex:personal. Run relay t3 connect to map it.` |
+| A `t3.resume_at_reset` account has no T3 mapping | `T3 Code has no provider mapped to codex:personal. Map it in [t3.instances.<id>].` |
+| A `t3.resume_at_reset` thread ID has other characters | `must be a T3 thread ID: letters, digits, "_", ":", "." and "-".` |
+| `t3.resume_at_reset.max_resumes` is out of range | `must be a whole number from 1 to 20.` |
 | A wrong type | `must be a string.`, `must be a table.`, `must be a list of [[projects]] tables.`, `must be a list of account names.`, `must be a list of variable names in capitals, for example "ANTHROPIC_API_KEY".`, `must be "personal" or "work".`, `must be debug, info, warn or error.` |
 
 ## Adding a setting

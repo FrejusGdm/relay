@@ -46,7 +46,7 @@ Code's interactive mode already does by default (`docs/research/security.md`, "P
   threads every 60 seconds through the existing T3 client. When a thread on account X stopped at a
   usage limit, relay sends the continue message to that same thread after the reset, only when the
   thread is idle and its last run is still the one that stopped, never twice for the same stop, and
-  records every action in `RELAY_HOME/t3/events.jsonl`. `relay resume-at-reset off --thread <id>`
+  records every action in `RELAY_HOME/t3/actions.jsonl`. `relay resume-at-reset off --thread <id>`
   cancels a thread's wait.
 - **`relay t3 connect` and `relay t3 disconnect`.** The sign-in code of `add-t3-limit-rules`
   (`src/t3/oauth.ts`) is on `main`, but no command calls it, so a person cannot connect relay to T3
@@ -101,7 +101,7 @@ Code's interactive mode already does by default (`docs/research/security.md`, "P
 - **No new network listener.** The daemon still has only its Unix socket. `relay t3 connect` uses
   the loopback sign-in of `add-t3-limit-rules`, which only a command at the keyboard starts.
 - **Unattended actions are visible and can be stopped.** Every wait, check, resume and send is an
-  event in the job's event log or `RELAY_HOME/t3/events.jsonl`, appears in `relay status`, and can
+  event in the job's event log or `RELAY_HOME/t3/actions.jsonl`, appears in `relay status`, and can
   be cancelled with `relay resume-at-reset off`. Event data holds no message text and no thread
   title.
 - **T3 threads.** relay sends to a thread only when T3 reports it idle (`activeRunId` is null) and

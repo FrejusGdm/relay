@@ -1,6 +1,6 @@
 # Build progress
 
-Last updated 2026-10-08 08:55 UTC.
+Last updated 2026-10-14.
 
 This page shows how far the build of relay has come. The plan is split into OpenSpec changes, the
 written plans in `openspec/changes/`. Each change has a `tasks.md` file with numbered task groups,
@@ -204,6 +204,26 @@ crossings, the T3 Code client with a fake T3 server, and the sign-in to T3 Code.
 `main` in `src/limits/` and `src/t3/`, but group 2's boxes are still open in `tasks.md`, so the
 boxes lag behind the code here. I did not check which task each pull request completes.
 
+### add-resume-at-reset (resume at reset): built
+
+Asked for by Josué on 2026-10-13 and built on the branch `feat/resume-at-reset`.
+
+| Task group | Ticked | Open |
+|---|---|---|
+| 1. Fakes and the failure reason | 2 | 0 |
+| 2. The wait and the scheduler | 2 | 0 |
+| 3. relay run, relay status and the off command | 2 | 0 |
+| 4. T3 Code threads | 3 | 0 |
+| 5. Documents and the whole check | 3 | 0 |
+
+When an agent stops because its account reached a usage limit, relay waits until that limit
+resets and continues the same session on the same account: `relay run --headless
+--resume-at-reset` for relay's own jobs, and `[t3.resume_at_reset]` in `config.toml` for T3 Code
+threads. The daemon owns every wait, `relay status` shows it, and `relay resume-at-reset off`
+cancels it. `relay t3 connect` and `relay t3 disconnect` now exist, over the sign-in of
+`add-t3-limit-rules`. The T3 part was tested only against the fake T3 server; trying it on a real
+T3 Code thread needs Josué (see "What needs Josué").
+
 ## Pull requests
 
 These three pull requests are open. Each one targets `main`.
@@ -240,6 +260,9 @@ These items need a person with the real tools, an account or a decision. An agen
   read both result files, then run the standard plan over several days, summarize it, copy
   `summary.md` to `docs/evaluations/handoff-<date>.md`, and decide on phase 7 from the verdicts.
   `eval/handoff/README.md` explains each step and the cost.
+- **Try resume at reset on T3 Code** (`add-resume-at-reset`): run `relay t3 connect`, map the
+  Claude instance in `config.toml` and turn on `[t3.resume_at_reset]`, then watch
+  `relay status` and `~/.relay/t3/actions.jsonl` the next time a thread stops at its limit.
 - **The open decisions in `docs/ROADMAP.md`:** whether to ask Anthropic and OpenAI directly before a
   public release, whether relay gets a view inside T3 Code, and whether the name "relay" is clear
   enough for search, a domain and a Homebrew name.

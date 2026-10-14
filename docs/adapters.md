@@ -502,6 +502,7 @@ command is in `src/cli/commands/run.ts`; the spec is `agent-runs` in
 ```
 relay run [<provider[:account]>] [--headless] [--prompt <text> | --prompt-file <path>]
           [--resume <id> | --resume last] [--permission <level>] [--model <name>] [--json]
+          [--resume-at-reset [--max-resumes <n>]]
 ```
 
 Without `--headless`, the agent runs in your terminal. With `--headless`, it works on its own on
@@ -668,6 +669,37 @@ a limit.
 the program confirmed: its output or a hook reported the session, or a turn in it completed. A
 session ID that relay chose for a run whose program never started a session is skipped. relay refuses, with exit code 25, a
 session that a worker of any job started on another account.
+
+### Resuming at a reset
+
+`--resume-at-reset` makes a headless run continue by itself after a usage limit resets, on the same
+account and in the same session, instead of ending with exit code 23:
+
+```
+$ relay run claude:work --headless --resume-at-reset --prompt "Finish the migration."
+Started Claude Code on claude:work · session 7c1e9a52
+  ran bun test · exit 1
+Claude Code · work stopped (exit code 1)
+Claude Code stopped: usage limit, resets 15:47.
+Waiting for claude:work's limit to reset at 15:47, then continuing.
+You can close this terminal. To cancel, run relay resume-at-reset off --job 87c0a8cf
+Continuing session 7c1e9a52 on claude:work (resume 1).
+  changed src/migrate.ts
+Turn finished · 212 s
+The task ended normally after 1 resume.
+```
+
+Claude Code continues an interactive session at a reset by itself (its setting
+`autoContinueAtUsageLimit`, which relay never changes), but nothing does that for `claude -p`, so the
+option is for headless runs only. relay reads the reset time from the stop itself (Claude Code's
+`rate_limit_event`, the limit message, or Codex's rate limits), then from the account's recorded
+availability, such as the status line's `resets_at`. When the agent stops, the daemon takes over the
+wait, so the terminal can be closed; it resumes the session with `claude -p --resume <id>` or Codex's
+`thread/resume` (`codex exec resume <id>` in the fallback) and the prompt "The usage limit has reset.
+Continue the task from where you stopped." The run ends with 0 when the task ends normally, and with
+23 after `--max-resumes` resumes in a row (3 by default, at most 20) that hit the limit again. A stop
+with `credits_required` is never waited for. `docs/daemon.md`, "Resume at reset", describes the
+wait, the checks every 15 minutes when the reset time is unknown, and cancelling.
 
 ### What comes later
 

@@ -34,7 +34,7 @@ availability; without one, relay SHALL check every 15 minutes plus up to 60 seco
 
 #### Scenario: Claude limit with a reset time
 - **WHEN** a thread's newest run failed with the error text `You've hit your session limit · resets 6:50pm (Europe/Berlin)`
-- **THEN** relay records `limit_seen` and `waiting` in `RELAY_HOME/t3/events.jsonl` with the reset time 18:50 Berlin time and the next check 60 to 90 seconds after it
+- **THEN** relay records `limit_seen` and `waiting` in `RELAY_HOME/t3/actions.jsonl` with the reset time 18:50 Berlin time and the next check 60 to 90 seconds after it
 
 #### Scenario: Another failure
 - **WHEN** a thread's newest run failed with `Claude API is overloaded (529). Try again shortly.`
