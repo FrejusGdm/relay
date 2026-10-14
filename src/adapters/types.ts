@@ -86,7 +86,7 @@ export interface ProviderPolicy {
 
 export interface HookSpec { file: string; events: string[] }
 
-export type FailureReason = "usage_limit" | "rate_limit" | "overloaded" | "auth" | "billing"
+export type FailureReason = "usage_limit" | "rate_limit" | "credits_required" | "overloaded" | "auth" | "billing"
   | "context_full" | "interrupted" | "crashed" | "other";
 export type ReadingSource = "provider_api" | "stream_event" | "hook" | "status_line" | "message_text" | "user" | "none";
 

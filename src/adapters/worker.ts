@@ -67,7 +67,7 @@ export function recordWorkerReading(relayHome: string, account: Account, event: 
       });
     } else if (event.kind === "turn_failed") {
       const states: Partial<Record<typeof event.reason, AvailabilityState>> = {
-        usage_limit: "quota_exhausted", rate_limit: "rate_limited", auth: "unavailable", billing: "unavailable",
+        usage_limit: "quota_exhausted", rate_limit: "rate_limited", credits_required: "quota_exhausted", auth: "unavailable", billing: "unavailable",
       };
       const state = states[event.reason];
       // A rate limit without a reset time takes the one of a full window from the latest status-line

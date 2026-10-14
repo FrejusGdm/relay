@@ -50,6 +50,7 @@ const LIMIT_WORDS: Partial<Record<FailureReason | AvailabilityState, string>> = 
   usage_limit: "was at its usage limit",
   quota_exhausted: "was at its usage limit",
   rate_limit: "was at its rate limit",
+  credits_required: "needs usage credits",
   rate_limited: "was at its rate limit",
   auth: "could not sign in",
   billing: "has a billing problem",

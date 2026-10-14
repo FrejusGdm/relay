@@ -875,7 +875,7 @@ function outcome(ctx: SupervisorContext, worker: Worker, result: Ended, say: (li
   const { adapter, account } = worker.plan;
   const err = (line: string) => ctx.io.err(`${line}\n`);
   const { lastTurn, status } = result;
-  const limit = lastTurn !== null && !lastTurn.completed && (lastTurn.reason === "usage_limit" || lastTurn.reason === "rate_limit")
+  const limit = lastTurn !== null && !lastTurn.completed && (lastTurn.reason === "usage_limit" || lastTurn.reason === "rate_limit" || lastTurn.reason === "credits_required")
     ? { reason: lastTurn.reason, retryAt: lastTurn.retryAt } : null;
   if (result.interrupted) {
     const sessionId = worker.record.provider_session_id;

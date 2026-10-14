@@ -18,6 +18,7 @@ export function createClaudeStreamMapper(context: MapperContext): StreamMapper {
   let assistantError: string | undefined;
   let assistantText = "";
   let rejected = false;
+  let credits = false;
   let retryAt: Date | undefined;
   const tools = new Map<string, Tool>();
   function begin() {
@@ -26,6 +27,7 @@ export function createClaudeStreamMapper(context: MapperContext): StreamMapper {
     assistantError = undefined;
     assistantText = "";
     rejected = false;
+    credits = false;
     retryAt = undefined;
     tools.clear();
   }
@@ -93,6 +95,9 @@ export function createClaudeStreamMapper(context: MapperContext): StreamMapper {
         if (number(info.utilization)) window.usedPercent = info.utilization * 100;
         if (resetsAt !== undefined) window.resetsAt = resetsAt;
         if (info.status === "rejected") { rejected = true; retryAt = resetsAt; }
+        // Claude Code 2.1.181 and later: the included usage is used up and only usage credits let
+        // the session continue, so no reset ends this stop (Agent SDK reference, SDKRateLimitEvent).
+        if (info.status === "rejected" && info.errorCode === "credits_required") credits = true;
         return [{ kind: "limit_update", windows: [window], source: "stream_event",
           ...(info.status === "rejected" ? { state: "quota_exhausted" as const, ...(resetsAt !== undefined ? { retryAt: resetsAt } : {}) } : {}),
         }];
@@ -105,6 +110,7 @@ export function createClaudeStreamMapper(context: MapperContext): StreamMapper {
           const text = typeof message.result === "string" ? message.result : assistantText;
           let reason: FailureReason = assistantError === "overloaded" ? "overloaded" : assistantError === "authentication_failed" ? "auth" : assistantError === "billing_error" ? "billing" : "other";
           if (assistantError === "rate_limit") {
+            if (credits) return [{ kind: "turn_failed", reason: "credits_required", message: text.slice(0, 300), source: "stream_event", ...(retryAt !== undefined ? { retryAt } : {}) }];
             if (rejected) return [{ kind: "turn_failed", reason: "usage_limit", message: text.slice(0, 300), source: "stream_event", ...(retryAt !== undefined ? { retryAt } : {}) }];
             const reset = resetTimeFromText(text.match(LIMIT_TEXT)?.[2] ?? "")
               ?? resetTimeFromText(assistantText.match(LIMIT_TEXT)?.[2] ?? "");

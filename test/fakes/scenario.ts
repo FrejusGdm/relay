@@ -15,12 +15,15 @@ export interface Scenario {
   hooks_trusted?: boolean | "modified";   // "modified": changed since the person trusted them
   app_server?: "ok" | "exit_immediately" | "no_answer" | "method_not_found";
   turns: { steps: Step[] }[];
+  // The turns of the first, second, ... start that resumes a session (add-resume-at-reset). A
+  // resume past the end of the list follows the default turns.
+  resumes?: { turns: { steps: Step[] }[] }[];
 }
 export interface FakeWindow { used_percent: number; window_minutes: number; resets_at: string }
 export type Step =
   | { say: string } | { run: string; exit_code?: number; delay_ms?: number }
   | { write: string; content: string }
-  | { limit: { window: "primary" | "secondary" | "five_hour" | "seven_day"; resets_at: string; kind?: "usage" | "rate" } }
+  | { limit: { window: "primary" | "secondary" | "five_hour" | "seven_day"; resets_at?: string; kind?: "usage" | "rate" | "credits" } }
   | { error: "authentication_failed" | "overloaded" | "billing_error" | "server_error" }
   | { crash: { signal: "SIGKILL" | "SIGSEGV" } } | { exit: number } | { hang: true } | { finish: true }
   | { stderr: string } | { raw: string } | { approval: { command?: string; path?: string } } | { ignore_sigterm: true }
@@ -83,8 +86,8 @@ const STEP_CHECKS: Record<string, (step: Json) => string | null> = {
     return onlyKeys(s, ["limit"]) ?? onlyKeys(limit, ["window", "resets_at", "kind"]) ??
       (!["primary", "secondary", "five_hour", "seven_day"].includes(limit.window as string)
         ? "limit.window must be primary, secondary, five_hour or seven_day"
-        : !isTime(limit.resets_at) ? "limit.resets_at must be an ISO 8601 time"
-        : limit.kind !== undefined && !["usage", "rate"].includes(limit.kind as string) ? "limit.kind must be usage or rate"
+        : limit.resets_at !== undefined && !isTime(limit.resets_at) ? "limit.resets_at must be an ISO 8601 time"
+        : limit.kind !== undefined && !["usage", "rate", "credits"].includes(limit.kind as string) ? "limit.kind must be usage, rate or credits"
         : null);
   },
   error: (s) =>
@@ -135,7 +138,7 @@ function windowProblem(name: string, value: unknown): string | null {
 
 function scenarioProblem(value: Json): string | null {
   const unknown = onlyKeys(value, [
-    "version", "tool_version", "startup_delay_ms", "session_id", "auth", "login", "rate_limits", "hooks_trusted", "app_server", "turns",
+    "version", "tool_version", "startup_delay_ms", "session_id", "auth", "login", "rate_limits", "hooks_trusted", "app_server", "turns", "resumes",
   ]);
   if (unknown !== null) return unknown;
   if (value.version !== 1) return "version must be 1";
@@ -181,7 +184,17 @@ function scenarioProblem(value: Json): string | null {
     return "app_server must be ok, exit_immediately, no_answer or method_not_found";
   }
   if (!Array.isArray(value.turns)) return "turns must be a list";
+  if (value.resumes !== undefined && !Array.isArray(value.resumes)) return "resumes must be a list";
   return null;
+}
+
+function checkTurns(turns: unknown[], where: string): void {
+  turns.forEach((turn, t) => {
+    if (!isObject(turn) || onlyKeys(turn, ["steps"]) !== null || !Array.isArray(turn.steps)) {
+      throw new ScenarioError(`${where}Turn ${t + 1} is not valid: a turn must be an object with a list of steps.`);
+    }
+    turn.steps.forEach((step, s) => parseStep(step, `${where}Turn ${t + 1}, step ${s + 1}`));
+  });
 }
 
 // Checks one step. `where` names it in the error, for example "turn 2, step 3".
@@ -195,11 +208,12 @@ export function parseScenario(value: unknown): Scenario {
   if (!isObject(value)) throw new ScenarioError("A scenario must be a JSON object.");
   const problem = scenarioProblem(value);
   if (problem !== null) throw new ScenarioError(`The scenario is not valid: ${problem}.`);
-  (value.turns as unknown[]).forEach((turn, t) => {
-    if (!isObject(turn) || onlyKeys(turn, ["steps"]) !== null || !Array.isArray(turn.steps)) {
-      throw new ScenarioError(`Turn ${t + 1} is not valid: a turn must be an object with a list of steps.`);
+  checkTurns(value.turns as unknown[], "");
+  ((value.resumes ?? []) as unknown[]).forEach((resume, r) => {
+    if (!isObject(resume) || onlyKeys(resume, ["turns"]) !== null || !Array.isArray(resume.turns)) {
+      throw new ScenarioError(`Resume ${r + 1} is not valid: a resume must be an object with a list of turns.`);
     }
-    turn.steps.forEach((step, s) => parseStep(step, `Turn ${t + 1}, step ${s + 1}`));
+    checkTurns(resume.turns, `Resume ${r + 1}, `);
   });
   return value as unknown as Scenario;
 }
@@ -233,6 +247,22 @@ export function loadScenario(file = process.env.RELAY_FAKE_SCENARIO, program?: F
   } catch (error) {
     throw new ScenarioError(`${file}: ${(error as Error).message}`);
   }
+}
+
+// The scenario of a start that resumes a session: the turns of the next entry of `resumes`. The
+// fake counts its resumes in a file next to the scenario file, so the count survives from one
+// process to the next, as the daemon resumes a session in a new process each time.
+export function forResume(scenario: Scenario, file: string | undefined, program: FakeProgram): Scenario {
+  if (scenario.resumes === undefined || file === undefined || file === "") return scenario;
+  const counter = `${file}.${program}-resumes`;
+  let done = 0;
+  try {
+    done = Number.parseInt(readFileSync(counter, "utf8"), 10) || 0;
+  } catch {
+    // No resume yet.
+  }
+  writeFileSync(counter, String(done + 1));
+  return { ...scenario, turns: scenario.resumes[done]?.turns ?? [] };
 }
 
 // The steps of turn `index` (counted from 0).
