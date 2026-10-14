@@ -11,7 +11,9 @@ export const LIMIT_ACTIONS = ["wait", "switch", "notify"] as const;
 export type LimitAction = (typeof LIMIT_ACTIONS)[number];
 
 export interface T3Instance { id: string; account: AccountId; model: string | null }
-export interface T3Settings { url: string; projects: string[]; instances: T3Instance[] }
+// [t3.resume_at_reset] (add-resume-at-reset): the threads relay continues after a usage limit resets.
+export interface T3ResumeSettings { accounts: AccountId[]; threads: string[]; maxResumes: number }
+export interface T3Settings { url: string; projects: string[]; instances: T3Instance[]; resumeAtReset: T3ResumeSettings }
 export interface LimitSetting {
   account: AccountId;
   window: LimitWindow;

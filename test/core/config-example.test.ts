@@ -20,6 +20,7 @@ test("docs/config.example.toml has no problems and three accounts", () => {
       { id: "claude", account: "claude:personal", model: null },
       { id: "codex", account: "codex:personal", model: "gpt-6.1-sol" },
     ],
+    resumeAtReset: { accounts: ["claude:personal"], threads: [], maxResumes: 3 },
   });
   expect(config.limits).toEqual([
     { account: "claude:personal", window: "seven_day", threshold: 90, action: null, switchTo: "codex:personal" },

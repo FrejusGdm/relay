@@ -34,6 +34,10 @@ import { resumeJob } from "./engines";
 import { createAdapterRegistry } from "../adapters/registry";
 import { JobResumer } from "../resume/jobs";
 import { resumeTiming } from "../resume/timing";
+import { createT3Client } from "../t3/client";
+import { connectionState, readConnection, tokenGetter } from "../t3/connection";
+import { T3Resumer, t3PollMs } from "../t3/resume";
+import { osSecretStore } from "../t3/secrets";
 import { openDaemonLog } from "./log";
 import { checkSocketPathLength, DaemonStartError, prepareRuntimeDir, removeStaleSocket, runtimeDir, socketPath } from "./paths";
 import { pidPath, readPidFile, removeOwnPidFile, takeDaemonLock, writePidFile } from "./singleton";
@@ -134,6 +138,16 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
       relayHome: opts.relayHome, env: opts.env, log, timing: resumeTiming(opts.env), config: readConfig,
       registry: () => createAdapterRegistry({}, opts.env), start: (wait, account) => resumeJob(engines, wait, account),
     });
+    // T3 Code threads, through the connection relay t3 connect made.
+    const t3Resumer = new T3Resumer({
+      relayHome: opts.relayHome, env: opts.env, log, timing: resumeTiming(opts.env), config: readConfig,
+      registry: () => createAdapterRegistry({}, opts.env),
+      client: async () => {
+        const record = readConnection(opts.relayHome);
+        if (record === null || connectionState(record, new Date()) === "expired") return null;
+        return createT3Client({ url: record.url, token: tokenGetter(osSecretStore(), record.url), logger: log, version: VERSION });
+      },
+    });
     const started_at = new Date().toISOString();
     const router = createRouter([
       versionRoute({ pid: process.pid, started_at, schema_version: SCHEMA_VERSION }, db, () => workers.running()),
@@ -151,6 +165,7 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     follower.start();
     spool.start();
     resumer.start();
+    t3Resumer.start(t3PollMs(opts.env));
 
     const signal = await stopSignal;
     log.info("daemon_stopping", { signal });
@@ -158,6 +173,7 @@ export async function runDaemon(opts: DaemonOptions): Promise<number> {
     stream.shutdown();
     await operations.finish(log);
     await resumer.stop();
+    await t3Resumer.stop();
     await workers.finishSwitches();
     await workers.stopAll();
     await resumer.finished();

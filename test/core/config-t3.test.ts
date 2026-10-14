@@ -11,6 +11,31 @@ const validate = (text: string) => {
 };
 const accounts = '\n[accounts."claude:personal"]\n[accounts."codex:personal"]\n';
 
+describe("T3 resume at reset settings", () => {
+  test("accounts mapped to T3, thread IDs and max_resumes are accepted", () => {
+    const { config, problems } = validate(`[t3.instances.claude]
+account = "claude:personal"
+[t3.resume_at_reset]
+accounts = ["claude:personal"]
+threads = ["thread_01J9", "abc:def-1"]
+max_resumes = 5
+${accounts}`);
+    expect(problems).toEqual([]);
+    expect(config.t3.resumeAtReset).toEqual({ accounts: ["claude:personal"], threads: ["thread_01J9", "abc:def-1"], maxResumes: 5 });
+  });
+
+  test.each([
+    ['[t3.resume_at_reset]\naccounts = ["codex:personal"]',
+      "t3.resume_at_reset.accounts[1]: T3 Code has no provider mapped to codex:personal. Map it in [t3.instances.<id>]."],
+    ['[t3.resume_at_reset]\nthreads = ["a b"]',
+      't3.resume_at_reset.threads[1]: must be a T3 thread ID: letters, digits, "_", ":", "." and "-".'],
+    ["[t3.resume_at_reset]\nmax_resumes = 0", "t3.resume_at_reset.max_resumes: must be a whole number from 1 to 20."],
+    ['[t3.resume_at_reset]\naccounts = "claude:personal"', "t3.resume_at_reset.accounts: must be a list of account names."],
+  ])("refuses %s", (text, problem) => {
+    expect(validate(`${text}\n${accounts}`).problems).toContain(problem);
+  });
+});
+
 describe("T3 settings", () => {
   test.each([
     ['[t3]\nurl = "http://192.168.1.20:3773/mcp"',
@@ -25,7 +50,7 @@ describe("T3 settings", () => {
   });
 
   test("the default address and empty lists do not require a t3 table", () => {
-    const expected = { url: "http://127.0.0.1:3773/mcp", projects: [], instances: [] };
+    const expected = { url: "http://127.0.0.1:3773/mcp", projects: [], instances: [], resumeAtReset: { accounts: [], threads: [], maxResumes: 3 } };
     expect(emptyConfig("/r").t3).toEqual(expected);
     expect(validate("").config.t3).toEqual(expected);
   });
@@ -48,6 +73,7 @@ ${accounts}`);
         { id: "Claude_1", account: "claude:personal", model: null },
         { id: "codex", account: "codex:personal", model: "gpt-6.1-sol" },
       ],
+      resumeAtReset: { accounts: [], threads: [], maxResumes: 3 },
     });
   });
 
