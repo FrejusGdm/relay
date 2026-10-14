@@ -24,6 +24,8 @@ const run = lazy(() => import("./run"), "run");
 const switchCommand = lazy(() => import("./switch"), "switchCommand");
 const status = lazy(() => import("./status"), "status");
 const statusline = lazy(() => import("./statusline"), "statusline");
+const resumeAtReset = lazy(() => import("./resume-at-reset"), "resumeAtReset");
+const t3 = lazy(() => import("./t3"), "t3");
 const hooks: Handler = async (ctx) =>
   (await import("./hooks")).hooksCommand(async (hookAccount, context) => {
     const [{ readCodexHookTrust }, { buildAgentEnv }] = await Promise.all([
@@ -35,7 +37,7 @@ const hooks: Handler = async (ctx) =>
 
 export type CommandName = "init" | "run" | "checkpoint" | "checkpoints" | "rollback"
   | "accept-git-changes" | "switch" | "status" | "account" | "providers" | "policy"
-  | "hooks" | "hook" | "statusline" | "daemon" | "doctor";
+  | "hooks" | "hook" | "statusline" | "daemon" | "doctor" | "resume-at-reset" | "t3";
 
 export interface OptionDef {
   name: string;          // long name without dashes, for example "message"
@@ -390,5 +392,42 @@ export const COMMANDS: CommandDef[] = [
     quiet: false,
     built: true,
     handler: doctor,
+  },
+  {
+    name: "resume-at-reset",
+    usage: "relay resume-at-reset off [--job <id> | --thread <id>]",
+    argsUsage: "off",
+    summary: "Cancel a wait for a usage limit to reset",
+    details: [
+      "relay run --headless --resume-at-reset turns it on for a job,",
+      "and [t3.resume_at_reset] in config.toml turns it on for T3 Code threads.",
+      "Without --job or --thread, relay cancels the wait of the job in this folder.",
+    ],
+    examples: ["relay resume-at-reset off", "relay resume-at-reset off --job 3f9a2c1d"],
+    options: [
+      { name: "job", value: "<id>", description: "Cancel this job's wait" },
+      { name: "thread", value: "<id>", description: "Cancel this T3 Code thread's wait" },
+    ],
+    minArgs: 1,
+    maxArgs: 1,
+    quiet: false,
+    built: true,
+    handler: resumeAtReset,
+  },
+  {
+    name: "t3",
+    usage: "relay t3 <connect|disconnect>",
+    argsUsage: "<connect|disconnect>",
+    summary: "Connect relay to T3 Code, or disconnect it",
+    details: [
+      "T3 Code asks for a pairing code. relay keeps the token it issues in your system's credential store only.",
+    ],
+    examples: ["relay t3 connect"],
+    options: [],
+    minArgs: 1,
+    maxArgs: 1,
+    quiet: false,
+    built: true,
+    handler: t3,
   },
 ];

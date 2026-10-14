@@ -1,0 +1,12 @@
+Usage
+  relay t3 <connect|disconnect>
+
+Connect relay to T3 Code, or disconnect it.
+T3 Code asks for a pairing code. relay keeps the token it issues in your system's credential store only.
+
+Examples
+  relay t3 connect
+
+Options
+  -h, --help               Show this help
+      --log-level <level>  How much to log: debug, info, warn or error

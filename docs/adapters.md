@@ -215,6 +215,7 @@ sent the interrupt and `crashed` otherwise, then `exited`.
 |---|---|
 | `usage_limit` | The account reached a usage limit of its plan, and the reset time is known. |
 | `rate_limit` | The provider refused because of too many requests, without a known reset time. |
+| `credits_required` | Claude Code only: the plan's included usage is used up and the session can continue only with usage credits (`rate_limit_event` with `errorCode: "credits_required"`, Claude Code 2.1.181 and later). No reset ends it, so resume at reset never waits for it. |
 | `overloaded` | The provider's service was overloaded. |
 | `auth` | The sign-in or the key was refused. |
 | `billing` | The account has no credit or a billing problem. |

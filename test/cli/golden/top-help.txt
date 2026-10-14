@@ -20,6 +20,8 @@ Commands
   statusline          Record usage from Claude Code's status line
   daemon              Start, stop or check relay's background service
   doctor              Rebuild relay's index of jobs
+  resume-at-reset     Cancel a wait for a usage limit to reset
+  t3                  Connect relay to T3 Code, or disconnect it
 
 Options
   -h, --help               Show help

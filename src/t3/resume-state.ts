@@ -123,3 +123,23 @@ function isThreadState(value: unknown): value is T3ThreadState {
     && typeof entry.waiting_since === "string" && Number.isSafeInteger(entry.sends_in_a_row) && typeof entry.counted === "boolean"
     && (entry.sent_run_id === null || typeof entry.sent_run_id === "string") && time(entry.sent_at);
 }
+
+// T3 thread IDs are T3's own; relay accepts only plain characters before it writes one anywhere.
+export function isT3ThreadId(value: string): boolean {
+  return /^[A-Za-z0-9_:.-]{1,200}$/.test(value);
+}
+
+// Cancels a thread's wait. Returns false when relay knows nothing about the thread.
+export async function cancelT3Wait(relayHome: string, threadId: string): Promise<boolean> {
+  return await withT3Lock(relayHome, () => {
+    const state = readT3State(relayHome);
+    const entry = state.threads[threadId];
+    if (entry === undefined) return false;
+    delete state.threads[threadId];
+    // The stopped run counts as handled, so the watcher does not start a new wait for it.
+    state.classified[threadId] = entry.sent_run_id ?? entry.run_id;
+    writeT3State(relayHome, state);
+    recordT3Event(relayHome, "cancelled", { thread_id: threadId, run_id: entry.run_id, account: entry.account, reason: "person" });
+    return true;
+  });
+}

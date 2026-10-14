@@ -11,7 +11,7 @@ const doc = readFileSync(join(import.meta.dir, "..", "..", "docs", "cli.md"), "u
 
 test("each command's help shows the usage line of its row in docs/cli.md", () => {
   const rows = new Map<string, string>();
-  for (const match of doc.matchAll(/^\| `([a-z-]+)` \| `(relay [^`]*)` \|/gm)) rows.set(match[1]!, match[2]!.replaceAll("\\|", "|"));
+  for (const match of doc.matchAll(/^\| `([a-z0-9-]+)` \| `(relay [^`]*)` \|/gm)) rows.set(match[1]!, match[2]!.replaceAll("\\|", "|"));
   expect([...rows.keys()].sort()).toEqual(COMMANDS.map((def) => def.name).sort());
   for (const def of COMMANDS) {
     const usage = renderCommandHelp(def).split("\n")[1]!.trim();
