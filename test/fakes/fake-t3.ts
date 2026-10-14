@@ -31,6 +31,8 @@ export interface FakeT3Options {
   pairingCode?: string;
   expiresIn?: number;
   echoTokenError?: boolean;
+  // Runs before each tool call, so a test can change state while relay waits for an answer.
+  beforeCall?: (tool: string, args: Record<string, unknown>) => Promise<void> | void;
 }
 export interface FakeT3 {
   url: string;
@@ -140,6 +142,7 @@ export async function startFakeT3(options: FakeT3Options = {}): Promise<FakeT3> 
       const inputSchema: z.ZodObject = schemas[tool];
       server.registerTool(tool, { description: `Fake ${tool} for relay tests.`, inputSchema }, async (args) => {
         calls.push({ tool, args, authorization: authorization.getStore() ?? null });
+        await options.beforeCall?.(tool, args);
         const result = runTool(tool, args);
         if (result === null) return { content: [{ type: "text", text: "The thread or active run was not found." }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };

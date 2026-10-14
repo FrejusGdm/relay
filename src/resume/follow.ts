@@ -31,12 +31,14 @@ export function waitingLine(wait: Pick<WaitRecord, "account" | "stop" | "next_ch
 
 type Signal = "SIGINT" | "SIGTERM" | "SIGHUP";
 
+// `after` is the id of the waiting event relay run wrote itself: every later event belongs to this
+// wait, also one the daemon wrote before relay run began to follow.
 export async function followWait(
-  ctx: SupervisorContext, job: JobRef, wait: WaitRecord, json: boolean, say: (line: string) => void,
+  ctx: SupervisorContext, job: JobRef, wait: WaitRecord, json: boolean, say: (line: string) => void, after: number,
 ): Promise<number> {
   const err = (line: string) => ctx.io.err(`${line}\n`);
   const provider = displayName(wait.provider);
-  let lastId = lastEventId(job);
+  let lastId = after;
   const workers = new Set<string>();
   let ended: Ended | null = null;
   let daemonCheckedAt = Date.now();
@@ -173,14 +175,6 @@ export async function cancelWait(relayHome: string, jobId: string): Promise<Wait
     await endWait(relayHome, wait, "cancelled", "person", ExitCode.LimitReached);
     return wait.state;
   });
-}
-
-function lastEventId(job: JobRef): number {
-  try {
-    return readEvents(job).at(-1)?.id ?? 0;
-  } catch {
-    return 0;
-  }
 }
 
 // Replaces relay's own handlers for SIGINT, SIGTERM and SIGHUP while relay run follows the wait.

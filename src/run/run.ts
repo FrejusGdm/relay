@@ -181,7 +181,7 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
   await ensureDaemon({ relayHome: ctx.relayHome, env: ctx.env, err: ctx.io.err });
   const supervisor = new JobSupervisor(ctx, job, registry, say, options.json);
   const armed = maxResumes === null ? false : await armWait(ctx, job, account, permission, options.model ?? null, maxResumes);
-  let following: WaitRecord | null = null;
+  let following: { wait: WaitRecord; after: number } | null = null;
   let code: number;
   try {
     try {
@@ -203,9 +203,9 @@ export async function runAgent(ctx: CommandContext, options: RunOptions): Promis
     supervisor.close();
   }
   if (following === null) return code;
-  say(waitingLine(following));
+  say(waitingLine(following.wait));
   say(cancelHint(job.id));
-  return await followWait(ctx, job, following, options.json, say);
+  return await followWait(ctx, job, following.wait, options.json, say, following.after);
 
   async function runFirst(): Promise<number> {
     // A job with earlier work continues through a handoff, unless the person resumes a session.
@@ -296,7 +296,7 @@ function processAlive(pid: number): boolean {
 // resume before relay run has let the job go.
 async function settleWait(
   ctx: CommandContext, job: JobRef, supervisor: JobSupervisor, registry: AdapterRegistry, code: number,
-): Promise<WaitRecord | null> {
+): Promise<{ wait: WaitRecord; after: number } | null> {
   return await withWaitLock(ctx.relayHome, job.id, async () => {
     const wait = readWait(ctx.relayHome, job.id);
     // relay resume-at-reset off ended it while the agent ran.
@@ -308,8 +308,7 @@ async function settleWait(
         relayHome: ctx.relayHome, env: ctx.env, timing: resumeTiming(ctx.env), wait, last, adapter: registry.get(last.account.provider),
       });
       writeWait(ctx.relayHome, next);
-      await recordWaiting(ctx.relayHome, next);
-      return next;
+      return { wait: next, after: await recordWaiting(ctx.relayHome, next) };
     }
     const reason = code === ExitCode.Ok ? "completed" : turn !== null && !turn.completed ? turn.reason : last?.interrupted ? "interrupted" : "exited";
     await endWait(ctx.relayHome, wait, code === ExitCode.Ok ? "finished" : "stopped", reason, code);

@@ -136,10 +136,14 @@ export class T3Resumer {
         if (entry !== undefined && entry.state !== "sent" && entry.run_id === runId) continue;
         // After max_resumes relay stays away from the thread until one of its runs completes.
         if (entry?.state === "gave_up") continue;
-        const found = await this.classify(client, threadId, runId);
+        const read = await this.classify(client, threadId, runId);
+        const found = read?.found ?? null;
         await withT3Lock(relayHome, async () => {
           const state = readT3State(relayHome);
           const current = state.threads[threadId];
+          // relay resume-at-reset off, or another sweep, handled this run while relay read it.
+          if (state.classified[threadId] === runId || (current !== undefined && current.state !== "sent" && current.run_id === runId)) return;
+          if (current?.state === "gave_up") return;
           if (found === null || found.kind !== "limit") {
             state.classified[threadId] = runId;
             if (current?.state === "sent") delete state.threads[threadId];
@@ -147,7 +151,7 @@ export class T3Resumer {
             if (found?.kind === "credits") recordT3Event(relayHome, "skipped", { thread_id: threadId, run_id: runId, account, reason: "credits_required" });
             return;
           }
-          await this.startWaiting(state, threadId, runId, account, found.reset, current, config);
+          await this.startWaiting(state, threadId, runId, account, found.reset, current, config, read!.at);
         });
       }
     }
@@ -155,12 +159,16 @@ export class T3Resumer {
 
   // Reads the newest run's last timeline items once: a usage limit, a credits stop, or another
   // failure. Null when the thread has an active run or the run is not the failed one any more.
-  private async classify(client: T3Client, threadId: string, runId: string): Promise<Classification | null> {
+  // Reset times in the messages are read as the next moment after the run failed, so a stop found
+  // after its reset is due at once instead of a day later.
+  private async classify(client: T3Client, threadId: string, runId: string): Promise<{ found: Classification; at: Date } | null> {
     const head = await client.call("t3_thread_read", { threadId, view: "activity", limit: 1, runLimit: 1 }, { threadId });
     const detail = record(head.thread);
     const newest = Array.isArray(head.recentRuns) ? record(head.recentRuns[0]) : {};
     if (detail.activeRunId !== null && detail.activeRunId !== undefined) return null;
     if (newest.runId !== runId || newest.status !== "failed") return null;
+    const ended = typeof newest.completedAt === "string" && !Number.isNaN(Date.parse(newest.completedAt)) ? new Date(newest.completedAt) : now();
+    const at = ended > now() ? now() : ended;
     const count = typeof detail.itemCount === "number" && Number.isInteger(detail.itemCount) ? detail.itemCount : 0;
     const after = count - TAIL_ITEMS - 1;
     const tail = await client.call("t3_thread_read", {
@@ -169,24 +177,24 @@ export class T3Resumer {
     const items = Array.isArray(tail.items) ? tail.items.map(record).filter((item) => item.runId === runId && typeof item.text === "string") : [];
     const errors = items.filter((item) => item.type === "error");
     for (const item of errors.reverse()) {
-      const found = classifyFailure(item.text as string);
+      const found = classifyFailure(item.text as string, at);
       if (found.kind !== "limit" || found.reset !== null) {
-        if (found.kind !== "other") return found;
+        if (found.kind !== "other") return { found, at };
         continue;
       }
       // T3's own text has no reset time; Claude Code's message in the same run often has it.
       for (const other of items.toReversed()) {
-        const again = classifyFailure(other.text as string);
-        if (again.kind === "limit" && again.reset !== null) return again;
+        const again = classifyFailure(other.text as string, at);
+        if (again.kind === "limit" && again.reset !== null) return { found: again, at };
       }
-      return found;
+      return { found, at };
     }
-    return { kind: "other" };
+    return { found: { kind: "other" }, at };
   }
 
   private async startWaiting(
     state: T3ResumeState, threadId: string, runId: string, account: AccountId, textReset: ResetTime | null,
-    current: T3ThreadState | undefined, config: RelayConfig,
+    current: T3ThreadState | undefined, config: RelayConfig, stoppedAt: Date,
   ): Promise<void> {
     const { relayHome, timing } = this.options;
     // A stop of the run relay's own message started counts toward max_resumes.
@@ -199,12 +207,11 @@ export class T3Resumer {
       return;
     }
     const relayAccount = findAccount(config, account);
-    const stoppedAt = now();
     const reset = relayAccount === undefined ? textReset : await findResetTime({
       stopReset: textReset, stoppedAt: new Date(stoppedAt.getTime() - 1), account: relayAccount,
       adapter: this.options.registry().get(relayAccount.provider), relayHome, env: this.options.env,
     });
-    const next = reset !== null ? afterReset(reset.at, timing, this.options.random) : nextUnknownCheck(stoppedAt, timing, this.options.random);
+    const next = reset !== null ? afterReset(reset.at, timing, this.options.random) : nextUnknownCheck(now(), timing, this.options.random);
     state.threads[threadId] = { ...waitingEntry(account, runId, reset, stoppedAt), next_check_at: next.toISOString(), sends_in_a_row: inARow };
     writeT3State(relayHome, state);
     recordT3Event(relayHome, "waiting", {

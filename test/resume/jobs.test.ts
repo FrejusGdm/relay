@@ -119,3 +119,22 @@ test("a wait left resuming by a daemon that died is resumed again with the agent
   await watcher.finished();
   expect(starts).toEqual(["77777777"]);
 });
+
+test("stopping the daemon waits for a resume that is starting, so the daemon can stop its agent", async () => {
+  const relayHome = tempRelayHome();
+  job(relayHome, "aaaaaaaa", "11111111");
+  const order: string[] = [];
+  const watcher = resumer(relayHome, async () => {
+    await Bun.sleep(200);
+    order.push("registered");
+    return { workerId: "99999999", done: Promise.resolve(lastEnd("99999999", true)) };
+  });
+  void watcher.tick();
+  await Bun.sleep(50);
+  await watcher.stop();
+  order.push("stopped");
+  await watcher.finished();
+  expect(order).toEqual(["registered", "stopped"]);
+  // The agent the stopping daemon ended is resumed by the next daemon.
+  expect(readWait(relayHome, "aaaaaaaa")).toMatchObject({ state: "waiting", stop: { worker_id: "99999999" } });
+});

@@ -54,8 +54,11 @@ function limitedThread(threadId: string, instance = "claude", text = CLAUDE_LIMI
   };
 }
 
-async function setUp(threads: FakeThread[], settings = 'accounts = ["claude:personal"]', scenario: Parameters<typeof fakeEnv>[0] = {}) {
-  fake = await startFakeT3({ token: TOKEN, threads, projects: [{ id: "project-1", title: "Project", workspaceRoot: "/work/project" }] });
+async function setUp(
+  threads: FakeThread[], settings = 'accounts = ["claude:personal"]', scenario: Parameters<typeof fakeEnv>[0] = {},
+  beforeCall?: (tool: string, args: Record<string, unknown>) => Promise<void> | void,
+) {
+  fake = await startFakeT3({ token: TOKEN, threads, beforeCall, projects: [{ id: "project-1", title: "Project", workspaceRoot: "/work/project" }] });
   const relayHome = tempRelayHome();
   const { config, problems } = validateConfig(parseToml(`${CONFIG}[t3.resume_at_reset]\n${settings}\n`), { relayHome, homedir: "/home/person" });
   expect(problems).toEqual([]);
@@ -285,4 +288,41 @@ test("the limit messages T3 shows are read with their reset times", () => {
     .toEqual({ kind: "limit", reset: { at: new Date("2026-10-14T04:00:00Z"), source: "message_text" } });
   expect(classifyFailure("You're out of included usage · /usage-credits to continue", after)).toEqual({ kind: "credits" });
   expect(classifyFailure("Claude API is overloaded (529). Try again shortly.", after)).toEqual({ kind: "other" });
+});
+
+test("a stop found after its reset time is due at once, not a day later", async () => {
+  clock = new Date(2026, 9, 13, 14, 0, 0);
+  const { relayHome, resumer, sends } = await setUp([limitedThread("thread-1")]);
+  await resumer().tick();
+  expect(events(relayHome)[1]).toMatchObject({ type: "waiting", reset_at: new Date(2026, 9, 13, 13, 0).toISOString() });
+  expect(sends()).toHaveLength(1);
+});
+
+test("cancelling while relay reads a thread that stopped again is not undone", async () => {
+  let cancelOnRead = false;
+  let relayHomeRef = "";
+  const { relayHome, resumer, sends, fake } = await setUp([limitedThread("thread-1")], undefined, {}, async (tool, args) => {
+    if (cancelOnRead && tool === "t3_thread_read" && args.threadId === "thread-1") {
+      cancelOnRead = false;
+      expect(await cancelT3Wait(relayHomeRef, "thread-1")).toBe(true);
+    }
+  });
+  relayHomeRef = relayHome;
+  const watcher = resumer();
+  await watcher.tick();
+  clock = new Date(2026, 9, 13, 13, 2, 0);
+  await watcher.tick();
+  expect(sends()).toHaveLength(1);
+  // The run relay started stops at the limit again; the person cancels while relay reads it.
+  const thread = fake.threads[0]!;
+  thread.runs[0]!.status = "failed";
+  thread.runs[0]!.completedAt = clock.toISOString();
+  thread.items!.push({ type: "error", runId: thread.runs[0]!.runId, text: `You've hit your session limit · resets 2:00pm (${ZONE})` });
+  cancelOnRead = true;
+  await watcher.tick();
+  clock = new Date(2026, 9, 13, 14, 5, 0);
+  await watcher.tick();
+  expect(sends()).toHaveLength(1);
+  expect(readT3State(relayHome).threads["thread-1"]).toBeUndefined();
+  expect(events(relayHome).filter((event) => event.type === "waiting")).toHaveLength(1);
 });

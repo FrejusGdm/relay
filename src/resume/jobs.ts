@@ -39,6 +39,8 @@ export interface JobResumerOptions {
 
 export class JobResumer {
   private readonly running = new Map<string, Promise<void>>();
+  // Resumes between the decision and the moment the agent is registered with the daemon's workers.
+  private readonly starting = new Set<Promise<unknown>>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private sweeping: Promise<void> | null = null;
   private stopped = false;
@@ -50,13 +52,15 @@ export class JobResumer {
     void this.tick();
   }
 
-  // Takes no new resumes. Agents already resumed are stopped by the daemon's HeadlessWorkers;
-  // finished() then waits until their waits are recorded.
+  // Takes no new resumes, and waits until every resume being started is either registered with the
+  // daemon's HeadlessWorkers (which then stop it) or put back to waiting. finished() then waits
+  // until the waits of the stopped agents are recorded.
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     await this.sweeping;
+    while (this.starting.size > 0) await Promise.allSettled([...this.starting]);
   }
 
   async finished(): Promise<void> {
@@ -122,8 +126,22 @@ export class JobResumer {
     this.running.set(wait.job_id, resume);
   }
 
-  // Decides under the lock whether to resume now, then starts the agent and waits for its end.
+  // Decides under the lock whether to resume now, starts the agent, and waits for its end.
   private async resume(jobId: string): Promise<void> {
+    const begun = this.begin(jobId);
+    this.starting.add(begun);
+    let started: { started: Started; wait: WaitRecord } | null;
+    try {
+      started = await begun;
+    } finally {
+      this.starting.delete(begun);
+    }
+    if (started === null) return;
+    const last = await started.started.done.catch(() => null);
+    await this.afterResume(jobId, last, started.started.workerId);
+  }
+
+  private async begin(jobId: string): Promise<{ started: Started; wait: WaitRecord } | null> {
     const { relayHome, timing } = this.options;
     const decided = await withWaitLock(relayHome, jobId, async (): Promise<{ wait: WaitRecord; account: Account } | null> => {
       const wait = readWait(relayHome, jobId);
@@ -166,14 +184,22 @@ export class JobResumer {
       writeWait(relayHome, updated);
       return { wait: updated, account };
     });
-    if (decided === null) return;
+    if (decided === null) return null;
+    // The daemon began to stop while relay checked the account: the next daemon resumes instead.
+    if (this.stopped) {
+      await withWaitLock(relayHome, jobId, () => {
+        const wait = readWait(relayHome, jobId);
+        if (wait?.state === "resuming") writeWait(relayHome, { ...wait, state: "waiting", resumes: wait.resumes - 1, counted: false });
+      });
+      return null;
+    }
 
     let started: Started;
     try {
       started = await this.options.start(decided.wait, decided.account);
     } catch (error) {
       await this.startFailed(decided.wait, error);
-      return;
+      return null;
     }
     await withWaitLock(relayHome, jobId, async () => {
       const wait = readWait(relayHome, jobId);
@@ -184,8 +210,7 @@ export class JobResumer {
       });
     });
     this.options.log.info("resume_at_reset_resumed", { job: jobId, worker: started.workerId, target: decided.wait.account });
-    const last = await started.done.catch(() => null);
-    await this.afterResume(jobId, last, started.workerId);
+    return { started, wait: decided.wait };
   }
 
   // The job's folder is gone, or another agent took the job between the decision and the start, or
@@ -282,12 +307,14 @@ export async function waitAfterStop(options: {
   };
 }
 
-export async function recordWaiting(relayHome: string, wait: WaitRecord): Promise<void> {
-  await appendEvent(jobRefOf(relayHome, wait), "resume_at_reset_waiting", {
+// Returns the event's id, from which a waiting relay run follows the job.
+export async function recordWaiting(relayHome: string, wait: WaitRecord): Promise<number> {
+  const event = await appendEvent(jobRefOf(relayHome, wait), "resume_at_reset_waiting", {
     worker_id: wait.stop?.worker_id ?? null, target: wait.account, provider_session_id: wait.session_id,
     reason: wait.stop?.reason ?? null, reset_at: wait.stop?.reset_at ?? null, source: wait.stop?.source ?? null,
     next_check_at: wait.next_check_at, resumes_in_a_row: wait.resumes_in_a_row,
   });
+  return event.id;
 }
 
 // The source of the stop's reading, from the worker's turn_failed event.
